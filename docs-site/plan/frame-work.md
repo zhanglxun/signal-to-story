@@ -360,6 +360,18 @@ font-family: "Inter Variable", "Noto Sans SC", "PingFang SC",
 
 菜单和品牌信息均由配置驱动，但不为了配置化引入远程菜单或动态组件注册系统。
 
+### 7.1 当前最简模块规划
+
+当前菜单保持两层以内：
+
+1. **驾驶舱**：个人待办、任务状态和关键结果汇总。
+2. **内容生产**：选题、任务、资产；故事、脚本和分镜在数据模型确认后逐步加入，不先建空菜单。
+3. **系统管理**：
+   - `组织与账号`：组织资料、后台账号列表和创建账号。
+   - `角色管理`：从 Supabase 展示组织角色、能力集合和分配状态。
+
+不复制参考平台的用户账号/平台账号双池、机构树、区域/渠道、菜单管理、资源权限树和自定义角色中心。个人平台出现真实多人协作需求前，不建设复杂 RBAC。
+
 ---
 
 ## 8. Supabase Auth、路由与权限
@@ -381,6 +393,8 @@ await supabase.auth.signInWithPassword({ email, password })
 - 提交中、错误和限流提示。
 - 忘记密码入口；生产启用前配置 Redirect URL 和自有 SMTP。
 - 不使用“用户不存在”等可用于账号枚举的差异化文案。
+
+当前管理员能力采用 `admin-create-account` Edge Function：具备 `account.manage` 权限的组织角色可在后台填写邮箱、显示名称、临时密码和目标角色；函数根据 `organization_roles` 中的分配规则校验权限，再在服务端调用 Supabase Auth Admin API 并直接确认邮箱。浏览器不得调用 Admin API，也不得持有 secret/service-role 密钥。
 
 ### 8.2 Supabase Client 与会话
 
@@ -445,6 +459,15 @@ interface MenuItem {
 - 后续角色和工作区关系优先存放在独立成员表；确需 JWT 授权声明时使用受控的 `app_metadata`，并考虑 Token 刷新延迟。
 - 不能仅使用 `TO authenticated` 作为业务表授权；RLS 还必须校验 owner 或 workspace membership。
 - UPDATE Policy 必须同时考虑 SELECT、USING 和 WITH CHECK。
+
+### 8.5 当前角色模型
+
+- `owner`：组织和账号最终控制权，可创建 Owner/Admin/Member/Viewer。
+- `admin`：可创建 Admin/Member/Viewer 并管理内容生产，不可授予 Owner。
+- `member`：可创建和维护内容、任务与资产，不管理账号。
+- `viewer`：只读查看驾驶舱、状态和资产关系。
+
+四个角色是 `organization_roles` 的默认种子数据，不是前端硬编码常量。角色定义、能力集合、是否可分配和分配所需权限均由数据库维护，成员关系通过外键引用角色。V1 先提供数据库驱动的角色列表，不开放自定义角色、菜单权限树或按钮级权限编辑；前端展示权限不替代 RLS 和 Edge Function 的服务端校验。
 
 ---
 

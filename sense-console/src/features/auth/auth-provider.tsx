@@ -5,9 +5,7 @@ import type { User } from "@supabase/supabase-js"
 import { AuthContext, type ConsoleUser } from "@/features/auth/auth-context"
 import { getAuthErrorMessage } from "@/features/auth/auth-errors"
 import { queryClient } from "@/lib/query-client"
-import { getSupabaseClient, isDemoModeEnabled, isSupabaseConfigured } from "@/lib/supabase"
-
-const DEMO_SESSION_KEY = "signal-to-story.demo-session"
+import { getSupabaseClient, isSupabaseConfigured } from "@/lib/supabase"
 
 function toConsoleUser(user: User): ConsoleUser {
   return {
@@ -20,20 +18,30 @@ function toConsoleUser(user: User): ConsoleUser {
   }
 }
 
-const demoUser: ConsoleUser = {
-  id: "demo-operator",
-  email: "demo@susesne.cn",
-  displayName: "内容主理人",
-  isDemo: true,
+async function resolveConsoleUser(user: User): Promise<ConsoleUser> {
+  const fallback = toConsoleUser(user)
+  const supabase = getSupabaseClient()
+  if (!supabase) return fallback
+
+  const { data, error } = await supabase
+    .from("profiles")
+    .select("display_name")
+    .eq("user_id", user.id)
+    .maybeSingle()
+
+  if (error) {
+    console.warn("[auth] 无法读取用户资料，将使用 Auth 显示名。", error)
+    return fallback
+  }
+
+  return {
+    ...fallback,
+    displayName: data?.display_name || fallback.displayName,
+  }
 }
 
 export function AuthProvider({ children }: PropsWithChildren) {
-  const isDemoAvailable = isDemoModeEnabled()
-  const [user, setUser] = useState<ConsoleUser | null>(() =>
-    isDemoModeEnabled() && sessionStorage.getItem(DEMO_SESSION_KEY) === "active"
-      ? demoUser
-      : null,
-  )
+  const [user, setUser] = useState<ConsoleUser | null>(null)
   const [isLoading, setIsLoading] = useState(isSupabaseConfigured)
   const [isRecoverySession, setIsRecoverySession] = useState(false)
 
@@ -43,18 +51,14 @@ export function AuthProvider({ children }: PropsWithChildren) {
 
     let active = true
 
-    void supabase.auth.getUser().then(({ data, error }) => {
+    void supabase.auth.getUser().then(async ({ data, error }) => {
       if (!active) return
       if (error && error.name !== "AuthSessionMissingError") {
         console.warn("[auth] 无法验证已保存的 Supabase 会话。", error)
       }
-      setUser((currentUser) =>
-        data.user
-          ? toConsoleUser(data.user)
-          : currentUser?.isDemo
-            ? currentUser
-            : null,
-      )
+      const consoleUser = data.user ? await resolveConsoleUser(data.user) : null
+      if (!active) return
+      setUser(consoleUser)
       setIsLoading(false)
     })
 
@@ -63,12 +67,21 @@ export function AuthProvider({ children }: PropsWithChildren) {
       if (event === "PASSWORD_RECOVERY") setIsRecoverySession(true)
       if (event === "SIGNED_OUT") {
         setIsRecoverySession(false)
-        sessionStorage.removeItem(DEMO_SESSION_KEY)
         queryClient.clear()
       }
-      setUser((currentUser) =>
-        session?.user ? toConsoleUser(session.user) : currentUser?.isDemo ? currentUser : null,
-      )
+      setUser((currentUser) => {
+        if (!session?.user) return null
+        const fallback = toConsoleUser(session.user)
+        return currentUser?.id === fallback.id
+          ? { ...fallback, displayName: currentUser.displayName }
+          : fallback
+      })
+      if (session?.user) {
+        void resolveConsoleUser(session.user).then((resolvedUser) => {
+          if (!active) return
+          setUser((currentUser) => currentUser?.id === resolvedUser.id ? resolvedUser : currentUser)
+        })
+      }
       setIsLoading(false)
     })
     return () => {
@@ -79,38 +92,28 @@ export function AuthProvider({ children }: PropsWithChildren) {
 
   const signIn = useCallback(async (email: string, password: string) => {
     const supabase = getSupabaseClient()
-    if (!supabase) throw new Error("Supabase 尚未配置，请使用演示入口。")
+    if (!supabase) throw new Error("Supabase 尚未配置。")
     const { data, error } = await supabase.auth.signInWithPassword({ email: email.trim(), password })
     if (error) throw new Error(getAuthErrorMessage(error, "登录失败，请稍后再试。"))
     if (!data.user) throw new Error("登录失败，请稍后再试。")
-    sessionStorage.removeItem(DEMO_SESSION_KEY)
     setIsRecoverySession(false)
-    setUser(toConsoleUser(data.user))
-  }, [])
-
-  const signInDemo = useCallback(() => {
-    if (!isDemoModeEnabled()) return
-    sessionStorage.setItem(DEMO_SESSION_KEY, "active")
-    setIsLoading(false)
-    setIsRecoverySession(false)
-    setUser(demoUser)
+    setUser(await resolveConsoleUser(data.user))
   }, [])
 
   const signOut = useCallback(async () => {
     const supabase = getSupabaseClient()
-    if (supabase && !user?.isDemo) {
+    if (supabase) {
       const { error } = await supabase.auth.signOut({ scope: "local" })
       if (error) throw new Error(getAuthErrorMessage(error, "退出登录失败，请稍后再试。"))
     }
-    sessionStorage.removeItem(DEMO_SESSION_KEY)
     queryClient.clear()
     setIsRecoverySession(false)
     setUser(null)
-  }, [user?.isDemo])
+  }, [])
 
   const resetPassword = useCallback(async (email: string) => {
     const supabase = getSupabaseClient()
-    if (!supabase) throw new Error("演示模式不发送重置邮件。")
+    if (!supabase) throw new Error("Supabase 尚未配置。")
     const { error } = await supabase.auth.resetPasswordForEmail(email.trim(), {
       redirectTo: `${window.location.origin}/update-password`,
     })
@@ -126,8 +129,8 @@ export function AuthProvider({ children }: PropsWithChildren) {
   }, [])
 
   const value = useMemo(
-    () => ({ user, isLoading, isDemoMode: !isSupabaseConfigured, isDemoAvailable, isRecoverySession, signIn, signInDemo, signOut, resetPassword, updatePassword }),
-    [isDemoAvailable, isLoading, isRecoverySession, resetPassword, signIn, signInDemo, signOut, updatePassword, user],
+    () => ({ user, isLoading, isConfigured: isSupabaseConfigured, isRecoverySession, signIn, signOut, resetPassword, updatePassword }),
+    [isLoading, isRecoverySession, resetPassword, signIn, signOut, updatePassword, user],
   )
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>

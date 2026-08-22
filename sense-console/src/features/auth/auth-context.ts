@@ -3,17 +3,14 @@ import type { User } from "@supabase/supabase-js"
 
 export type ConsoleUser = Pick<User, "id" | "email"> & {
   displayName: string
-  isDemo?: boolean
 }
 
 export type AuthContextValue = {
   user: ConsoleUser | null
   isLoading: boolean
-  isDemoMode: boolean
-  isDemoAvailable: boolean
+  isConfigured: boolean
   isRecoverySession: boolean
   signIn: (email: string, password: string) => Promise<void>
-  signInDemo: () => void
   signOut: () => Promise<void>
   resetPassword: (email: string) => Promise<void>
   updatePassword: (password: string) => Promise<void>

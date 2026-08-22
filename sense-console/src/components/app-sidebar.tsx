@@ -1,4 +1,4 @@
-import { LibraryIcon, ListTodoIcon, LayoutDashboardIcon, Settings2Icon, SparklesIcon, SquarePenIcon } from "lucide-react"
+import { Building2Icon, LibraryIcon, ListTodoIcon, LayoutDashboardIcon, Settings2Icon, ShieldCheckIcon, SparklesIcon, SquarePenIcon } from "lucide-react"
 import { NavLink, useLocation, useNavigate } from "react-router"
 
 import { BrandMark } from "@/components/brand-mark"
@@ -24,6 +24,10 @@ const productionNav = [
   { title: "任务", url: "/tasks", icon: ListTodoIcon },
   { title: "资产", url: "/assets", icon: LibraryIcon },
 ]
+const systemNav = [
+  { title: "组织与账号", url: "/system/accounts", icon: Building2Icon },
+  { title: "角色管理", url: "/system/roles", icon: ShieldCheckIcon },
+]
 
 export function AppSidebar(props: React.ComponentProps<typeof Sidebar>) {
   const location = useLocation()
@@ -41,6 +45,7 @@ export function AppSidebar(props: React.ComponentProps<typeof Sidebar>) {
       <SidebarGroup><SidebarGroupContent className="flex flex-col gap-2"><SidebarMenu><SidebarMenuItem><SidebarMenuButton tooltip="新建选题" className="bg-primary text-primary-foreground hover:bg-primary/90 hover:text-primary-foreground active:bg-primary/90 active:text-primary-foreground" onClick={() => navigate("/topics")}><SquarePenIcon /><span>新建选题</span></SidebarMenuButton></SidebarMenuItem></SidebarMenu>{renderItems(primaryNav)}</SidebarGroupContent></SidebarGroup>
       <SidebarSeparator />
       <SidebarGroup><SidebarGroupLabel>内容生产</SidebarGroupLabel><SidebarGroupContent>{renderItems(productionNav)}</SidebarGroupContent></SidebarGroup>
+      <SidebarGroup><SidebarGroupLabel>系统管理</SidebarGroupLabel><SidebarGroupContent>{renderItems(systemNav)}</SidebarGroupContent></SidebarGroup>
       <SidebarGroup className="mt-auto"><SidebarGroupContent><SidebarMenu><SidebarMenuItem><SidebarMenuButton tooltip="外观设置" onClick={() => setCustomizerOpen(true)}><Settings2Icon /><span>外观设置</span></SidebarMenuButton></SidebarMenuItem></SidebarMenu></SidebarGroupContent></SidebarGroup>
     </SidebarContent>
     <SidebarFooter><NavUser /></SidebarFooter>

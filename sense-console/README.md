@@ -19,7 +19,7 @@ cp .env.example .env.local
 npm run dev
 ```
 
-未配置 Supabase 时，登录页提供明确标识的本地演示入口；配置后默认只显示真实邮箱密码登录。需要在本机同时验收界面时，可临时设置 `VITE_ENABLE_DEMO_MODE=true`，生产环境不得开启。
+未配置 Supabase 时，登录页会显示配置提示并禁用提交；应用不提供绕过认证的演示入口。
 
 ## Supabase
 

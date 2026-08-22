@@ -9,6 +9,8 @@ import { ForbiddenPage } from "@/pages/forbidden-page"
 import { ForgotPasswordPage } from "@/pages/forgot-password-page"
 import { LoginPage } from "@/pages/login-page"
 import { NotFoundPage } from "@/pages/not-found-page"
+import { OrganizationAccountsPage } from "@/pages/organization-accounts-page"
+import { RolesPage } from "@/pages/roles-page"
 import { SettingsPage } from "@/pages/settings-page"
 import { TaskDetailPage } from "@/pages/task-detail-page"
 import { TasksPage } from "@/pages/tasks-page"
@@ -33,6 +35,8 @@ export default function App() {
           <Route path="/tasks/:taskId" element={<TaskDetailPage />} />
           <Route path="/assets" element={<AssetsPage />} />
           <Route path="/assets/:assetId" element={<AssetDetailPage />} />
+          <Route path="/system/accounts" element={<OrganizationAccountsPage />} />
+          <Route path="/system/roles" element={<RolesPage />} />
           <Route path="/settings" element={<SettingsPage />} />
         </Route>
       </Route>

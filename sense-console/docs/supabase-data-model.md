@@ -1,10 +1,24 @@
 # Supabase 数据模型设计入口
 
-状态：待独立设计与评审。本文件只定义边界，不提前固化业务表。
+状态：账号与组织基座已落地；内容生产领域模型仍待独立设计与评审。
+
+## 已落地：组织与账号基座
+
+| 表 | 用途 | 浏览器权限 |
+| --- | --- | --- |
+| `organizations` | Signal to Story 组织信息 | 组织成员只读 |
+| `profiles` | Auth 用户的展示资料与账号状态 | 同组织成员只读 |
+| `organization_members` | 用户、组织和角色关系 | 组织成员只读 |
+| `organization_roles` | 组织角色、能力集合与分配规则 | 组织成员只读 |
+| `audit_events` | 高权限管理动作审计 | 具备 `account.manage` 的角色只读 |
+
+默认角色为 `owner`、`admin`、`member`、`viewer`，作为 `organization_roles` 的种子数据。前端角色列表、账号角色显示和创建账号下拉框都读取该表，不再维护角色名称与说明的前端常量。当前暂不开放自定义角色的新增、编辑和权限树界面。
+
+账号创建使用 `admin-create-account` Edge Function。函数从 `organization_roles.permissions` 验证调用者是否具备账号管理与目标角色分配权限，再在服务端调用 Supabase Admin API；浏览器不接触 secret/service-role 密钥。角色授权以 `organization_members` 与 `organization_roles` 为准，`app_metadata` 只作受控镜像，不作为当前 RLS 的唯一依据。
 
 ## 拟覆盖的核心对象
 
-- `profiles`：账号的可信服务端角色与工作空间关系，不使用可由用户修改的 `user_metadata` 做授权。
+- `profiles`：账号展示资料与状态；可信角色关系存放在 `organization_members`，不使用可由用户修改的 `user_metadata` 做授权。
 - `topics`：选题、信号来源、评分、状态与判断结论。
 - `agent_tasks`：异步任务、执行者、输入引用、进度、错误与输出引用。
 - `stories` / `story_nodes`：故事与章节、场景、分镜等结构关系。
@@ -21,4 +35,4 @@
 
 ## 下一步设计输出
 
-ER 图与状态机、migration SQL、RLS 权限矩阵与测试、TypeScript Database 类型、Agent 写入契约与幂等机制。
+内容生产领域 ER 图与状态机、RLS 权限矩阵与测试、生成式 TypeScript Database 类型、Agent 写入契约与幂等机制。

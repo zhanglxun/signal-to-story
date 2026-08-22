@@ -1,6 +1,11 @@
-import { fireEvent, render, screen } from "@testing-library/react"
+import { render, screen } from "@testing-library/react"
 import { MemoryRouter } from "react-router"
-import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
+import { describe, expect, it, vi } from "vitest"
+
+vi.mock("@/lib/supabase", () => ({
+  getSupabaseClient: () => null,
+  isSupabaseConfigured: false,
+}))
 
 import App from "@/App"
 import { ThemeProvider } from "@/components/theme-provider"
@@ -13,19 +18,14 @@ function renderApp(route: string) {
 }
 
 describe("console authentication shell", () => {
-  beforeEach(() => {
-    sessionStorage.clear()
-    vi.stubEnv("VITE_ENABLE_DEMO_MODE", "true")
-  })
-  afterEach(() => vi.unstubAllEnvs())
   it("redirects a signed-out visitor to login", async () => {
     renderApp("/dashboard")
     expect(await screen.findByRole("heading", { name: "欢迎回来" })).toBeInTheDocument()
   })
-  it("allows the unconfigured local preview", async () => {
+  it("does not expose an authentication bypass when Supabase is unconfigured", async () => {
     renderApp("/login")
-    fireEvent.click(screen.getByRole("button", { name: /进入演示工作台/ }))
-    expect(await screen.findByRole("heading", { name: "内容生产驾驶舱" })).toBeInTheDocument()
-    expect(screen.getByText("演示数据")).toBeInTheDocument()
+    expect(screen.queryByRole("button", { name: /进入演示工作台/ })).not.toBeInTheDocument()
+    expect(screen.getByRole("button", { name: "登录" })).toBeDisabled()
+    expect(screen.getByText("认证尚未配置")).toBeInTheDocument()
   })
 })
