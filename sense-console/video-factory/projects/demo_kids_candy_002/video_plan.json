@@ -1,0 +1,90 @@
+{
+  "project_id": "demo_kids_candy_002",
+  "title": "小宇航员的星际糖果星（万相动态与分轨音效版）",
+  "meta": {
+    "aspect_ratio": "9:16",
+    "target_resolution": "1080x1920",
+    "style": "3D Pixar animation style, vibrant pastel colors, cinematic soft lighting, 8k",
+    "bgm_track": "assets/bgm/cheerful_fantasy.mp3",
+    "voice": "zh-CN-XiaoxiaoNeural",
+    "voice_rate": "+3%",
+    "voice_pitch": "+0Hz",
+    "total_duration_sec": 27.56,
+    "subtitles_file": "subtitles/subtitles.srt"
+  },
+  "character_refs": [
+    {
+      "id": "char_paopao",
+      "name": "小宇航员泡泡",
+      "description": "A cute 6-year-old chibi astronaut boy with round glass helmet, big sparkling brown eyes, wearing a puffy white and teal spacesuit with glowing buttons",
+      "ref_images": []
+    }
+  ],
+  "shots": [
+    {
+      "id": "shot_001",
+      "type": "ai_video",
+      "voiceover": "在银河系的最深处，藏着一颗彩虹色的棉花糖星球！",
+      "visual_prompt": "A cute round cartoon spaceship flying smoothly towards a giant swirling rainbow cotton candy planet in deep space, glowing twinkling stars, 3D Pixar animation style, vertical 9:16",
+      "camera": "slow push-in",
+      "duration_sec": 5.39,
+      "keyframe_image": "keyframes/shot_001.png",
+      "sfx_file": "sfx/shot_001_sfx.mp3",
+      "motion_adapter": "wanx",
+      "status": "audio_generated",
+      "audio_file": "audio/shot_001.mp3"
+    },
+    {
+      "id": "shot_002",
+      "type": "ai_video",
+      "voiceover": "小宇航员泡泡推开舱门，哇！地上的石头居然全是跳跳糖！",
+      "visual_prompt": "A cute chibi astronaut boy happily walking down from a cute spaceship onto glowing sparkling candy crystal ground, looking around in wonder, 3D Pixar animation style, vertical 9:16",
+      "camera": "pan_left",
+      "duration_sec": 6.44,
+      "keyframe_image": "keyframes/shot_002.png",
+      "sfx_file": "sfx/shot_002_sfx.mp3",
+      "motion_adapter": "wanx",
+      "status": "audio_generated",
+      "audio_file": "audio/shot_002.mp3"
+    },
+    {
+      "id": "shot_003",
+      "type": "ai_video",
+      "voiceover": "一只果冻小兔子跳了过来，送给他一颗会发光的棒棒糖。",
+      "visual_prompt": "A cute translucent glowing pink jelly bunny hopping joyfully towards the chibi astronaut and handing over a spinning galaxy lollipop, magical sparkling particle effects, 3D Pixar style, vertical 9:16",
+      "camera": "medium shot",
+      "duration_sec": 5.46,
+      "keyframe_image": "keyframes/shot_003.png",
+      "sfx_file": "sfx/shot_003_sfx.mp3",
+      "motion_adapter": "wanx",
+      "status": "audio_generated",
+      "audio_file": "audio/shot_003.mp3"
+    },
+    {
+      "id": "shot_004",
+      "type": "ai_video",
+      "voiceover": "轻轻咬上一口，整片夜空都绽放出了七彩的糖果烟花！",
+      "visual_prompt": "A cute chibi astronaut boy tasting a glowing lollipop happily, colorful bright rainbow fireworks blooming and exploding across the starry night sky, magical reflections, 3D Pixar style, vertical 9:16",
+      "camera": "pan_up",
+      "duration_sec": 5.36,
+      "keyframe_image": "keyframes/shot_004.png",
+      "sfx_file": "sfx/shot_004_sfx.mp3",
+      "motion_adapter": "wanx",
+      "status": "audio_generated",
+      "audio_file": "audio/shot_004.mp3"
+    },
+    {
+      "id": "shot_005",
+      "type": "pan_zoom",
+      "voiceover": "今晚的梦里，你也会收到一份宇宙送来的甜蜜礼物哦！",
+      "visual_prompt": "The cute little spaceship flying away gently through a sea of glowing stars and rainbow candy dust, warm cozy bedtime sunset lighting, 3D Pixar style, vertical 9:16",
+      "camera": "zoom_out",
+      "duration_sec": 4.91,
+      "keyframe_image": "keyframes/shot_005.png",
+      "sfx_file": "sfx/shot_005_sfx.mp3",
+      "motion_adapter": "local_kenburns",
+      "status": "audio_generated",
+      "audio_file": "audio/shot_005.mp3"
+    }
+  ]
+}

@@ -1,0 +1,34 @@
+# Environment variables
+.env
+.env.*
+!.env.example
+*.local
+
+# Dependencies
+node_modules/
+__pycache__/
+*.pyc
+
+# Build outputs
+dist/
+dist-ssr/
+output/
+test-results/
+playwright-report/
+
+# Generated media for local video-factory demos.
+# Keep project plans, schemas, configuration, and source code in Git.
+sense-console/video-factory/assets/bgm/
+sense-console/video-factory/projects/demo_*/audio/
+sense-console/video-factory/projects/demo_*/sfx/
+sense-console/video-factory/projects/demo_*/shots/
+sense-console/video-factory/projects/demo_*/keyframes/
+sense-console/video-factory/projects/demo_*/subtitles/
+sense-console/video-factory/projects/demo_*/output/
+
+# OS and Editors
+.DS_Store
+.vscode/*
+!.vscode/extensions.json
+.idea/
+*.sw?
