@@ -1,6 +1,6 @@
 import { StrictMode } from "react"
 import { createRoot } from "react-dom/client"
-import { QueryClient, QueryClientProvider } from "@tanstack/react-query"
+import { QueryClientProvider } from "@tanstack/react-query"
 import { BrowserRouter } from "react-router"
 
 import "./index.css"
@@ -10,12 +10,7 @@ import { Toaster } from "@/components/ui/sonner"
 import { TooltipProvider } from "@/components/ui/tooltip"
 import { AuthProvider } from "@/features/auth/auth-provider"
 import { AppearanceProvider } from "@/features/appearance/appearance-context"
-
-const queryClient = new QueryClient({
-  defaultOptions: {
-    queries: { staleTime: 30_000, retry: 1, refetchOnWindowFocus: false },
-  },
-})
+import { queryClient } from "@/lib/query-client"
 
 createRoot(document.getElementById("root")!).render(
   <StrictMode>

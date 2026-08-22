@@ -11,6 +11,7 @@ export type AuthContextValue = {
   isLoading: boolean
   isDemoMode: boolean
   isDemoAvailable: boolean
+  isRecoverySession: boolean
   signIn: (email: string, password: string) => Promise<void>
   signInDemo: () => void
   signOut: () => Promise<void>

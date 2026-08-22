@@ -25,6 +25,15 @@ npm run dev
 
 在 `.env.local` 写入 `VITE_SUPABASE_URL` 和 `VITE_SUPABASE_PUBLISHABLE_KEY`。认证使用 Supabase Auth 邮箱密码模式。业务表结构暂不创建，等待独立数据模型评审；详见 [docs/supabase-data-model.md](docs/supabase-data-model.md)。浏览器不得使用 `service_role` 密钥。
 
+Supabase Dashboard 的 Auth 配置还需满足：
+
+- Email Provider 保持启用；后台不提供公开注册入口，正式环境建议关闭公开 Signup。
+- Site URL 指向正式 Console 地址。
+- Redirect URLs 至少包含本地和正式环境的 `/update-password` 地址。
+- 上线密码找回前配置自有 SMTP；Supabase 默认邮件服务仅适合开发验证。
+
+应用启动时使用 Auth 服务验证已保存会话，而不是仅信任浏览器缓存；登出默认只注销当前设备，并同时清除用户级 TanStack Query 缓存。
+
 ## 验证
 
 ```bash
