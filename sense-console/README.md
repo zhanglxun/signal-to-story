@@ -2,6 +2,15 @@
 
 `sense-console` 是 Signal to Story 的可视化控制中心，负责选题判断、Agent 任务调度、执行状态、结论清单与内容资产关系展示。Agent 的异步执行和原始资产文件不在本工程中完成或保存。
 
+## UI 基座
+
+- 使用 shadcn/ui 最新版的 Base Nova（Base UI）官方预设，配置见 [`components.json`](components.json)。
+- 登录页和控制台骨架分别以官方 `login-04`、`dashboard-01` Block 为结构基线。
+- 官方组件源码已完整拉取到 [`src/components/ui`](src/components/ui)，业务页面只组合这些组件和语义主题变量。
+- 外观设置仅使用 shadcn 官方主题色、明暗模式和圆角半径，不另建产品私有皮肤。
+
+具体约束、来源和更新命令见 [`docs/shadcn-foundation.md`](docs/shadcn-foundation.md)。
+
 ## 本地运行
 
 ```bash
@@ -10,7 +19,7 @@ cp .env.example .env.local
 npm run dev
 ```
 
-未配置 Supabase 时，登录页提供明确标识的本地演示入口；配置后只显示真实邮箱密码登录。
+未配置 Supabase 时，登录页提供明确标识的本地演示入口；配置后默认只显示真实邮箱密码登录。需要在本机同时验收界面时，可临时设置 `VITE_ENABLE_DEMO_MODE=true`，生产环境不得开启。
 
 ## Supabase
 

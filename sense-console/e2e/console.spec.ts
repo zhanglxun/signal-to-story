@@ -8,4 +8,6 @@ test("demo operator can enter and inspect core areas", async ({ page }) => {
   await expect(page.getByRole("heading", { name: "任务调度" })).toBeVisible()
   await page.getByRole("link", { name: "资产" }).click()
   await expect(page.getByRole("heading", { name: "内容资产" })).toBeVisible()
+  await page.getByRole("button", { name: /内容主理人/ }).click()
+  await expect(page.getByRole("menuitem", { name: "退出登录" })).toBeVisible()
 })

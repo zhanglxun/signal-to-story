@@ -3,7 +3,7 @@ import type { PropsWithChildren } from "react"
 import type { User } from "@supabase/supabase-js"
 
 import { AuthContext, type ConsoleUser } from "@/features/auth/auth-context"
-import { getSupabaseClient, isSupabaseConfigured } from "@/lib/supabase"
+import { getSupabaseClient, isDemoModeEnabled, isSupabaseConfigured } from "@/lib/supabase"
 
 const DEMO_SESSION_KEY = "signal-to-story.demo-session"
 
@@ -26,8 +26,9 @@ const demoUser: ConsoleUser = {
 }
 
 export function AuthProvider({ children }: PropsWithChildren) {
+  const isDemoAvailable = isDemoModeEnabled()
   const [user, setUser] = useState<ConsoleUser | null>(() =>
-    !isSupabaseConfigured && sessionStorage.getItem(DEMO_SESSION_KEY) === "active"
+    isDemoModeEnabled() && sessionStorage.getItem(DEMO_SESSION_KEY) === "active"
       ? demoUser
       : null,
   )
@@ -38,12 +39,20 @@ export function AuthProvider({ children }: PropsWithChildren) {
     if (!supabase) return
 
     void supabase.auth.getSession().then(({ data }) => {
-      setUser(data.session?.user ? toConsoleUser(data.session.user) : null)
+      setUser((currentUser) =>
+        data.session?.user
+          ? toConsoleUser(data.session.user)
+          : currentUser?.isDemo
+            ? currentUser
+            : null,
+      )
       setIsLoading(false)
     })
 
     const { data } = supabase.auth.onAuthStateChange((_event, session) => {
-      setUser(session?.user ? toConsoleUser(session.user) : null)
+      setUser((currentUser) =>
+        session?.user ? toConsoleUser(session.user) : currentUser?.isDemo ? currentUser : null,
+      )
       setIsLoading(false)
     })
     return () => data.subscription.unsubscribe()
@@ -57,7 +66,7 @@ export function AuthProvider({ children }: PropsWithChildren) {
   }, [])
 
   const signInDemo = useCallback(() => {
-    if (isSupabaseConfigured) return
+    if (!isDemoModeEnabled()) return
     sessionStorage.setItem(DEMO_SESSION_KEY, "active")
     setUser(demoUser)
   }, [])
@@ -89,8 +98,8 @@ export function AuthProvider({ children }: PropsWithChildren) {
   }, [])
 
   const value = useMemo(
-    () => ({ user, isLoading, isDemoMode: !isSupabaseConfigured, signIn, signInDemo, signOut, resetPassword, updatePassword }),
-    [isLoading, resetPassword, signIn, signInDemo, signOut, updatePassword, user],
+    () => ({ user, isLoading, isDemoMode: !isSupabaseConfigured, isDemoAvailable, signIn, signInDemo, signOut, resetPassword, updatePassword }),
+    [isDemoAvailable, isLoading, resetPassword, signIn, signInDemo, signOut, updatePassword, user],
   )
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>

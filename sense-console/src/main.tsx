@@ -9,6 +9,7 @@ import { ThemeProvider } from "@/components/theme-provider.tsx"
 import { Toaster } from "@/components/ui/sonner"
 import { TooltipProvider } from "@/components/ui/tooltip"
 import { AuthProvider } from "@/features/auth/auth-provider"
+import { AppearanceProvider } from "@/features/appearance/appearance-context"
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -18,8 +19,9 @@ const queryClient = new QueryClient({
 
 createRoot(document.getElementById("root")!).render(
   <StrictMode>
-    <ThemeProvider>
-      <QueryClientProvider client={queryClient}>
+    <ThemeProvider defaultTheme="light" storageKey="signal-to-story.theme">
+      <AppearanceProvider>
+       <QueryClientProvider client={queryClient}>
         <BrowserRouter>
           <AuthProvider>
             <TooltipProvider>
@@ -28,7 +30,8 @@ createRoot(document.getElementById("root")!).render(
             </TooltipProvider>
           </AuthProvider>
         </BrowserRouter>
-      </QueryClientProvider>
+       </QueryClientProvider>
+      </AppearanceProvider>
     </ThemeProvider>
   </StrictMode>
 )

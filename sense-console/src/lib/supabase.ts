@@ -5,6 +5,10 @@ const supabasePublishableKey = import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY?.tr
 
 export const isSupabaseConfigured = Boolean(supabaseUrl && supabasePublishableKey)
 
+export function isDemoModeEnabled() {
+  return !isSupabaseConfigured || import.meta.env.VITE_ENABLE_DEMO_MODE === "true"
+}
+
 let client: SupabaseClient | null = null
 
 export function getSupabaseClient() {

@@ -26,4 +26,14 @@ export default defineConfig([
       'react-hooks/set-state-in-effect': 'off',
     },
   },
+  {
+    files: [
+      'src/components/chart-area-interactive.tsx',
+      'src/hooks/use-mobile.ts',
+    ],
+    rules: {
+      'react-refresh/only-export-components': 'off',
+      'react-hooks/set-state-in-effect': 'off',
+    },
+  },
 ])

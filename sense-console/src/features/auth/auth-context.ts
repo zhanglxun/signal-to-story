@@ -10,6 +10,7 @@ export type AuthContextValue = {
   user: ConsoleUser | null
   isLoading: boolean
   isDemoMode: boolean
+  isDemoAvailable: boolean
   signIn: (email: string, password: string) => Promise<void>
   signInDemo: () => void
   signOut: () => Promise<void>
