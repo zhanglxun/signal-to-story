@@ -1,0 +1,10 @@
+import { Link } from "react-router"
+import { ArrowUpRight, Grid2X2, List } from "lucide-react"
+import { ListToolbar } from "@/components/list-toolbar"
+import { PageHeader } from "@/components/page-header"
+import { StatusBadge } from "@/components/status-badge"
+import { Button } from "@/components/ui/button"
+import { Card, CardContent } from "@/components/ui/card"
+import { assets } from "@/data/mock-data"
+
+export function AssetsPage() { return <div className="space-y-6"><PageHeader eyebrow="Creative library" title="内容资产" description="按故事关系组织图片、音频、人物、场景、分镜和视频；这里只记录元数据与存储地址。" actions={<div className="flex rounded-lg border bg-card p-1"><Button size="icon-sm" variant="secondary"><Grid2X2 /></Button><Button size="icon-sm" variant="ghost"><List /></Button></div>} /><ListToolbar placeholder="搜索资产名称、类型或关联选题" action="登记资产" /><section className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">{assets.map((asset) => <Card key={asset.id} className="group"><div className={`relative mx-4 aspect-[16/8] overflow-hidden rounded-xl bg-gradient-to-br ${asset.tone}`}><div className="surface-grid absolute inset-0 opacity-25" /><span className="absolute top-3 left-3 rounded-full bg-black/25 px-2 py-1 text-[10px] font-semibold uppercase tracking-wider text-white backdrop-blur">{asset.kind}</span><Link to={`/assets/${asset.id}`} className="absolute right-3 bottom-3 grid size-8 place-items-center rounded-full bg-white/88 text-slate-900 opacity-0 shadow-sm transition group-hover:opacity-100" aria-label="打开资产"><ArrowUpRight className="size-4" /></Link></div><CardContent><div className="flex items-start justify-between gap-3"><div className="min-w-0"><Link to={`/assets/${asset.id}`} className="truncate font-medium hover:text-primary">{asset.name}</Link><p className="mt-1 truncate text-xs text-muted-foreground">{asset.relatedTo}</p></div><StatusBadge status={asset.status} /></div><div className="mt-4 flex justify-between border-t pt-3 text-xs text-muted-foreground"><span>{asset.size}</span><span>{asset.updatedAt}</span></div></CardContent></Card>)}</section></div> }
