@@ -1,6 +1,6 @@
 # Supabase 数据模型设计入口
 
-状态：账号与组织基座已落地；内容生产领域模型仍待独立设计与评审。
+状态：账号与组织基座、V1 资产元数据账本已落地；其余内容生产领域模型仍待独立设计与评审。
 
 ## 已落地：组织与账号基座
 
@@ -11,10 +11,31 @@
 | `organization_members` | 用户、组织和角色关系 | 组织成员只读 |
 | `organization_roles` | 组织角色、能力集合与分配规则 | 组织成员只读 |
 | `audit_events` | 高权限管理动作审计 | 具备 `account.manage` 的角色只读 |
+| `assets` | 角色、场景、道具、音效与风格的资产元数据 | `content.view` 只读；`content.manage` 新增和更新 |
 
 默认角色为 `owner`、`admin`、`member`、`viewer`，作为 `organization_roles` 的种子数据。前端角色列表、账号角色显示和创建账号下拉框都读取该表，不再维护角色名称与说明的前端常量。当前暂不开放自定义角色的新增、编辑和权限树界面。
 
 账号创建使用 `admin-create-account` Edge Function。函数从 `organization_roles.permissions` 验证调用者是否具备账号管理与目标角色分配权限，再在服务端调用 Supabase Admin API；浏览器不接触 secret/service-role 密钥。角色授权以 `organization_members` 与 `organization_roles` 为准，`app_metadata` 只作受控镜像，不作为当前 RLS 的唯一依据。
+
+## 已落地：V1 资产元数据账本
+
+`assets` 是浏览器、Agent 和后续 Worker 共用的资产索引，不保存图片、音频、视频或模型二进制。当前字段与原始 `c_assets` 草案的映射如下：
+
+| 原草案 | 当前字段 | 调整原因 |
+| --- | --- | --- |
+| `id BIGSERIAL` | `id bigint identity` | 使用 SQL 标准自增主键 |
+| `user_id` | `created_by` / `updated_by` UUID | 资产归组织所有，用户字段只承担审计；与 Supabase Auth 对齐 |
+| `org_id` | `organization_id` UUID | 与现有 `organizations.id` 对齐 |
+| `type INT` | `asset_type text` | 避免魔法数字；限制为 `character/scene/prop/sound/style` |
+| `category INT` | `category text` | 二级分类可扩展，不必每次新增分类都迁移数据库 |
+| `cloud_url` | `cloud_url` | 保存对象存储或受控外部地址 |
+| `local_url` | `local_path` | 明确它是设备路径；可写入但不授权给普通 Web 查询 |
+| `status INT` | `is_active boolean` | 当前只有启用/停用两态，使用布尔值更准确 |
+| `create_time/modify_time` | `created_at/updated_at timestamptz` | 统一时区与项目命名规范 |
+
+为列表预览增加 `media_type` 和 `thumbnail_url`；为 Agent 扩展增加受约束的 `metadata jsonb`。名称、二级分类和描述生成 `search_text`，并使用 trigram 索引支撑包含式文本搜索。
+
+权限采用 RLS 与显式 GRANT 双层控制：Viewer 及以上可读取，Member 及以上可登记和更新，不向浏览器授予 DELETE。停用资产使用 `is_active=false`；后续需要版本和物理清理时，再通过 `asset_versions` 与受控 Worker 流程处理。
 
 ## 拟覆盖的核心对象
 
