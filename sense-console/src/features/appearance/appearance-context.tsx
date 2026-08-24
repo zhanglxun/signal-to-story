@@ -2,6 +2,7 @@
 import * as React from "react"
 
 export type SkinId = "neutral" | "red" | "rose" | "orange" | "green" | "blue" | "yellow" | "violet"
+export type RailStyle = "colored" | "light"
 
 type Skin = {
   id: SkinId
@@ -27,6 +28,8 @@ type AppearanceContextValue = {
   setSkin: (skin: SkinId) => void
   radius: number
   setRadius: (radius: number) => void
+  railStyle: RailStyle
+  setRailStyle: (railStyle: RailStyle) => void
   customizerOpen: boolean
   setCustomizerOpen: (open: boolean) => void
 }
@@ -36,6 +39,7 @@ const AppearanceContext = React.createContext<AppearanceContextValue | null>(nul
 export function AppearanceProvider({ children }: { children: React.ReactNode }) {
   const [skin, setSkin] = React.useState<SkinId>(() => (localStorage.getItem("signal-to-story.skin") as SkinId) || "neutral")
   const [radius, setRadius] = React.useState(() => Number(localStorage.getItem("signal-to-story.radius") || 0.625))
+  const [railStyle, setRailStyle] = React.useState<RailStyle>(() => localStorage.getItem("signal-to-story.rail-style") === "light" ? "light" : "colored")
   const [customizerOpen, setCustomizerOpen] = React.useState(false)
 
   React.useEffect(() => {
@@ -59,7 +63,11 @@ export function AppearanceProvider({ children }: { children: React.ReactNode }) 
     localStorage.setItem("signal-to-story.radius", String(radius))
   }, [radius])
 
-  const value = React.useMemo(() => ({ skin, setSkin, radius, setRadius, customizerOpen, setCustomizerOpen }), [customizerOpen, radius, skin])
+  React.useEffect(() => {
+    localStorage.setItem("signal-to-story.rail-style", railStyle)
+  }, [railStyle])
+
+  const value = React.useMemo(() => ({ skin, setSkin, radius, setRadius, railStyle, setRailStyle, customizerOpen, setCustomizerOpen }), [customizerOpen, radius, railStyle, skin])
   return <AppearanceContext.Provider value={value}>{children}</AppearanceContext.Provider>
 }
 

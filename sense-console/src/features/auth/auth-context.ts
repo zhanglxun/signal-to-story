@@ -13,6 +13,7 @@ export type AuthContextValue = {
   signIn: (email: string, password: string) => Promise<void>
   signOut: () => Promise<void>
   resetPassword: (email: string) => Promise<void>
+  updateDisplayName: (displayName: string) => Promise<void>
   updatePassword: (password: string) => Promise<void>
 }
 

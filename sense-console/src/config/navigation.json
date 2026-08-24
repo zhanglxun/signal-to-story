@@ -1,0 +1,96 @@
+{
+  "modules": [
+    {
+      "id": "production",
+      "label": "生产控制",
+      "icon": "Workflow",
+      "defaultPath": "/dashboard",
+      "groups": [
+        {
+          "id": "workspace",
+          "label": "工作台",
+          "icon": "Gauge",
+          "items": [
+            {
+              "id": "dashboard",
+              "label": "驾驶舱",
+              "path": "/dashboard",
+              "icon": "LayoutDashboard"
+            }
+          ]
+        },
+        {
+          "id": "content-production",
+          "label": "内容生产",
+          "icon": "Clapperboard",
+          "items": [
+            {
+              "id": "topics",
+              "label": "选题",
+              "path": "/topics",
+              "icon": "Sparkles"
+            },
+            {
+              "id": "tasks",
+              "label": "任务中心",
+              "path": "/tasks",
+              "icon": "ListTodo"
+            },
+            {
+              "id": "assets",
+              "label": "资产库",
+              "path": "/assets",
+              "icon": "Library"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "system",
+      "label": "系统管理",
+      "icon": "Settings",
+      "defaultPath": "/system/accounts",
+      "groups": [
+        {
+          "id": "account-access",
+          "label": "账号与权限",
+          "icon": "Users",
+          "items": [
+            {
+              "id": "accounts",
+              "label": "组织与账号",
+              "path": "/system/accounts",
+              "icon": "Building2"
+            },
+            {
+              "id": "roles",
+              "label": "角色管理",
+              "path": "/system/roles",
+              "icon": "ShieldCheck"
+            }
+          ]
+        },
+        {
+          "id": "system-config",
+          "label": "系统配置",
+          "icon": "Settings2",
+          "items": [
+            {
+              "id": "settings",
+              "label": "系统设置",
+              "path": "/settings",
+              "icon": "SlidersHorizontal"
+            }
+          ]
+        }
+      ]
+    }
+  ],
+  "auxiliaryRoutes": [
+    {
+      "path": "/account",
+      "moduleId": "system"
+    }
+  ]
+}

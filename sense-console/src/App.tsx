@@ -2,6 +2,7 @@ import { Navigate, Route, Routes } from "react-router"
 
 import { AppShell } from "@/components/layout/app-shell"
 import { RequireAuth } from "@/features/auth/require-auth"
+import { AccountPage } from "@/pages/account-page"
 import { AssetDetailPage } from "@/pages/asset-detail-page"
 import { AssetsPage } from "@/pages/assets-page"
 import { DashboardPage } from "@/pages/dashboard-page"
@@ -37,6 +38,7 @@ export default function App() {
           <Route path="/assets/:assetId" element={<AssetDetailPage />} />
           <Route path="/system/accounts" element={<OrganizationAccountsPage />} />
           <Route path="/system/roles" element={<RolesPage />} />
+          <Route path="/account" element={<AccountPage />} />
           <Route path="/settings" element={<SettingsPage />} />
         </Route>
       </Route>

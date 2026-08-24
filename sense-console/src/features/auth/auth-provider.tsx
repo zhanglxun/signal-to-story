@@ -6,6 +6,7 @@ import { AuthContext, type ConsoleUser } from "@/features/auth/auth-context"
 import { getAuthErrorMessage } from "@/features/auth/auth-errors"
 import { queryClient } from "@/lib/query-client"
 import { getSupabaseClient, isSupabaseConfigured } from "@/lib/supabase"
+import { updateCurrentProfileDisplayName } from "@/services/profile-service"
 
 function toConsoleUser(user: User): ConsoleUser {
   return {
@@ -124,13 +125,18 @@ export function AuthProvider({ children }: PropsWithChildren) {
     const supabase = getSupabaseClient()
     if (!supabase) throw new Error("Supabase 尚未配置。")
     const { error } = await supabase.auth.updateUser({ password })
-    if (error) throw new Error(getAuthErrorMessage(error, "密码更新失败，请重新打开重置链接。"))
+    if (error) throw new Error(getAuthErrorMessage(error, "密码更新失败，请稍后再试。"))
     setIsRecoverySession(false)
   }, [])
 
+  const updateDisplayName = useCallback(async (displayName: string) => {
+    const savedDisplayName = await updateCurrentProfileDisplayName(displayName)
+    setUser((currentUser) => currentUser ? { ...currentUser, displayName: savedDisplayName } : currentUser)
+  }, [])
+
   const value = useMemo(
-    () => ({ user, isLoading, isConfigured: isSupabaseConfigured, isRecoverySession, signIn, signOut, resetPassword, updatePassword }),
-    [isLoading, isRecoverySession, resetPassword, signIn, signOut, updatePassword, user],
+    () => ({ user, isLoading, isConfigured: isSupabaseConfigured, isRecoverySession, signIn, signOut, resetPassword, updateDisplayName, updatePassword }),
+    [isLoading, isRecoverySession, resetPassword, signIn, signOut, updateDisplayName, updatePassword, user],
   )
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>

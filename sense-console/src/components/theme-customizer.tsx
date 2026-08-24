@@ -11,7 +11,7 @@ import { cn } from "@/lib/utils"
 
 export function ThemeCustomizer() {
   const { theme, setTheme } = useTheme()
-  const { skin, setSkin, radius, setRadius, customizerOpen, setCustomizerOpen } = useAppearance()
+  const { skin, setSkin, radius, setRadius, railStyle, setRailStyle, customizerOpen, setCustomizerOpen } = useAppearance()
 
   return <Sheet open={customizerOpen} onOpenChange={setCustomizerOpen}>
     <SheetContent className="sm:max-w-sm">
@@ -21,9 +21,11 @@ export function ThemeCustomizer() {
         <Separator />
         <section className="space-y-4"><div className="flex items-center justify-between"><div><h3 className="text-sm font-medium">深色模式</h3><p className="mt-1 text-xs text-muted-foreground">切换官方 light / dark tokens</p></div><div className="flex items-center gap-2"><SunIcon className="size-4 text-muted-foreground" /><Switch checked={theme === "dark"} onCheckedChange={(checked) => setTheme(checked ? "dark" : "light")} /><MoonIcon className="size-4 text-muted-foreground" /></div></div></section>
         <Separator />
+        <section className="space-y-3"><div><h3 className="text-sm font-medium">侧栏配色</h3><p className="mt-1 text-xs text-muted-foreground">仅侧边布局生效，布局本身不再直接控制颜色。</p></div><div className="flex w-fit overflow-hidden rounded-md border text-xs"><button className={cn("px-4 py-2 transition-colors", railStyle === "colored" ? "bg-primary text-primary-foreground" : "hover:bg-muted")} onClick={() => setRailStyle("colored")}>彩色</button><button className={cn("border-l px-4 py-2 transition-colors", railStyle === "light" ? "bg-primary text-primary-foreground" : "hover:bg-muted")} onClick={() => setRailStyle("light")}>浅色</button></div></section>
+        <Separator />
         <section className="space-y-4"><div className="flex items-center justify-between"><div><h3 className="text-sm font-medium">圆角</h3><p className="mt-1 text-xs text-muted-foreground">shadcn/create radius：{radius.toFixed(3)}rem</p></div><PaletteIcon className="size-4 text-muted-foreground" /></div><Slider min={0} max={1} step={0.125} value={[radius]} onValueChange={(value) => setRadius(Array.isArray(value) ? value[0] : value)} /></section>
         <Separator />
-        <Button variant="outline" className="w-full" onClick={() => { setSkin("neutral"); setRadius(0.625); setTheme("light") }}>恢复 Base Nova 默认皮肤</Button>
+        <Button variant="outline" className="w-full" onClick={() => { setSkin("neutral"); setRadius(0.625); setRailStyle("colored"); setTheme("light") }}>恢复 Base Nova 默认皮肤</Button>
       </div>
     </SheetContent>
   </Sheet>

@@ -7,7 +7,7 @@
 | 表 | 用途 | 浏览器权限 |
 | --- | --- | --- |
 | `organizations` | Signal to Story 组织信息 | 组织成员只读 |
-| `profiles` | Auth 用户的展示资料与账号状态 | 同组织成员只读 |
+| `profiles` | Auth 用户的展示资料与账号状态 | 同组织成员可读；本人仅可更新显示名称 |
 | `organization_members` | 用户、组织和角色关系 | 组织成员只读 |
 | `organization_roles` | 组织角色、能力集合与分配规则 | 组织成员只读 |
 | `audit_events` | 高权限管理动作审计 | 具备 `account.manage` 的角色只读 |
@@ -16,6 +16,8 @@
 默认角色为 `owner`、`admin`、`member`、`viewer`，作为 `organization_roles` 的种子数据。前端角色列表、账号角色显示和创建账号下拉框都读取该表，不再维护角色名称与说明的前端常量。当前暂不开放自定义角色的新增、编辑和权限树界面。
 
 账号创建使用 `admin-create-account` Edge Function。函数从 `organization_roles.permissions` 验证调用者是否具备账号管理与目标角色分配权限，再在服务端调用 Supabase Admin API；浏览器不接触 secret/service-role 密钥。角色授权以 `organization_members` 与 `organization_roles` 为准，`app_metadata` 只作受控镜像，不作为当前 RLS 的唯一依据。
+
+个人资料页通过 Data API 更新当前用户自己的 `profiles.display_name`，RLS 与列级 `GRANT` 会阻止浏览器修改邮箱、账号状态和其他用户资料。登录密码通过当前 Supabase Auth 会话调用 `updateUser` 更新，密码明文不会写入业务表或浏览器存储。
 
 ## 已落地：V1 资产元数据账本
 
