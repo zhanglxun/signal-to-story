@@ -1,46 +1,124 @@
 {
   "modules": [
     {
-      "id": "production",
-      "label": "生产控制",
-      "icon": "Workflow",
-      "defaultPath": "/dashboard",
+      "id": "intake",
+      "label": "信息收集",
+      "icon": "Inbox",
+      "defaultPath": "/intake",
       "groups": [
         {
-          "id": "workspace",
-          "label": "工作台",
-          "icon": "Gauge",
+          "id": "intake-entry",
+          "label": "信息进入",
+          "icon": "Inbox",
           "items": [
             {
-              "id": "dashboard",
-              "label": "驾驶舱",
-              "path": "/dashboard",
-              "icon": "LayoutDashboard"
+              "id": "pending-signals",
+              "label": "待处理信息",
+              "path": "/intake",
+              "icon": "Inbox"
             }
           ]
         },
         {
-          "id": "content-production",
-          "label": "内容生产",
-          "icon": "Clapperboard",
+          "id": "source-taxonomy",
+          "label": "信源分类",
+          "icon": "Tags",
+          "items": [
+            {
+              "id": "source-categories",
+              "label": "分类管理",
+              "path": "/sources/categories",
+              "icon": "Tags"
+            }
+          ]
+        },
+        {
+          "id": "topic-evaluation",
+          "label": "选题评估",
+          "icon": "Sparkles",
           "items": [
             {
               "id": "topics",
               "label": "选题",
               "path": "/topics",
               "icon": "Sparkles"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "video-production",
+      "label": "视频创作",
+      "icon": "Clapperboard",
+      "defaultPath": "/dashboard",
+      "groups": [
+        {
+          "id": "overview",
+          "label": "概览",
+          "icon": "Gauge",
+          "items": [
+            {
+              "id": "overview",
+              "label": "概览",
+              "path": "/dashboard",
+              "icon": "LayoutDashboard"
+            }
+          ]
+        },
+        {
+          "id": "content-creation",
+          "label": "内容创作",
+          "icon": "Clapperboard",
+          "items": [
+            {
+              "id": "scripts",
+              "label": "剧本构造",
+              "path": "/video/scripts",
+              "icon": "FileText"
             },
+            {
+              "id": "storyboards",
+              "label": "分镜设置",
+              "path": "/video/storyboards",
+              "icon": "Film"
+            },
+            {
+              "id": "characters",
+              "label": "角色设定",
+              "path": "/video/characters",
+              "icon": "UserRound"
+            },
+            {
+              "id": "scenes",
+              "label": "场景建模",
+              "path": "/video/scenes",
+              "icon": "Mountain"
+            },
+            {
+              "id": "canvas",
+              "label": "画布创作",
+              "path": "/video/canvas",
+              "icon": "Palette"
+            },
+            {
+              "id": "assets",
+              "label": "素材资产",
+              "path": "/assets",
+              "icon": "Library"
+            }
+          ]
+        },
+        {
+          "id": "task-monitoring",
+          "label": "任务与监控",
+          "icon": "ListTodo",
+          "items": [
             {
               "id": "tasks",
               "label": "任务中心",
               "path": "/tasks",
               "icon": "ListTodo"
-            },
-            {
-              "id": "assets",
-              "label": "资产库",
-              "path": "/assets",
-              "icon": "Library"
             }
           ]
         }
