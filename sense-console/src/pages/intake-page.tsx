@@ -1,0 +1,8 @@
+import { ListToolbar } from "@/components/list-toolbar"
+import { PageHeader } from "@/components/page-header"
+import { StatusBadge } from "@/components/status-badge"
+import { Card, CardContent } from "@/components/ui/card"
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
+import { signals } from "@/data/mock-data"
+
+export function IntakePage() { return <div className="space-y-6"><PageHeader eyebrow="Signal intake" title="待处理信息" description="集中查看新捕获的线索、链接和摘录，验证、聚类或转成选题之前先在这里沉淀。" /><ListToolbar placeholder="搜索标题、来源或标签" action="手动登记线索" /><Card><CardContent className="p-0"><Table><TableHeader><TableRow><TableHead>信息</TableHead><TableHead className="hidden md:table-cell">来源</TableHead><TableHead>可信度</TableHead><TableHead>状态</TableHead><TableHead className="hidden lg:table-cell">标签</TableHead><TableHead className="hidden sm:table-cell">抓取时间</TableHead></TableRow></TableHeader><TableBody>{signals.map((signal) => <TableRow key={signal.id}><TableCell><p className="font-medium">{signal.title}</p><p className="mt-1 text-xs text-muted-foreground md:hidden">{signal.source}</p></TableCell><TableCell className="hidden text-muted-foreground md:table-cell">{signal.source}</TableCell><TableCell className="text-muted-foreground">{signal.credibility}</TableCell><TableCell><StatusBadge status={signal.status} /></TableCell><TableCell className="hidden text-muted-foreground lg:table-cell">{signal.tag}</TableCell><TableCell className="hidden text-muted-foreground sm:table-cell">{signal.capturedAt}</TableCell></TableRow>)}</TableBody></Table></CardContent></Card></div> }

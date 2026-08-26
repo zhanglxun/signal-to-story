@@ -8,11 +8,13 @@ import { AssetsPage } from "@/pages/assets-page"
 import { DashboardPage } from "@/pages/dashboard-page"
 import { ForbiddenPage } from "@/pages/forbidden-page"
 import { ForgotPasswordPage } from "@/pages/forgot-password-page"
+import { IntakePage } from "@/pages/intake-page"
 import { LoginPage } from "@/pages/login-page"
 import { NotFoundPage } from "@/pages/not-found-page"
 import { OrganizationAccountsPage } from "@/pages/organization-accounts-page"
 import { RolesPage } from "@/pages/roles-page"
 import { SettingsPage } from "@/pages/settings-page"
+import { SourceCategoriesPage } from "@/pages/source-categories-page"
 import { TaskDetailPage } from "@/pages/task-detail-page"
 import { TasksPage } from "@/pages/tasks-page"
 import { TopicDetailPage } from "@/pages/topic-detail-page"
@@ -30,6 +32,8 @@ export default function App() {
         <Route element={<AppShell />}>
           <Route index element={<Navigate to="/dashboard" replace />} />
           <Route path="/dashboard" element={<DashboardPage />} />
+          <Route path="/intake" element={<IntakePage />} />
+          <Route path="/sources/categories" element={<SourceCategoriesPage />} />
           <Route path="/topics" element={<TopicsPage />} />
           <Route path="/topics/:topicId" element={<TopicDetailPage />} />
           <Route path="/tasks" element={<TasksPage />} />
