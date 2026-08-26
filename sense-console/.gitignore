@@ -1,0 +1,35 @@
+# Logs
+logs
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+lerna-debug.log*
+
+node_modules
+dist
+dist-ssr
+*.local
+test-results
+playwright-report
+
+# Generated media for local video-factory demos.
+video-factory/assets/bgm/
+video-factory/projects/demo_*/audio/
+video-factory/projects/demo_*/sfx/
+video-factory/projects/demo_*/shots/
+video-factory/projects/demo_*/keyframes/
+video-factory/projects/demo_*/subtitles/
+video-factory/projects/demo_*/output/
+
+# Editor directories and files
+.vscode/*
+!.vscode/extensions.json
+.idea
+.DS_Store
+*.suo
+*.ntvs*
+*.njsproj
+*.sln
+*.sw?

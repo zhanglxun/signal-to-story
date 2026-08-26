@@ -1,0 +1,51 @@
+# Signal to Story - Video Factory Configuration
+
+project_defaults:
+  aspect_ratio: "9:16"
+  target_resolution: "1080x1920"
+  fps: 30
+  voice: "zh-CN-XiaoxiaoNeural" # 活泼、亲切、富有感染力的女声（支持中文与日常英文）
+  voice_rate: "+0%"
+  voice_pitch: "+0Hz"
+
+render:
+  ffmpeg_path: "/opt/homebrew/bin/ffmpeg"
+  ffprobe_path: "/opt/homebrew/bin/ffprobe"
+  audio_ducking:
+    enabled: true
+    bgm_volume_normal: 0.25 # 无旁白时的 BGM 音量
+    bgm_volume_ducked: 0.08 # 有旁白时的 BGM 降音量
+    fade_duration_sec: 0.4  # 淡入淡出过渡时长
+
+storage:
+  mode: "local" # local | cloud
+  local_root: "projects"
+  # S3 / R2 / OSS configuration for future cloud sync
+  cloud:
+    provider: "r2" # r2 | s3 | oss | supabase
+    bucket: "signal-to-story-media"
+    endpoint_url: ""
+    access_key_id: ""
+    secret_access_key: ""
+    public_domain: ""
+
+adapters:
+  # 通义万相
+  wanx:
+    api_key: ""
+    endpoint: "https://dashscope.aliyuncs.com/api/v1/services/aigc"
+  # MiniMax (海螺)
+  minimax:
+    api_key: ""
+    group_id: ""
+    endpoint: "https://api.minimax.chat/v1"
+  # Seedance (豆包视频)
+  seedance:
+    api_key: ""
+    endpoint: ""
+  # OpenAI / Sora
+  openai:
+    api_key: ""
+  # Google Gemini / Veo
+  gemini:
+    api_key: ""

@@ -1,0 +1,88 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "VideoPlan",
+  "type": "object",
+  "required": ["project_id", "title", "meta", "shots"],
+  "properties": {
+    "project_id": {
+      "type": "string",
+      "description": "Unique identifier for the video project"
+    },
+    "title": {
+      "type": "string",
+      "description": "Project title or headline"
+    },
+    "meta": {
+      "type": "object",
+      "required": ["aspect_ratio", "target_resolution", "style", "voice"],
+      "properties": {
+        "aspect_ratio": {
+          "type": "string",
+          "enum": ["9:16", "16:9", "1:1"]
+        },
+        "target_resolution": {
+          "type": "string",
+          "pattern": "^[0-9]+x[0-9]+$"
+        },
+        "style": {
+          "type": "string"
+        },
+        "bgm_track": {
+          "type": "string"
+        },
+        "voice": {
+          "type": "string"
+        },
+        "voice_rate": {
+          "type": "string"
+        },
+        "voice_pitch": {
+          "type": "string"
+        }
+      }
+    },
+    "character_refs": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["id", "name", "description"],
+        "properties": {
+          "id": { "type": "string" },
+          "name": { "type": "string" },
+          "description": { "type": "string" },
+          "ref_images": {
+            "type": "array",
+            "items": { "type": "string" }
+          }
+        }
+      }
+    },
+    "shots": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "type": "object",
+        "required": ["id", "type", "voiceover", "visual_prompt", "camera", "duration_sec"],
+        "properties": {
+          "id": { "type": "string" },
+          "type": {
+            "type": "string",
+            "enum": ["pan_zoom", "ai_video", "data_card", "static"]
+          },
+          "voiceover": { "type": "string" },
+          "visual_prompt": { "type": "string" },
+          "camera": { "type": "string" },
+          "duration_sec": { "type": "number", "minimum": 0.5 },
+          "keyframe_image": { "type": ["string", "null"] },
+          "motion_adapter": { "type": ["string", "null"] },
+          "output_video": { "type": ["string", "null"] },
+          "status": {
+            "type": "string",
+            "enum": ["pending", "audio_generated", "keyframe_generated", "rendered", "failed"]
+          },
+          "cost": { "type": "number" }
+        }
+      }
+    }
+  }
+}
