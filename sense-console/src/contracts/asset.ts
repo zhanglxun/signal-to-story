@@ -52,14 +52,6 @@ export type UpdateAssetInput = CreateAssetInput & {
   id: number
 }
 
-export type AssetWorkspace = {
-  organization: {
-    id: string
-    name: string
-  } | null
-  canManage: boolean
-}
-
 export const assetTypeLabels: Record<AssetType, string> = {
   character: "角色",
   scene: "场景",

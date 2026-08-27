@@ -1,6 +1,6 @@
 # Supabase 数据模型设计入口
 
-状态：账号与组织基座、V1 资产元数据账本已落地；其余内容生产领域模型仍待独立设计与评审。
+状态：账号与组织基座、V1 资产元数据账本、知识库内容（分类/待处理信息/选题）已落地；其余内容生产领域模型仍待独立设计与评审。
 
 ## 已落地：组织与账号基座
 
@@ -39,10 +39,32 @@
 
 权限采用 RLS 与显式 GRANT 双层控制：Viewer 及以上可读取，Member 及以上可登记和更新，不向浏览器授予 DELETE。停用资产使用 `is_active=false`；后续需要版本和物理清理时，再通过 `asset_versions` 与受控 Worker 流程处理。
 
+## 已落地：知识库内容（分类 / 待处理信息 / 选题）
+
+`source_categories`、`signals`、`selections` 对应 `docs-site/spec/SignalToStory项目数据库文档.md` 的 `c_category`/`c_signal`/`c_selection` 草案，字段调整如下：
+
+| 表 | 原草案 | 当前字段 | 调整原因 |
+| --- | --- | --- | --- |
+| c_category → `source_categories` | 无组织字段 | `organization_id uuid` | 与 `assets` 一致：RLS 必须绑定真实 workspace，不能只写 `TO authenticated` |
+| | `sort_id Int`（字段说明写"用户的ID"，疑似笔误） | `sort_order smallint` | 结合实际用途（树形展示顺序）改名 |
+| | `status int 1/0` | `is_active boolean` | 与 `assets.is_active` 同一习惯 |
+| c_signal → `signals` | 无组织字段 | `organization_id uuid` | 同上 |
+| | `status int 1未整理/0已整理` | `is_organized boolean` | 二态工作流标记 |
+| | `category_id` | `... references source_categories(id) on delete restrict` | 分类仍被引用时拒绝删除，而不是级联 |
+| c_selection → `selections` | 无组织字段 | `organization_id uuid` | 同上 |
+| | `signal_id` | `... references signals(id) on delete restrict` | 防止孤儿选题 |
+| | `priority int 1/2/3`、`status int 1未完成/0已完成` | `priority smallint check in (1,2,3)`、`is_completed boolean` | 去掉魔法数字歧义 |
+| | `outline_template JSON` | `outline_template jsonb`，`[{"title": "..."}]`，`check (jsonb_typeof=array)` | 落地为章节标题的有序列表 |
+
+`source_categories` 用 `parent_id` 自关联两层结构，`private.enforce_source_category_depth()` 触发器阻止出现第三层。三张表都通过 `private.set_audit_fields()` 通用触发器维护 `created_by/created_at/updated_by/updated_at`，权限沿用已有的 `content.view`/`content.manage`。
+
+分类父子关系、信息所属分类和选题所属信息都使用 `(organization_id, 关联 ID)` 复合外键，数据库层会拒绝跨组织误关联，避免只依赖 RLS 维持租户边界。
+
+和 `assets` 不同的是，这三张表**都对浏览器开放了 DELETE**（`content.manage` 权限 + RLS）：`signals` 是收件箱性质的队列，`selections` 是本轮明确要支持删除的对象，`source_categories` 的删除风险已经由外键 `on delete restrict` 挡住（分类下还有子分类，或已被 `signals` 引用时，数据库直接拒绝，由 service 层捕获 `23503` 转成友好提示）。
+
 ## 拟覆盖的核心对象
 
 - `profiles`：账号展示资料与状态；可信角色关系存放在 `organization_members`，不使用可由用户修改的 `user_metadata` 做授权。
-- `topics`：选题、信号来源、评分、状态与判断结论。
 - `agent_tasks`：异步任务、执行者、输入引用、进度、错误与输出引用。
 - `stories` / `story_nodes`：故事与章节、场景、分镜等结构关系。
 - `assets` / `asset_versions`：图片、音频、人物、场景与视频的元数据、外部存储地址和版本。

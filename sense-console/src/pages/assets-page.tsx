@@ -34,9 +34,10 @@ import {
   type AssetMediaType,
   type AssetType,
 } from "@/contracts/asset"
-import { getAssets, getAssetWorkspace } from "@/services/asset-service"
+import { getAssets } from "@/services/asset-service"
+import { getContentWorkspace } from "@/services/content-workspace-service"
 
-const workspaceKey = ["asset-workspace"] as const
+const workspaceKey = ["content-workspace"] as const
 const PAGE_SIZE = 12
 type ViewMode = "list" | "grid"
 type ActiveFilter = "all" | "active" | "disabled"
@@ -88,7 +89,7 @@ export function AssetsPage() {
   const [activeFilter, setActiveFilter] = useState<ActiveFilter>("all")
   const [page, setPage] = useState(1)
   const deferredQuery = useDeferredValue(queryText)
-  const workspaceQuery = useQuery({ queryKey: workspaceKey, queryFn: getAssetWorkspace })
+  const workspaceQuery = useQuery({ queryKey: workspaceKey, queryFn: getContentWorkspace })
   const organizationId = workspaceQuery.data?.organization?.id
 
   const changeQueryText = (value: string) => {

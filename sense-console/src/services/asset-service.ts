@@ -2,7 +2,6 @@ import type {
   Asset,
   AssetFilters,
   AssetPage,
-  AssetWorkspace,
   CreateAssetInput,
   UpdateAssetInput,
 } from "@/contracts/asset"
@@ -49,46 +48,6 @@ function mapAsset(row: AssetRow): Asset {
     createdAt: row.created_at,
     updatedBy: row.updated_by,
     updatedAt: row.updated_at,
-  }
-}
-
-export async function getAssetWorkspace(): Promise<AssetWorkspace> {
-  const supabase = requireSupabase()
-  const { data: organizations, error: organizationError } = await supabase
-    .from("organizations")
-    .select("id, name")
-    .order("created_at", { ascending: true })
-    .limit(1)
-
-  if (organizationError) throw new Error("暂时无法读取资产所属组织。")
-  const organization = organizations?.[0] ?? null
-  if (!organization) return { organization: null, canManage: false }
-
-  const { data: userData, error: userError } = await supabase.auth.getUser()
-  if (userError || !userData.user) throw new Error("登录会话已失效，请重新登录。")
-
-  const { data: membership, error: membershipError } = await supabase
-    .from("organization_members")
-    .select("role")
-    .eq("organization_id", organization.id)
-    .eq("user_id", userData.user.id)
-    .maybeSingle()
-
-  if (membershipError) throw new Error("暂时无法读取资产管理权限。")
-  if (!membership) return { organization, canManage: false }
-
-  const { data: roleDefinition, error: roleError } = await supabase
-    .from("organization_roles")
-    .select("permissions")
-    .eq("organization_id", organization.id)
-    .eq("role_key", membership.role)
-    .maybeSingle()
-
-  if (roleError) throw new Error("暂时无法读取资产管理权限。")
-
-  return {
-    organization,
-    canManage: Boolean(roleDefinition?.permissions?.includes("content.manage")),
   }
 }
 

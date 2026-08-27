@@ -8,7 +8,8 @@ import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { assetTypeLabels, mediaTypeLabels } from "@/contracts/asset"
-import { getAsset, getAssetWorkspace } from "@/services/asset-service"
+import { getAsset } from "@/services/asset-service"
+import { getContentWorkspace } from "@/services/content-workspace-service"
 
 function isSafeWebUrl(value: string | null): value is string {
   if (!value) return false
@@ -27,7 +28,7 @@ export function AssetDetailPage() {
     queryFn: () => getAsset(numericAssetId),
     enabled: Number.isSafeInteger(numericAssetId) && numericAssetId > 0,
   })
-  const workspaceQuery = useQuery({ queryKey: ["asset-workspace"], queryFn: getAssetWorkspace })
+  const workspaceQuery = useQuery({ queryKey: ["content-workspace"], queryFn: getContentWorkspace })
 
   if (!Number.isSafeInteger(numericAssetId) || numericAssetId <= 0) {
     return <Alert variant="destructive"><AlertTitle>资产编号无效</AlertTitle><AlertDescription>请返回资产库重新选择。</AlertDescription></Alert>
