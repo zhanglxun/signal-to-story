@@ -2,6 +2,7 @@ import { useId, useState, type FormEvent, type ReactElement } from "react"
 import { useMutation, useQueryClient } from "@tanstack/react-query"
 import { toast } from "sonner"
 
+import { CategorySelect } from "@/components/source-categories/category-select"
 import { Button } from "@/components/ui/button"
 import {
   Dialog,
@@ -16,7 +17,7 @@ import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { NativeSelect, NativeSelectOption } from "@/components/ui/native-select"
 import { Textarea } from "@/components/ui/textarea"
-import { buildSourceCategoryTree, type SourceCategory } from "@/contracts/source-category"
+import type { SourceCategory } from "@/contracts/source-category"
 import type { Signal } from "@/contracts/signal"
 import { createSignal, updateSignal } from "@/services/signal-service"
 
@@ -39,20 +40,11 @@ function initialForm(signal?: Signal, defaultCategoryId?: number) {
   }
 }
 
-/** Flattens the two-level category tree into select options, indenting children. */
-function useCategoryOptions(categories: SourceCategory[]) {
-  return buildSourceCategoryTree(categories).flatMap((parent) => [
-    { id: parent.id, label: parent.name },
-    ...parent.children.map((child) => ({ id: child.id, label: `    ${child.name}` })),
-  ])
-}
-
 export function SignalDialog({ organizationId, signal, categories, trigger }: SignalDialogProps) {
   const queryClient = useQueryClient()
   const fieldPrefix = `signal-${signal?.id ?? "new"}-${useId()}`
-  const categoryOptions = useCategoryOptions(categories)
   const [open, setOpen] = useState(false)
-  const [form, setForm] = useState(() => initialForm(signal, categoryOptions[0]?.id))
+  const [form, setForm] = useState(() => initialForm(signal, categories[0]?.id))
   const editing = Boolean(signal)
 
   const mutation = useMutation({
@@ -65,7 +57,7 @@ export function SignalDialog({ organizationId, signal, categories, trigger }: Si
     },
     onSuccess: async () => {
       await queryClient.invalidateQueries({ queryKey: ["signals"] })
-      setForm(initialForm(signal, categoryOptions[0]?.id))
+      setForm(initialForm(signal, categories[0]?.id))
       setOpen(false)
       toast.success(editing ? "信息已更新。" : "信息已登记。")
     },
@@ -74,7 +66,7 @@ export function SignalDialog({ organizationId, signal, categories, trigger }: Si
 
   const changeOpen = (nextOpen: boolean) => {
     if (!nextOpen && mutation.isPending) return
-    if (nextOpen) setForm(initialForm(signal, categoryOptions[0]?.id))
+    if (nextOpen) setForm(initialForm(signal, categories[0]?.id))
     setOpen(nextOpen)
   }
 
@@ -94,7 +86,7 @@ export function SignalDialog({ organizationId, signal, categories, trigger }: Si
           </DialogHeader>
           <div className="grid gap-4 py-2 sm:grid-cols-2">
             <div className="grid gap-2 sm:col-span-2"><Label htmlFor={`${fieldPrefix}-name`}>名称</Label><Input id={`${fieldPrefix}-name`} value={form.name} onChange={(event) => setForm((current) => ({ ...current, name: event.target.value }))} maxLength={120} required /></div>
-            <div className="grid gap-2"><Label htmlFor={`${fieldPrefix}-category`}>分类</Label><NativeSelect id={`${fieldPrefix}-category`} className="w-full" value={form.categoryId === null ? "" : String(form.categoryId)} onChange={(event) => setForm((current) => ({ ...current, categoryId: event.target.value === "" ? null : Number(event.target.value) }))} required><NativeSelectOption value="" disabled>请选择分类</NativeSelectOption>{categoryOptions.map((option) => <NativeSelectOption key={option.id} value={String(option.id)}>{option.label}</NativeSelectOption>)}</NativeSelect></div>
+            <div className="grid gap-2"><Label htmlFor={`${fieldPrefix}-category`}>分类</Label><CategorySelect id={`${fieldPrefix}-category`} categories={categories} value={form.categoryId} onChange={(categoryId) => setForm((current) => ({ ...current, categoryId }))} placeholder="请选择分类" /></div>
             <div className="grid gap-2"><Label htmlFor={`${fieldPrefix}-status`}>状态</Label><NativeSelect id={`${fieldPrefix}-status`} className="w-full" value={form.isOrganized ? "organized" : "pending"} onChange={(event) => setForm((current) => ({ ...current, isOrganized: event.target.value === "organized" }))}><NativeSelectOption value="pending">未整理</NativeSelectOption><NativeSelectOption value="organized">已整理</NativeSelectOption></NativeSelect></div>
             <div className="grid gap-2 sm:col-span-2"><Label htmlFor={`${fieldPrefix}-site-url`}>来源链接</Label><Input id={`${fieldPrefix}-site-url`} type="url" value={form.siteUrl} onChange={(event) => setForm((current) => ({ ...current, siteUrl: event.target.value }))} maxLength={512} placeholder="https://…" /></div>
             <div className="grid gap-2 sm:col-span-2"><Label htmlFor={`${fieldPrefix}-icon`}>图标地址</Label><Input id={`${fieldPrefix}-icon`} value={form.iconUrl} onChange={(event) => setForm((current) => ({ ...current, iconUrl: event.target.value }))} maxLength={128} placeholder="可选" /></div>

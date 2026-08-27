@@ -15,9 +15,14 @@ export function StoryScopeSelect({ className }: { className?: string }) {
 
   if (stories.length === 0) return null
 
+  // Base UI's `Select.Value` only shows the raw value string unless `items`
+  // (a value → label map) is passed to the root — without it, the trigger
+  // would show the story's id instead of its title once one is selected.
+  const itemLabels = Object.fromEntries(stories.map((item) => [item.id, item.title]))
+
   return (
     <div className={className ?? "flex flex-wrap items-center gap-3"}>
-      <Select value={storyId ?? undefined} onValueChange={(value) => value && setStoryId(value)}>
+      <Select items={itemLabels} value={storyId ?? undefined} onValueChange={(value) => value && setStoryId(value)}>
         <SelectTrigger className="w-56" aria-label="切换剧本">
           <BookMarkedIcon className="text-muted-foreground" />
           <SelectValue placeholder="选择剧本" />

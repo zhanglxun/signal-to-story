@@ -6,15 +6,14 @@ import { SignalDialog } from "@/components/intake/signal-dialog"
 import { PageHeader } from "@/components/page-header"
 import { PaginationBar } from "@/components/pagination-bar"
 import { ConfirmDeleteDialog } from "@/components/shared/confirm-delete-dialog"
+import { CategorySelect } from "@/components/source-categories/category-select"
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent } from "@/components/ui/card"
 import { Empty, EmptyDescription, EmptyHeader, EmptyMedia, EmptyTitle } from "@/components/ui/empty"
 import { Input } from "@/components/ui/input"
-import { NativeSelect, NativeSelectOption } from "@/components/ui/native-select"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
-import { buildSourceCategoryTree } from "@/contracts/source-category"
 import { getContentWorkspace } from "@/services/content-workspace-service"
 import { getSourceCategories } from "@/services/source-category-service"
 import { deleteSignal, getSignalsPage } from "@/services/signal-service"
@@ -47,10 +46,6 @@ export function IntakePage() {
     enabled: Boolean(organizationId),
   })
   const categories = categoriesQuery.data ?? []
-  const categoryOptions = buildSourceCategoryTree(categories).flatMap((parent) => [
-    { id: parent.id, label: parent.name },
-    ...parent.children.map((child) => ({ id: child.id, label: `    ${child.name}` })),
-  ])
   const categoryNameById = new Map(categories.map((category) => [category.id, category.name]))
 
   const changeQueryText = (value: string) => { setQueryText(value); setPage(1) }
@@ -94,10 +89,14 @@ export function IntakePage() {
 
       <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
         <div className="relative min-w-0 flex-1 sm:max-w-sm"><SearchIcon className="absolute top-1/2 left-3 size-4 -translate-y-1/2 text-muted-foreground" /><Input className="pl-9" value={queryText} onChange={(event) => changeQueryText(event.target.value)} placeholder="搜索名称" /></div>
-        <NativeSelect className="w-full sm:w-48" aria-label="按分类筛选" value={categoryFilter === "all" ? "all" : String(categoryFilter)} onChange={(event) => changeCategoryFilter(event.target.value === "all" ? "all" : Number(event.target.value))}>
-          <NativeSelectOption value="all">全部分类</NativeSelectOption>
-          {categoryOptions.map((option) => <NativeSelectOption key={option.id} value={String(option.id)}>{option.label}</NativeSelectOption>)}
-        </NativeSelect>
+        <CategorySelect
+          className="w-full sm:w-56"
+          ariaLabel="按分类筛选"
+          categories={categories}
+          value={categoryFilter === "all" ? null : categoryFilter}
+          onChange={(value) => changeCategoryFilter(value === null ? "all" : value)}
+          allOptionLabel="全部分类"
+        />
       </div>
 
       {signalsQuery.isError && <Alert variant="destructive"><AlertTitle>无法读取待处理信息</AlertTitle><AlertDescription>{signalsQuery.error.message}</AlertDescription></Alert>}

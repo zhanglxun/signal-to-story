@@ -13,6 +13,7 @@ import { ForgotPasswordPage } from "@/pages/forgot-password-page"
 import { IntakePage } from "@/pages/intake-page"
 import { LoginPage } from "@/pages/login-page"
 import { NotFoundPage } from "@/pages/not-found-page"
+import { PromptExamplesPage } from "@/pages/prompt-examples-page"
 import { OrganizationAccountsPage } from "@/pages/organization-accounts-page"
 import { RolesPage } from "@/pages/roles-page"
 import { ScenesPage } from "@/pages/scenes-page"
@@ -39,6 +40,7 @@ export default function App() {
           <Route index element={<Navigate to="/dashboard" replace />} />
           <Route path="/dashboard" element={<DashboardPage />} />
           <Route path="/intake" element={<IntakePage />} />
+          <Route path="/intake/prompts" element={<PromptExamplesPage />} />
           <Route path="/sources/categories" element={<SourceCategoriesPage />} />
           <Route path="/topics" element={<TopicsPage />} />
           <Route path="/topics/:topicId" element={<TopicDetailPage />} />

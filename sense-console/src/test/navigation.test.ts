@@ -20,6 +20,7 @@ describe("console navigation", () => {
     expect(resolveNavigation("/topics/topic-1").activeItem?.id).toBe("topics")
     expect(resolveNavigation("/tasks/task-1").activeItem?.id).toBe("tasks")
     expect(resolveNavigation("/video/scripts/story-du-kou").activeItem?.id).toBe("scripts")
+    expect(resolveNavigation("/intake/prompts").activeItem?.id).toBe("prompt-examples")
   })
 
   it("assigns account settings to the system module without adding a menu item", () => {

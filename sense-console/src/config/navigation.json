@@ -57,6 +57,19 @@
               "icon": "Sparkles"
             }
           ]
+        },
+        {
+          "id": "creative-references",
+          "label": "创作参考",
+          "icon": "ImagePlus",
+          "items": [
+            {
+              "id": "prompt-examples",
+              "label": "提示词与图例",
+              "path": "/intake/prompts",
+              "icon": "ImagePlus"
+            }
+          ]
         }
       ]
     },

@@ -96,6 +96,21 @@ export async function getAsset(assetId: number): Promise<Asset | null> {
   return data ? mapAsset(data as unknown as AssetRow) : null
 }
 
+export async function getImageAssetOptions(organizationId: string): Promise<{ id: number; name: string }[]> {
+  const supabase = requireSupabase()
+  const { data, error } = await supabase
+    .from("assets")
+    .select("id, name")
+    .eq("organization_id", organizationId)
+    .eq("media_type", "image")
+    .eq("is_active", true)
+    .order("updated_at", { ascending: false })
+    .limit(200)
+
+  if (error) throw new Error("暂时无法读取图片资产。")
+  return (data ?? []) as { id: number; name: string }[]
+}
+
 export async function createAsset(input: CreateAssetInput): Promise<Asset> {
   const supabase = requireSupabase()
   const { data: userData, error: userError } = await supabase.auth.getUser()

@@ -19,5 +19,6 @@ Also follow:
 - Media binaries belong in object storage; Postgres stores metadata and relationships.
 - Do not introduce a Worker, monorepo, or shared packages before a real requirement exists.
 - Navigation has at most two levels, and the project uses one shadcn/ui Base UI component system.
+- Once a shared UI component exists for a given interaction, reuse it instead of hand-rolling a parallel implementation — e.g. every category-hierarchy dropdown uses `sense-console/src/components/source-categories/category-select.tsx`; see `sense-console/docs/frontend-conventions.md` for the running list.
 
 Before handing off code, run typecheck, lint, tests, and build.

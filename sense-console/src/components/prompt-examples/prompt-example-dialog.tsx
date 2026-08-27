@@ -1,0 +1,55 @@
+import { useRef, useState, type DragEvent, type FormEvent, type ReactElement, type ReactNode } from "react"
+import { useMutation, useQueryClient } from "@tanstack/react-query"
+import { ImagePlusIcon, UploadIcon, XIcon } from "lucide-react"
+import { toast } from "sonner"
+
+import { Button } from "@/components/ui/button"
+import { Input } from "@/components/ui/input"
+import { Label } from "@/components/ui/label"
+import { NativeSelect, NativeSelectOption } from "@/components/ui/native-select"
+import { Sheet, SheetContent, SheetDescription, SheetFooter, SheetHeader, SheetTitle, SheetTrigger } from "@/components/ui/sheet"
+import { Textarea } from "@/components/ui/textarea"
+import { promptExampleOriginLabels, promptExampleOriginTypes, promptExampleStatusLabels, promptExampleStatuses, promptExampleVisibilityLabels, promptExampleVisibilities, type PromptExample } from "@/contracts/prompt-example"
+import { createPromptExample, deletePromptExampleImage, updatePromptExample, uploadPromptExampleImage } from "@/services/prompt-example-service"
+
+type Props = { organizationId: string; promptExample?: PromptExample; imageAssetOptions: { id: number; name: string }[]; trigger: ReactElement }
+function initialForm(item?: PromptExample) { return { title: item?.title ?? "", promptText: item?.promptText ?? "", negativePrompt: item?.negativePrompt ?? "", exampleImageUrl: item?.exampleImageUrl ?? "", exampleAssetId: item?.exampleAssetId == null ? "" : String(item.exampleAssetId), sourceUrl: item?.sourceUrl ?? "", sourceAuthor: item?.sourceAuthor ?? "", originType: item?.originType ?? "collected", tags: item?.tags.join("，") ?? "", status: item?.status ?? "inbox", visibility: item?.visibility ?? "private", notes: item?.notes ?? "" } }
+function isSafeWebUrl(value: string | null | undefined): value is string { try { return Boolean(value && ["http:", "https:"].includes(new URL(value).protocol)) } catch { return false } }
+
+export function PromptExampleDialog({ organizationId, promptExample, imageAssetOptions, trigger }: Props) {
+  const queryClient = useQueryClient(), fileInputRef = useRef<HTMLInputElement>(null)
+  const [open, setOpen] = useState(false), [form, setForm] = useState(() => initialForm(promptExample)), [imageFile, setImageFile] = useState<File | null>(null), [localPreviewUrl, setLocalPreviewUrl] = useState<string | null>(null)
+  const editing = Boolean(promptExample)
+  const clearSelectedImage = () => { if (localPreviewUrl) URL.revokeObjectURL(localPreviewUrl); setLocalPreviewUrl(null); setImageFile(null) }
+  const mutation = useMutation({
+    mutationFn: async () => {
+      let uploadedPath: string | null = null
+      try {
+        if (imageFile) uploadedPath = await uploadPromptExampleImage(organizationId, imageFile)
+        const payload = { organizationId, title: form.title, promptText: form.promptText, negativePrompt: form.negativePrompt, exampleImageUrl: form.exampleImageUrl, exampleStoragePath: uploadedPath ?? promptExample?.exampleStoragePath ?? null, exampleAssetId: form.exampleAssetId ? Number(form.exampleAssetId) : null, sourceUrl: form.sourceUrl, sourceAuthor: form.sourceAuthor, originType: form.originType as PromptExample["originType"], tags: form.tags.split(/[，,]/), status: form.status as PromptExample["status"], visibility: form.visibility as PromptExample["visibility"], notes: form.notes }
+        const saved = editing ? await updatePromptExample({ id: promptExample!.id, ...payload }) : await createPromptExample(payload)
+        if (uploadedPath && promptExample?.exampleStoragePath && promptExample.exampleStoragePath !== uploadedPath) await deletePromptExampleImage(promptExample.exampleStoragePath).catch(() => undefined)
+        return saved
+      } catch (error) { if (uploadedPath) await deletePromptExampleImage(uploadedPath).catch(() => undefined); throw error }
+    },
+    onSuccess: async () => { await queryClient.invalidateQueries({ queryKey: ["prompt-examples"] }); setOpen(false); clearSelectedImage(); toast.success(editing ? "提示词与图例已更新。" : "提示词与图例已登记。") },
+    onError: (error) => toast.error(error instanceof Error ? error.message : "保存失败。"),
+  })
+  const changeOpen = (next: boolean) => { if (!next && mutation.isPending) return; if (next) setForm(initialForm(promptExample)); clearSelectedImage(); setOpen(next) }
+  const selectImage = (file: File | undefined) => { if (!file) return; if (localPreviewUrl) URL.revokeObjectURL(localPreviewUrl); setImageFile(file); setLocalPreviewUrl(URL.createObjectURL(file)) }
+  const handleDrop = (event: DragEvent<HTMLDivElement>) => { event.preventDefault(); selectImage(Array.from(event.dataTransfer.files).find((file) => file.type.startsWith("image/"))) }
+  const imagePreviewUrl = localPreviewUrl ?? (isSafeWebUrl(promptExample?.examplePreviewUrl) ? promptExample.examplePreviewUrl : isSafeWebUrl(form.exampleImageUrl) ? form.exampleImageUrl : null)
+  return <Sheet open={open} onOpenChange={changeOpen}><SheetTrigger render={trigger} /><SheetContent side="right" className="w-full gap-0 p-0 sm:!max-w-5xl"><form onSubmit={(event: FormEvent) => { event.preventDefault(); mutation.mutate() }} className="flex min-h-0 flex-1 flex-col">
+    <SheetHeader className="border-b px-6 py-5"><SheetTitle>{editing ? "编辑提示词与图例" : "登记提示词与图例"}</SheetTitle><SheetDescription>图片可上传、拖入或粘贴截图；保存的是受权限保护的 Storage 地址。</SheetDescription></SheetHeader>
+    <div className="min-h-0 flex-1 overflow-y-auto px-6 py-5"><div className="grid gap-6 lg:grid-cols-[minmax(0,1.15fr)_minmax(18rem,0.85fr)]"><div className="grid content-start gap-4">
+      <Field label="名称"><Input value={form.title} onChange={(event) => setForm((current) => ({ ...current, title: event.target.value }))} maxLength={120} required placeholder="例如：电影感雨夜街景" /></Field>
+      <Field label="正向提示词"><Textarea className="min-h-72 resize-y leading-6" value={form.promptText} onChange={(event) => setForm((current) => ({ ...current, promptText: event.target.value }))} maxLength={8000} required placeholder="输入完整提示词正文" /></Field>
+      <Field label="负向提示词"><Textarea className="min-h-28 resize-y" value={form.negativePrompt} onChange={(event) => setForm((current) => ({ ...current, negativePrompt: event.target.value }))} maxLength={4000} placeholder="可选" /></Field>
+    </div><div className="grid content-start gap-4"><Field label="图例图片"><div role="button" tabIndex={0} onDragOver={(event) => event.preventDefault()} onDrop={handleDrop} onPaste={(event) => selectImage(Array.from(event.clipboardData.files).find((file) => file.type.startsWith("image/")))} onClick={() => fileInputRef.current?.click()} onKeyDown={(event) => { if (event.key === "Enter" || event.key === " ") { event.preventDefault(); fileInputRef.current?.click() } }} className="group relative flex aspect-[4/5] cursor-pointer flex-col items-center justify-center overflow-hidden rounded-xl border border-dashed bg-muted/30 text-center outline-none transition-colors hover:border-primary/60 hover:bg-muted/60 focus-visible:ring-2 focus-visible:ring-ring">{imagePreviewUrl ? <img src={imagePreviewUrl} alt="图例预览" className="size-full object-cover" /> : <><ImagePlusIcon className="mb-3 size-10 text-muted-foreground" /><p className="font-medium">上传或粘贴图例</p><p className="mt-1 px-5 text-xs text-muted-foreground">点击选择、拖拽图片，或在此直接粘贴截图</p></>}{imagePreviewUrl && <div className="absolute inset-x-0 bottom-0 bg-black/60 px-3 py-2 text-xs text-white opacity-0 transition-opacity group-hover:opacity-100">点击替换图片</div>}</div><input ref={fileInputRef} className="sr-only" type="file" accept="image/jpeg,image/png,image/webp,image/gif" onChange={(event) => selectImage(event.target.files?.[0])} /><div className="flex items-center gap-2"><Button type="button" variant="outline" size="sm" onClick={() => fileInputRef.current?.click()}><UploadIcon />选择图片</Button>{imageFile && <Button type="button" variant="ghost" size="sm" onClick={clearSelectedImage}><XIcon />取消本次图片</Button>}</div></Field>
+      <Field label="外部图例地址"><Input type="url" value={form.exampleImageUrl} onChange={(event) => setForm((current) => ({ ...current, exampleImageUrl: event.target.value }))} maxLength={2048} placeholder="https://…（可选）" /></Field><Field label="关联资产库图片"><NativeSelect className="w-full" value={form.exampleAssetId} onChange={(event) => setForm((current) => ({ ...current, exampleAssetId: event.target.value }))}><NativeSelectOption value="">不关联</NativeSelectOption>{imageAssetOptions.map((asset) => <NativeSelectOption key={asset.id} value={String(asset.id)}>{asset.name}</NativeSelectOption>)}</NativeSelect></Field>
+    </div></div><div className="mt-6 grid gap-4 border-t pt-5 sm:grid-cols-2">
+      <Field label="来源"><NativeSelect className="w-full" value={form.originType} onChange={(event) => setForm((current) => ({ ...current, originType: event.target.value as PromptExample["originType"] }))}>{promptExampleOriginTypes.map((type) => <NativeSelectOption key={type} value={type}>{promptExampleOriginLabels[type]}</NativeSelectOption>)}</NativeSelect></Field><Field label="整理状态"><NativeSelect className="w-full" value={form.status} onChange={(event) => setForm((current) => ({ ...current, status: event.target.value as PromptExample["status"] }))}>{promptExampleStatuses.map((status) => <NativeSelectOption key={status} value={status}>{promptExampleStatusLabels[status]}</NativeSelectOption>)}</NativeSelect></Field><Field label="原始链接"><Input type="url" value={form.sourceUrl} onChange={(event) => setForm((current) => ({ ...current, sourceUrl: event.target.value }))} maxLength={2048} placeholder="可选" /></Field><Field label="原作者 / 来源账号"><Input value={form.sourceAuthor} onChange={(event) => setForm((current) => ({ ...current, sourceAuthor: event.target.value }))} maxLength={120} placeholder="可选" /></Field><Field label="标签"><Input value={form.tags} onChange={(event) => setForm((current) => ({ ...current, tags: event.target.value }))} placeholder="场景，电影感，雨夜" /></Field><Field label="共享标记"><NativeSelect className="w-full" value={form.visibility} onChange={(event) => setForm((current) => ({ ...current, visibility: event.target.value as PromptExample["visibility"] }))}>{promptExampleVisibilities.map((visibility) => <NativeSelectOption key={visibility} value={visibility}>{promptExampleVisibilityLabels[visibility]}</NativeSelectOption>)}</NativeSelect></Field><div className="sm:col-span-2"><Field label="备注"><Textarea value={form.notes} onChange={(event) => setForm((current) => ({ ...current, notes: event.target.value }))} maxLength={4000} rows={3} placeholder="适用模型、使用心得或版权说明（可选）" /></Field></div>
+    </div></div><SheetFooter className="flex-row justify-end border-t px-6 py-4"><Button type="button" variant="outline" onClick={() => changeOpen(false)} disabled={mutation.isPending}>取消</Button><Button type="submit" disabled={mutation.isPending}>{mutation.isPending ? "保存中…" : "保存"}</Button></SheetFooter>
+  </form></SheetContent></Sheet>
+}
+function Field({ label, children }: { label: string; children: ReactNode }) { return <div className="grid gap-2"><Label>{label}</Label>{children}</div> }

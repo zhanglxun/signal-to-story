@@ -82,6 +82,28 @@
 
 # 资源管理
 
+## 提示词与图例（prompt_examples）
+
+| 字段 | 类型 | 备注 |
+| --- | --- | --- |
+| id | bigint | 主键 ID |
+| organization_id | uuid | 所属组织 |
+| title | text | 名称 |
+| prompt_text | text | 正向提示词正文 |
+| negative_prompt | text | 负向提示词，可空 |
+| example_image_url | text | 外部图例地址，可空 |
+| example_storage_path | text | 私有 Supabase Storage 图例对象路径，可空 |
+| example_asset_id | bigint | 已导入资产库的图片资产，可空 |
+| source_url / source_author | text | 网络原始链接与作者，可空 |
+| origin_type | text | `collected` 网络收集 / `self_created` 自己创作 |
+| tags | text[] | 最多 12 个标签 |
+| status | text | `inbox` 待整理 / `curated` 已收藏 / `archived` 已归档 |
+| visibility | text | `private` 私有 / `shared` 可共享标记；当前不公开 |
+| notes | text | 备注、使用心得，可空 |
+| created_by / created_at / updated_by / updated_at | uuid / timestamptz | 审计字段 |
+
+提示词与图例是创作参考，不替代图片资产；需要长期保存或复用的图例可同步登记到 `assets`，然后使用 `example_asset_id` 关联。浏览器上传的图例存放在私有 `prompt-examples` Storage bucket；网页只按当前账号权限取得短时签名预览地址，不公开对象 URL。
+
 
 
 ## 故事剧本\(c\_story\)
@@ -140,6 +162,4 @@
 |create\_time|datetime||创建时间|
 |modify\_id|long||修改人|
 |modify\_time|datetime||修改时间|
-
-
 

@@ -1,6 +1,6 @@
 # Supabase 数据模型设计入口
 
-状态：账号与组织基座、V1 资产元数据账本、知识库内容（分类/待处理信息/选题）已落地；其余内容生产领域模型仍待独立设计与评审。
+状态：账号与组织基座、V1 资产元数据账本、知识库内容（分类/待处理信息/选题）和提示词与图例库已落地；其余内容生产领域模型仍待独立设计与评审。
 
 ## 已落地：组织与账号基座
 
@@ -61,6 +61,16 @@
 分类父子关系、信息所属分类和选题所属信息都使用 `(organization_id, 关联 ID)` 复合外键，数据库层会拒绝跨组织误关联，避免只依赖 RLS 维持租户边界。
 
 和 `assets` 不同的是，这三张表**都对浏览器开放了 DELETE**（`content.manage` 权限 + RLS）：`signals` 是收件箱性质的队列，`selections` 是本轮明确要支持删除的对象，`source_categories` 的删除风险已经由外键 `on delete restrict` 挡住（分类下还有子分类，或已被 `signals` 引用时，数据库直接拒绝，由 service 层捕获 `23503` 转成友好提示）。
+
+## 已落地：提示词与图例库
+
+`prompt_examples` 管理网络收集与自主创作的提示词，并可保存外部图例地址、私有 Storage 图例对象，或可选关联一条现有图片资产。它不把提示词伪装成图片资产类型：提示词是可复用的创作参考，图片仍由 `assets` 账本管理。
+
+表内保留 `source_url`、`source_author`、`origin_type`、`tags`、`status` 和 `notes`，满足轻量收集与整理；`visibility` 只保存 `private/shared` 意图，当前没有匿名读取策略或公开发布页面。`example_asset_id` 与 `organization_id` 一起引用 `assets`，防止把其他组织的图例错误关联进来。
+
+上传图例使用私有 `prompt-examples` bucket：对象路径第一段为 `organization_id`，Storage RLS 使用同一套 `content.view` / `content.manage` 权限。表中只保存 `example_storage_path`；读取列表时由前端按已登录会话申请一小时有效的签名预览 URL，避免公开图片链接。
+
+访问规则与知识库内容一致：`content.view` 可读取，`content.manage` 可新建、编辑和删除；审计触发器维护创建与更新时间及操作人。
 
 ## 拟覆盖的核心对象
 
