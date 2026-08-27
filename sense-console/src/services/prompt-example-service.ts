@@ -6,6 +6,7 @@ import type {
   UpdatePromptExampleInput,
 } from "@/contracts/prompt-example"
 import { getSupabaseClient } from "@/lib/supabase"
+import { deleteManagedObject, uploadManagedImage } from "@/services/object-storage-service"
 
 type PromptExampleRow = {
   id: number
@@ -172,32 +173,12 @@ export async function updatePromptExample(input: UpdatePromptExampleInput): Prom
   return mapPromptExample(data as unknown as PromptExampleRow)
 }
 
-const imageMimeExtensions: Record<string, string> = {
-  "image/jpeg": "jpg",
-  "image/png": "png",
-  "image/webp": "webp",
-  "image/gif": "gif",
-}
-
-export async function uploadPromptExampleImage(organizationId: string, file: File): Promise<string> {
-  const extension = imageMimeExtensions[file.type]
-  if (!extension) throw new Error("仅支持 JPG、PNG、WebP 或 GIF 图片。")
-  if (file.size > 10 * 1024 * 1024) throw new Error("图片不能超过 10MB。")
-
-  const supabase = requireSupabase()
-  const path = `${organizationId}/${crypto.randomUUID()}.${extension}`
-  const { error } = await supabase.storage.from("prompt-examples").upload(path, file, {
-    contentType: file.type,
-    upsert: false,
-  })
-  if (error) throw new Error("图片上传失败，请检查当前账号权限或稍后重试。")
-  return path
+export async function uploadPromptExampleImage(organizationId: string, file: File): Promise<{ path: string; publicUrl: string | null }> {
+  return uploadManagedImage({ organizationId, purpose: "prompt_example", file })
 }
 
 export async function deletePromptExampleImage(path: string): Promise<void> {
-  const supabase = requireSupabase()
-  const { error } = await supabase.storage.from("prompt-examples").remove([path])
-  if (error) throw new Error("旧图片清理失败。")
+  return deleteManagedObject(path)
 }
 
 export async function deletePromptExample(id: number, organizationId: string): Promise<void> {

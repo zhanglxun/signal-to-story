@@ -23,10 +23,10 @@ export function PromptExampleDialog({ organizationId, promptExample, imageAssetO
   const clearSelectedImage = () => { if (localPreviewUrl) URL.revokeObjectURL(localPreviewUrl); setLocalPreviewUrl(null); setImageFile(null) }
   const mutation = useMutation({
     mutationFn: async () => {
-      let uploadedPath: string | null = null
+      let uploadedPath: string | null = null, uploadedPublicUrl: string | null = null
       try {
-        if (imageFile) uploadedPath = await uploadPromptExampleImage(organizationId, imageFile)
-        const payload = { organizationId, title: form.title, promptText: form.promptText, negativePrompt: form.negativePrompt, exampleImageUrl: form.exampleImageUrl, exampleStoragePath: uploadedPath ?? promptExample?.exampleStoragePath ?? null, exampleAssetId: form.exampleAssetId ? Number(form.exampleAssetId) : null, sourceUrl: form.sourceUrl, sourceAuthor: form.sourceAuthor, originType: form.originType as PromptExample["originType"], tags: form.tags.split(/[，,]/), status: form.status as PromptExample["status"], visibility: form.visibility as PromptExample["visibility"], notes: form.notes }
+        if (imageFile) { const uploaded = await uploadPromptExampleImage(organizationId, imageFile); uploadedPath = uploaded.path; uploadedPublicUrl = uploaded.publicUrl }
+        const payload = { organizationId, title: form.title, promptText: form.promptText, negativePrompt: form.negativePrompt, exampleImageUrl: uploadedPublicUrl ?? form.exampleImageUrl, exampleStoragePath: uploadedPath ?? promptExample?.exampleStoragePath ?? null, exampleAssetId: form.exampleAssetId ? Number(form.exampleAssetId) : null, sourceUrl: form.sourceUrl, sourceAuthor: form.sourceAuthor, originType: form.originType as PromptExample["originType"], tags: form.tags.split(/[，,]/), status: form.status as PromptExample["status"], visibility: form.visibility as PromptExample["visibility"], notes: form.notes }
         const saved = editing ? await updatePromptExample({ id: promptExample!.id, ...payload }) : await createPromptExample(payload)
         if (uploadedPath && promptExample?.exampleStoragePath && promptExample.exampleStoragePath !== uploadedPath) await deletePromptExampleImage(promptExample.exampleStoragePath).catch(() => undefined)
         return saved

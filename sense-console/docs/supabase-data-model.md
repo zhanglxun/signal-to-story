@@ -70,6 +70,18 @@
 
 上传图例使用私有 `prompt-examples` bucket：对象路径第一段为 `organization_id`，Storage RLS 使用同一套 `content.view` / `content.manage` 权限。表中只保存 `example_storage_path`；读取列表时由前端按已登录会话申请一小时有效的签名预览 URL，避免公开图片链接。
 
+## 对象存储接入约定
+
+Supabase Storage 当前只是默认的图例存储，并不是长期媒体归档的唯一选项。系统设置维护候选提供商（Supabase、阿里云 OSS、腾讯云 COS、七牛 Kodo、Cloudflare R2）的非敏感配置说明与连接状态。任何长期 Access Key、Secret Key 或 Token 都不得写入浏览器、`VITE_*` 环境变量或业务表。
+
+外部对象存储接入时，由 Edge Function 持有服务端 Secret，并根据组织的已验证默认提供商签发临时上传 / 下载 URL。资产元数据随后应统一记录 `storage_provider`、`storage_bucket`、`object_key`、`public_or_signed_url` 和内容哈希；切换默认提供商仅影响新写入，不迁移或破坏已有对象。
+
+提示词图例当前使用 `example_storage_path` 保存托管对象的完整定位标识：Supabase 保存其私有对象 key，七牛保存 `qiniu://{bucket}/{object_key}`。`example_image_url` 只保存用户填写的外部图例链接，不能用于保存短时签名 URL；签名 URL 会过期，应在读取时按权限动态生成。七牛提示词图例的新对象键为 `signal-story/prompts/{uuid}.{ext}`。
+
+### 公共上传规范
+
+所有新增上传应复用 `src/services/object-storage-service.ts` 的 `uploadManagedImage()`，不得在页面或业务 service 内自行读取 provider 密钥、拼接任意对象路径或直接调用某一家云厂商 SDK。调用方只提供组织、受白名单限制的业务用途和文件；服务根据当前默认提供商路由上传，返回稳定 `path` 与可选 `publicUrl`。外部 provider 的临时凭证统一由 `storage-upload-token` Edge Function 签发，服务端将用途映射到固定目录，例如 `prompt_example → signal-story/prompts/{uuid}.{ext}`。
+
 访问规则与知识库内容一致：`content.view` 可读取，`content.manage` 可新建、编辑和删除；审计触发器维护创建与更新时间及操作人。
 
 ## 拟覆盖的核心对象
