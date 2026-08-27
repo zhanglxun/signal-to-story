@@ -4,6 +4,7 @@ import { PlusIcon, UsersIcon } from "lucide-react"
 import { toast } from "sonner"
 
 import { PageHeader } from "@/components/page-header"
+import { PaginationBar } from "@/components/pagination-bar"
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
@@ -22,47 +23,55 @@ import { Label } from "@/components/ui/label"
 import { NativeSelect, NativeSelectOption } from "@/components/ui/native-select"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
 import type { OrganizationRole } from "@/contracts/organization"
-import { useAuth } from "@/features/auth/auth-context"
-import { createOrganizationAccount, getOrganizationAccounts } from "@/services/organization-service"
+import {
+  createOrganizationAccount,
+  getOrganizationAccountsPage,
+  getOrganizationAccountsWorkspace,
+} from "@/services/organization-service"
 
-const organizationAccountsKey = ["organization-accounts"] as const
+const workspaceKey = ["organization-accounts-workspace"] as const
+const PAGE_SIZE = 10
 
 export function OrganizationAccountsPage() {
-  const { user } = useAuth()
   const queryClient = useQueryClient()
   const [open, setOpen] = useState(false)
   const [displayName, setDisplayName] = useState("")
   const [email, setEmail] = useState("")
   const [password, setPassword] = useState("")
   const [role, setRole] = useState<OrganizationRole>("")
+  const [page, setPage] = useState(1)
 
-  const query = useQuery({
-    queryKey: organizationAccountsKey,
-    queryFn: getOrganizationAccounts,
+  const workspaceQuery = useQuery({
+    queryKey: workspaceKey,
+    queryFn: getOrganizationAccountsWorkspace,
+  })
+  const organizationId = workspaceQuery.data?.organization?.id
+
+  const accountsPageKey = ["organization-accounts-page", organizationId] as const
+  const accountsQuery = useQuery({
+    queryKey: [...accountsPageKey, page],
+    queryFn: () => getOrganizationAccountsPage({ organizationId: organizationId!, page, pageSize: PAGE_SIZE }),
+    enabled: Boolean(organizationId),
   })
 
-  const currentAccount = useMemo(
-    () => query.data?.accounts.find((account) => account.id === user?.id),
-    [query.data?.accounts, user?.id],
-  )
   const currentRole = useMemo(
-    () => query.data?.roles.find((item) => item.key === currentAccount?.role),
-    [currentAccount?.role, query.data?.roles],
+    () => workspaceQuery.data?.roles.find((item) => item.key === workspaceQuery.data?.currentAccount?.role),
+    [workspaceQuery.data],
   )
   const roleNameByKey = useMemo(
-    () => new Map(query.data?.roles.map((item) => [item.key, item.name])),
-    [query.data?.roles],
+    () => new Map(workspaceQuery.data?.roles.map((item) => [item.key, item.name])),
+    [workspaceQuery.data?.roles],
   )
   const grantableRoles = useMemo(
-    () => query.data?.roles.filter((item) => item.isAssignable && currentRole?.permissions.includes(item.assignmentPermission)) ?? [],
-    [currentRole?.permissions, query.data?.roles],
+    () => workspaceQuery.data?.roles.filter((item) => item.isAssignable && currentRole?.permissions.includes(item.assignmentPermission)) ?? [],
+    [currentRole?.permissions, workspaceQuery.data?.roles],
   )
   const canCreateAccount = Boolean(currentRole?.permissions.includes("account.manage"))
 
   const mutation = useMutation({
     mutationFn: createOrganizationAccount,
     onSuccess: async () => {
-      await queryClient.invalidateQueries({ queryKey: organizationAccountsKey })
+      await queryClient.invalidateQueries({ queryKey: accountsPageKey })
       setDisplayName("")
       setEmail("")
       setPassword("")
@@ -75,9 +84,9 @@ export function OrganizationAccountsPage() {
 
   const submit = (event: FormEvent) => {
     event.preventDefault()
-    if (!query.data?.organization) return
+    if (!organizationId) return
     mutation.mutate({
-      organizationId: query.data.organization.id,
+      organizationId,
       displayName,
       email,
       password,
@@ -85,13 +94,18 @@ export function OrganizationAccountsPage() {
     })
   }
 
-  if (query.isLoading) return <p className="text-sm text-muted-foreground">正在加载组织与账号…</p>
-  if (query.isError) {
-    return <Alert variant="destructive"><AlertTitle>无法加载系统管理</AlertTitle><AlertDescription>{query.error.message}</AlertDescription></Alert>
+  if (workspaceQuery.isLoading) return <p className="text-sm text-muted-foreground">正在加载组织与账号…</p>
+  if (workspaceQuery.isError) {
+    return <Alert variant="destructive"><AlertTitle>无法加载系统管理</AlertTitle><AlertDescription>{workspaceQuery.error.message}</AlertDescription></Alert>
   }
-  if (!query.data?.organization) {
+  if (!workspaceQuery.data?.organization) {
     return <Alert><AlertTitle>账号尚未加入组织</AlertTitle><AlertDescription>请先完成首个 Owner 初始化，再使用后台创建后续账号。</AlertDescription></Alert>
   }
+
+  const organization = workspaceQuery.data.organization
+  const accounts = accountsQuery.data?.accounts ?? []
+  const totalCount = accountsQuery.data?.totalCount ?? 0
+  const pageCount = Math.max(1, Math.ceil(totalCount / PAGE_SIZE))
 
   return (
     <div className="space-y-6">
@@ -122,20 +136,23 @@ export function OrganizationAccountsPage() {
       />
 
       <Card>
-        <CardHeader><CardTitle className="flex items-center gap-2"><UsersIcon className="size-4" />{query.data.organization.name}</CardTitle></CardHeader>
-        <CardContent className="grid gap-4 text-sm sm:grid-cols-3"><div><p className="text-muted-foreground">组织标识</p><p className="mt-1 font-medium">{query.data.organization.slug}</p></div><div><p className="text-muted-foreground">域名</p><p className="mt-1 font-medium">{query.data.organization.domain ?? "未设置"}</p></div><div><p className="text-muted-foreground">账号数量</p><p className="mt-1 font-medium tabular-nums">{query.data.accounts.length}</p></div></CardContent>
+        <CardHeader><CardTitle className="flex items-center gap-2"><UsersIcon className="size-4" />{organization.name}</CardTitle></CardHeader>
+        <CardContent className="grid gap-4 text-sm sm:grid-cols-3"><div><p className="text-muted-foreground">组织标识</p><p className="mt-1 font-medium">{organization.slug}</p></div><div><p className="text-muted-foreground">域名</p><p className="mt-1 font-medium">{organization.domain ?? "未设置"}</p></div><div><p className="text-muted-foreground">账号数量</p><p className="mt-1 font-medium tabular-nums">{totalCount}</p></div></CardContent>
       </Card>
+
+      {accountsQuery.isError && <Alert variant="destructive"><AlertTitle>无法读取账号列表</AlertTitle><AlertDescription>{accountsQuery.error.message}</AlertDescription></Alert>}
 
       <Card>
         <CardHeader><CardTitle>后台账号</CardTitle></CardHeader>
         <CardContent className="p-0">
           <Table>
             <TableHeader><TableRow><TableHead>成员</TableHead><TableHead>邮箱账号</TableHead><TableHead>角色</TableHead><TableHead>状态</TableHead><TableHead className="hidden sm:table-cell">创建时间</TableHead></TableRow></TableHeader>
-            <TableBody>{query.data.accounts.map((account) => <TableRow key={account.id}><TableCell className="font-medium">{account.displayName}</TableCell><TableCell>{account.email}</TableCell><TableCell><Badge variant="outline">{roleNameByKey.get(account.role) ?? account.role}</Badge></TableCell><TableCell><Badge variant={account.status === "active" ? "default" : "outline"}>{account.status === "active" ? "已启用" : "已停用"}</Badge></TableCell><TableCell className="hidden text-muted-foreground sm:table-cell">{new Intl.DateTimeFormat("zh-CN", { dateStyle: "medium" }).format(new Date(account.createdAt))}</TableCell></TableRow>)}</TableBody>
+            <TableBody>{accounts.map((account) => <TableRow key={account.id}><TableCell className="font-medium">{account.displayName}</TableCell><TableCell>{account.email}</TableCell><TableCell><Badge variant="outline">{roleNameByKey.get(account.role) ?? account.role}</Badge></TableCell><TableCell><Badge variant={account.status === "active" ? "default" : "outline"}>{account.status === "active" ? "已启用" : "已停用"}</Badge></TableCell><TableCell className="hidden text-muted-foreground sm:table-cell">{new Intl.DateTimeFormat("zh-CN", { dateStyle: "medium" }).format(new Date(account.createdAt))}</TableCell></TableRow>)}</TableBody>
           </Table>
-          {query.data.accounts.length === 0 && <p className="p-6 text-center text-sm text-muted-foreground">暂无账号。</p>}
+          {!accountsQuery.isLoading && accounts.length === 0 && <p className="p-6 text-center text-sm text-muted-foreground">暂无账号。</p>}
         </CardContent>
       </Card>
+      <PaginationBar page={page} pageCount={pageCount} totalCount={totalCount} onPageChange={setPage} />
     </div>
   )
 }

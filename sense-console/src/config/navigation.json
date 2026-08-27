@@ -4,8 +4,21 @@
       "id": "intake",
       "label": "信息收集",
       "icon": "Inbox",
-      "defaultPath": "/intake",
+      "defaultPath": "/dashboard",
       "groups": [
+        {
+          "id": "overview",
+          "label": "概览",
+          "icon": "Gauge",
+          "items": [
+            {
+              "id": "overview",
+              "label": "概览",
+              "path": "/dashboard",
+              "icon": "LayoutDashboard"
+            }
+          ]
+        },
         {
           "id": "intake-entry",
           "label": "信息进入",
@@ -51,21 +64,8 @@
       "id": "video-production",
       "label": "视频创作",
       "icon": "Clapperboard",
-      "defaultPath": "/dashboard",
+      "defaultPath": "/tasks",
       "groups": [
-        {
-          "id": "overview",
-          "label": "概览",
-          "icon": "Gauge",
-          "items": [
-            {
-              "id": "overview",
-              "label": "概览",
-              "path": "/dashboard",
-              "icon": "LayoutDashboard"
-            }
-          ]
-        },
         {
           "id": "content-creation",
           "label": "内容创作",

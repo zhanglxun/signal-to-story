@@ -17,6 +17,7 @@ import { Link } from "react-router"
 
 import { AssetDialog } from "@/components/assets/asset-dialog"
 import { PageHeader } from "@/components/page-header"
+import { PaginationBar } from "@/components/pagination-bar"
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
@@ -36,6 +37,7 @@ import {
 import { getAssets, getAssetWorkspace } from "@/services/asset-service"
 
 const workspaceKey = ["asset-workspace"] as const
+const PAGE_SIZE = 12
 type ViewMode = "list" | "grid"
 type ActiveFilter = "all" | "active" | "disabled"
 
@@ -84,17 +86,33 @@ export function AssetsPage() {
   const [queryText, setQueryText] = useState("")
   const [assetType, setAssetType] = useState<"all" | AssetType>("all")
   const [activeFilter, setActiveFilter] = useState<ActiveFilter>("all")
+  const [page, setPage] = useState(1)
   const deferredQuery = useDeferredValue(queryText)
   const workspaceQuery = useQuery({ queryKey: workspaceKey, queryFn: getAssetWorkspace })
   const organizationId = workspaceQuery.data?.organization?.id
 
+  const changeQueryText = (value: string) => {
+    setQueryText(value)
+    setPage(1)
+  }
+  const changeAssetType = (value: "all" | AssetType) => {
+    setAssetType(value)
+    setPage(1)
+  }
+  const changeActiveFilter = (value: ActiveFilter) => {
+    setActiveFilter(value)
+    setPage(1)
+  }
+
   const assetsQuery = useQuery({
-    queryKey: ["assets", organizationId, assetType, activeFilter, deferredQuery],
+    queryKey: ["assets", organizationId, assetType, activeFilter, deferredQuery, page],
     queryFn: () => getAssets({
       organizationId: organizationId!,
       assetType: assetType === "all" ? undefined : assetType,
       active: activeFilter === "all" ? undefined : activeFilter === "active",
       query: deferredQuery,
+      page,
+      pageSize: PAGE_SIZE,
     }),
     enabled: Boolean(organizationId),
   })
@@ -105,7 +123,9 @@ export function AssetsPage() {
 
   const organization = workspaceQuery.data.organization
   const canManage = workspaceQuery.data.canManage
-  const assets = assetsQuery.data ?? []
+  const assets = assetsQuery.data?.assets ?? []
+  const totalCount = assetsQuery.data?.totalCount ?? 0
+  const pageCount = Math.max(1, Math.ceil(totalCount / PAGE_SIZE))
   const dateFormatter = new Intl.DateTimeFormat("zh-CN", { dateStyle: "medium" })
 
   return (
@@ -118,9 +138,9 @@ export function AssetsPage() {
       />
 
       <div className="flex flex-col gap-3 lg:flex-row lg:items-center">
-        <div className="relative min-w-0 flex-1 lg:max-w-md"><SearchIcon className="absolute top-1/2 left-3 size-4 -translate-y-1/2 text-muted-foreground" /><Input className="pl-9" value={queryText} onChange={(event) => setQueryText(event.target.value)} placeholder="搜索资产名称、二级分类或描述" /></div>
-        <NativeSelect className="w-full sm:w-40" aria-label="资产类别" value={assetType} onChange={(event) => setAssetType(event.target.value as "all" | AssetType)}><NativeSelectOption value="all">全部类别</NativeSelectOption>{assetTypes.map((type) => <NativeSelectOption key={type} value={type}>{assetTypeLabels[type]}</NativeSelectOption>)}</NativeSelect>
-        <NativeSelect className="w-full sm:w-36" aria-label="资产状态" value={activeFilter} onChange={(event) => setActiveFilter(event.target.value as ActiveFilter)}><NativeSelectOption value="all">全部状态</NativeSelectOption><NativeSelectOption value="active">已启用</NativeSelectOption><NativeSelectOption value="disabled">已停用</NativeSelectOption></NativeSelect>
+        <div className="relative min-w-0 flex-1 lg:max-w-md"><SearchIcon className="absolute top-1/2 left-3 size-4 -translate-y-1/2 text-muted-foreground" /><Input className="pl-9" value={queryText} onChange={(event) => changeQueryText(event.target.value)} placeholder="搜索资产名称、二级分类或描述" /></div>
+        <NativeSelect className="w-full sm:w-40" aria-label="资产类别" value={assetType} onChange={(event) => changeAssetType(event.target.value as "all" | AssetType)}><NativeSelectOption value="all">全部类别</NativeSelectOption>{assetTypes.map((type) => <NativeSelectOption key={type} value={type}>{assetTypeLabels[type]}</NativeSelectOption>)}</NativeSelect>
+        <NativeSelect className="w-full sm:w-36" aria-label="资产状态" value={activeFilter} onChange={(event) => changeActiveFilter(event.target.value as ActiveFilter)}><NativeSelectOption value="all">全部状态</NativeSelectOption><NativeSelectOption value="active">已启用</NativeSelectOption><NativeSelectOption value="disabled">已停用</NativeSelectOption></NativeSelect>
       </div>
 
       {assetsQuery.isError && <Alert variant="destructive"><AlertTitle>无法读取资产</AlertTitle><AlertDescription>{assetsQuery.error.message}</AlertDescription></Alert>}
@@ -137,6 +157,8 @@ export function AssetsPage() {
       {assets.length > 0 && viewMode === "grid" && (
         <section className="grid gap-4 sm:grid-cols-2 @5xl/main:grid-cols-3">{assets.map((asset) => <Card key={asset.id}><CardHeader><div className="flex items-start justify-between gap-3"><CardTitle className="truncate"><Link to={`/assets/${asset.id}`} className="hover:underline">{asset.name}</Link></CardTitle><div className="flex items-center gap-1"><AssetStatus active={asset.isActive} />{canManage && <AssetDialog organizationId={organization.id} asset={asset} trigger={<Button variant="ghost" size="icon-sm" aria-label={`编辑 ${asset.name}`}><PencilIcon /></Button>} />}</div></div></CardHeader><CardContent><Link to={`/assets/${asset.id}`}><AssetPreview asset={asset} /><span className="sr-only">打开 {asset.name}</span></Link><p className="mt-3 line-clamp-2 min-h-10 text-sm text-muted-foreground">{asset.description || "暂无描述"}</p></CardContent><CardFooter className="justify-between text-xs text-muted-foreground"><span>{assetTypeLabels[asset.assetType]} · {asset.category}</span><span>{dateFormatter.format(new Date(asset.updatedAt))}</span></CardFooter></Card>)}</section>
       )}
+
+      {assets.length > 0 && <PaginationBar page={page} pageCount={pageCount} totalCount={totalCount} onPageChange={setPage} />}
     </div>
   )
 }

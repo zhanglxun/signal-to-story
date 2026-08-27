@@ -1,6 +1,7 @@
 import type {
   Asset,
   AssetFilters,
+  AssetPage,
   AssetWorkspace,
   CreateAssetInput,
   UpdateAssetInput,
@@ -91,14 +92,21 @@ export async function getAssetWorkspace(): Promise<AssetWorkspace> {
   }
 }
 
-export async function getAssets(filters: AssetFilters): Promise<Asset[]> {
+const DEFAULT_ASSET_PAGE_SIZE = 12
+
+export async function getAssets(filters: AssetFilters): Promise<AssetPage> {
   const supabase = requireSupabase()
+  const pageSize = filters.pageSize ?? DEFAULT_ASSET_PAGE_SIZE
+  const page = Math.max(1, filters.page ?? 1)
+  const from = (page - 1) * pageSize
+  const to = from + pageSize - 1
+
   let request = supabase
     .from("assets")
-    .select(assetColumns)
+    .select(assetColumns, { count: "exact" })
     .eq("organization_id", filters.organizationId)
     .order("updated_at", { ascending: false })
-    .limit(100)
+    .range(from, to)
 
   if (filters.assetType) request = request.eq("asset_type", filters.assetType)
   if (typeof filters.active === "boolean") request = request.eq("is_active", filters.active)
@@ -109,9 +117,12 @@ export async function getAssets(filters: AssetFilters): Promise<Asset[]> {
     request = request.ilike("search_text", `%${pattern}%`)
   }
 
-  const { data, error } = await request
+  const { data, error, count } = await request
   if (error) throw new Error("暂时无法读取资产列表。")
-  return ((data ?? []) as unknown as AssetRow[]).map(mapAsset)
+  return {
+    assets: ((data ?? []) as unknown as AssetRow[]).map(mapAsset),
+    totalCount: count ?? 0,
+  }
 }
 
 export async function getAsset(assetId: number): Promise<Asset | null> {

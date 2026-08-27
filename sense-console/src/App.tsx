@@ -5,6 +5,8 @@ import { RequireAuth } from "@/features/auth/require-auth"
 import { AccountPage } from "@/pages/account-page"
 import { AssetDetailPage } from "@/pages/asset-detail-page"
 import { AssetsPage } from "@/pages/assets-page"
+import { CanvasPage } from "@/pages/canvas-page"
+import { CharactersPage } from "@/pages/characters-page"
 import { DashboardPage } from "@/pages/dashboard-page"
 import { ForbiddenPage } from "@/pages/forbidden-page"
 import { ForgotPasswordPage } from "@/pages/forgot-password-page"
@@ -13,8 +15,12 @@ import { LoginPage } from "@/pages/login-page"
 import { NotFoundPage } from "@/pages/not-found-page"
 import { OrganizationAccountsPage } from "@/pages/organization-accounts-page"
 import { RolesPage } from "@/pages/roles-page"
+import { ScenesPage } from "@/pages/scenes-page"
+import { ScriptDetailPage } from "@/pages/script-detail-page"
+import { ScriptsPage } from "@/pages/scripts-page"
 import { SettingsPage } from "@/pages/settings-page"
 import { SourceCategoriesPage } from "@/pages/source-categories-page"
+import { StoryboardsPage } from "@/pages/storyboards-page"
 import { TaskDetailPage } from "@/pages/task-detail-page"
 import { TasksPage } from "@/pages/tasks-page"
 import { TopicDetailPage } from "@/pages/topic-detail-page"
@@ -38,6 +44,12 @@ export default function App() {
           <Route path="/topics/:topicId" element={<TopicDetailPage />} />
           <Route path="/tasks" element={<TasksPage />} />
           <Route path="/tasks/:taskId" element={<TaskDetailPage />} />
+          <Route path="/video/scripts" element={<ScriptsPage />} />
+          <Route path="/video/scripts/:storyId" element={<ScriptDetailPage />} />
+          <Route path="/video/storyboards" element={<StoryboardsPage />} />
+          <Route path="/video/characters" element={<CharactersPage />} />
+          <Route path="/video/scenes" element={<ScenesPage />} />
+          <Route path="/video/canvas" element={<CanvasPage />} />
           <Route path="/assets" element={<AssetsPage />} />
           <Route path="/assets/:assetId" element={<AssetDetailPage />} />
           <Route path="/system/accounts" element={<OrganizationAccountsPage />} />

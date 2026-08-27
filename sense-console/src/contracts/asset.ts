@@ -26,6 +26,13 @@ export type AssetFilters = {
   assetType?: AssetType
   query?: string
   active?: boolean
+  page?: number
+  pageSize?: number
+}
+
+export type AssetPage = {
+  assets: Asset[]
+  totalCount: number
 }
 
 export type CreateAssetInput = {

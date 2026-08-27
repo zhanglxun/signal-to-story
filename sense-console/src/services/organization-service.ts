@@ -1,12 +1,16 @@
 import type {
   CreateOrganizationAccountInput,
+  ListPageParams,
   OrganizationAccount,
-  OrganizationAccountsResult,
+  OrganizationAccountsPage,
+  OrganizationAccountsWorkspace,
   OrganizationRoleDefinition,
   OrganizationRolesResult,
   OrganizationSummary,
 } from "@/contracts/organization"
 import { getSupabaseClient } from "@/lib/supabase"
+
+const DEFAULT_ACCOUNTS_PAGE_SIZE = 10
 
 type MemberRow = {
   user_id: string
@@ -73,6 +77,33 @@ async function getRolesForOrganization(organizationId: string) {
   return ((data ?? []) as RoleRow[]).map(mapRole)
 }
 
+function mapMember(row: MemberRow): OrganizationAccount | null {
+  if (!row.profiles) return null
+  return {
+    id: row.user_id,
+    email: row.profiles.email,
+    displayName: row.profiles.display_name,
+    role: row.role,
+    status: row.profiles.status,
+    createdAt: row.created_at,
+  }
+}
+
+const memberColumns = "user_id, role, created_at, profiles!inner(email, display_name, status)"
+
+async function getMembershipAccount(organizationId: string, userId: string): Promise<OrganizationAccount | null> {
+  const supabase = requireSupabase()
+  const { data, error } = await supabase
+    .from("organization_members")
+    .select(memberColumns)
+    .eq("organization_id", organizationId)
+    .eq("user_id", userId)
+    .maybeSingle()
+
+  if (error) throw new Error("暂时无法读取当前账号信息。")
+  return data ? mapMember(data as unknown as MemberRow) : null
+}
+
 export async function getOrganizationRoles(): Promise<OrganizationRolesResult> {
   const organization = await getPrimaryOrganization()
   if (!organization) return { organization: null, roles: [] }
@@ -83,34 +114,53 @@ export async function getOrganizationRoles(): Promise<OrganizationRolesResult> {
   }
 }
 
-export async function getOrganizationAccounts(): Promise<OrganizationAccountsResult> {
+/**
+ * Everything the accounts page needs *besides* the paginated account rows:
+ * the organization, the full (small, config-like) role list used to name
+ * roles and populate the "grant a role" dropdown, and the signed-in user's
+ * own membership — resolved directly rather than by scanning a page of
+ * accounts, so permission checks stay correct no matter which page of the
+ * member list is currently displayed.
+ */
+export async function getOrganizationAccountsWorkspace(): Promise<OrganizationAccountsWorkspace> {
   const organization = await getPrimaryOrganization()
-  if (!organization) return { organization: null, accounts: [], roles: [] }
+  if (!organization) return { organization: null, roles: [], currentAccount: null }
 
   const supabase = requireSupabase()
-  const rolesPromise = getRolesForOrganization(organization.id)
-  const { data, error } = await supabase
+  const { data: userData, error: userError } = await supabase.auth.getUser()
+  if (userError || !userData.user) throw new Error("登录会话已失效，请重新登录。")
+
+  const [roles, currentAccount] = await Promise.all([
+    getRolesForOrganization(organization.id),
+    getMembershipAccount(organization.id, userData.user.id),
+  ])
+
+  return { organization, roles, currentAccount }
+}
+
+export async function getOrganizationAccountsPage(
+  params: ListPageParams & { organizationId: string },
+): Promise<OrganizationAccountsPage> {
+  const supabase = requireSupabase()
+  const pageSize = params.pageSize ?? DEFAULT_ACCOUNTS_PAGE_SIZE
+  const page = Math.max(1, params.page ?? 1)
+  const from = (page - 1) * pageSize
+  const to = from + pageSize - 1
+
+  const { data, error, count } = await supabase
     .from("organization_members")
-    .select("user_id, role, created_at, profiles!inner(email, display_name, status)")
-    .eq("organization_id", organization.id)
+    .select(memberColumns, { count: "exact" })
+    .eq("organization_id", params.organizationId)
     .order("created_at", { ascending: true })
+    .range(from, to)
 
   if (error) throw new Error("暂时无法读取账号列表。")
 
-  const roles = await rolesPromise
-
   const accounts = ((data ?? []) as unknown as MemberRow[])
-    .filter((row) => row.profiles)
-    .map((row) => ({
-      id: row.user_id,
-      email: row.profiles!.email,
-      displayName: row.profiles!.display_name,
-      role: row.role,
-      status: row.profiles!.status,
-      createdAt: row.created_at,
-    }))
+    .map(mapMember)
+    .filter((account): account is OrganizationAccount => account !== null)
 
-  return { organization, accounts, roles }
+  return { accounts, totalCount: count ?? 0 }
 }
 
 export async function createOrganizationAccount(input: CreateOrganizationAccountInput) {
