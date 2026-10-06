@@ -20,6 +20,9 @@ tags:
 
 # AI 内容生产系统 PRD（V1）
 
+> 2026-10-06 决策更新：在线创作以平台云端存储为主，Obsidian 为独立可选本地形式。本文原有的 Obsidian 主编辑及必经导入流程属于历史方案；最新范围以 [云端内容 MVP](../plan/cloud-content-mvp.md) 为准。
+
+
 > [!abstract] 产品定义
 > 一个以内容项目为核心的 **Content Ops CMS**。它统一管理信息源、线索、选题、内容版本、审核、媒体任务、素材、发布记录和数据复盘；Codex/Claude 等外部 AI Agent 通过受控接口读取上下文、提交分析和草稿，但 CMS V1 不内置或调度通用 AI Agent。
 

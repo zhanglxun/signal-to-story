@@ -203,12 +203,13 @@ Agent 决定“做什么、为什么、需要什么”；Worker 稳定执行“�
 
 | 内容类型 | 权威来源 | 规则 |
 | --- | --- | --- |
-| 深度研究、原稿、脚本和创作过程 | Obsidian Vault | 本机单向导入快照；CMS 不反向静默改写 |
+| 在线原稿、脚本、平台版本 | 平台云端 Postgres | 在线编辑、不可变版本、人工审核 |
+| 本地研究与独立原稿 | Obsidian Vault | 可选本地创作；平台不静默改写 |
 | 任务、状态、关系、审核、版本、成本和审计 | Supabase Postgres | Console、Agent 和 Worker 共同依赖的运行事实库 |
 | 图片、音频、视频、字幕和工程产物 | 对象存储 | 数据库只保存元数据、地址和关系 |
 | Web 与执行代码 | `signal-to-story/sense-console` | 不混入 Vault 或生产媒体文件 |
 
-Postgres 可以保存 Markdown 的最新只读快照和不可变 revision，用于在线预览、检索和 Context Pack；Obsidian 仍是深度正文的主编辑端。
+2026-10-06 起，Postgres 保存在线创作的当前正文及不可变 revision，是平台稿件的权威来源。Obsidian 为独立本地形式；导入与导出均需显式操作。
 
 ---
 

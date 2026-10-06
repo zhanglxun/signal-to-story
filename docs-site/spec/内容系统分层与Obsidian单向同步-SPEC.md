@@ -18,6 +18,9 @@ tags:
 
 # 内容系统分层与 Obsidian 单向同步 SPEC
 
+> 2026-10-06 决策更新：在线创作以平台云端存储为主，Obsidian 为独立可选本地形式。本文原有的 Obsidian 主编辑及必经导入流程属于历史方案；最新范围以 [云端内容 MVP](../plan/cloud-content-mvp.md) 为准。
+
+
 > [!abstract] 决策摘要
 > `4_Conttent/` 固定为 **知识与创作层**。工程代码统一放在私有仓库 `signal-to-story/sense-console/`；Supabase Postgres 保存运行状态、关系与审计，对象存储保存媒体二进制。Worker 在真实长任务出现后再建立，不属于当前框架阶段。
 >

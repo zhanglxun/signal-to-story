@@ -157,3 +157,9 @@ export async function deleteSignal(id: number, organizationId: string): Promise<
     throw new Error("待处理信息删除失败，请检查当前账号权限。")
   }
 }
+
+export async function getSignal(id: number): Promise<Signal | null> {
+  const { data, error } = await requireSupabase().from("signals").select(columns).eq("id", id).maybeSingle()
+  if (error) throw new Error("暂时无法读取来源信息。")
+  return data ? mapSignal(data as unknown as SignalRow) : null
+}

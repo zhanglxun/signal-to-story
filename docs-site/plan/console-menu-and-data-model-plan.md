@@ -1,4 +1,6 @@
-# Signal to Story Console 菜单结构规划（讨论稿）
+# Signal to Story Console 菜单结构规划（历史讨论稿）
+
+> 当前落地菜单与数据设计见 [云端内容 MVP](cloud-content-mvp.md)。以下保留早期讨论记录。
 
 > 讨论稿，不是最终决定。本轮先只谈**流程和菜单**，表结构留到流程敲定后再单独设计。
 

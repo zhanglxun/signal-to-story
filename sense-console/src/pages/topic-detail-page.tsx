@@ -1,6 +1,6 @@
 import { useQuery } from "@tanstack/react-query"
 import { ExternalLinkIcon, PencilIcon, Trash2Icon } from "lucide-react"
-import { useNavigate, useParams } from "react-router"
+import { Link, useNavigate, useParams } from "react-router"
 
 import { DetailLayout } from "@/components/detail-layout"
 import { ConfirmDeleteDialog } from "@/components/shared/confirm-delete-dialog"
@@ -47,6 +47,7 @@ export function TopicDetailPage() {
   const signalOptions = signalOptionsQuery.data ?? []
 
   const actions = organizationId && (canManage || selection.signalName) ? <>
+    {canManage && <Button nativeButton={false} render={<Link to={`/content/projects?selection=${selection.id}`} />}>立项创作</Button>}
     {canManage && <SelectionDialog organizationId={organizationId} selection={selection} signalOptions={signalOptions} trigger={<Button variant="outline"><PencilIcon />编辑选题</Button>} />}
     {canManage && (
       <ConfirmDeleteDialog

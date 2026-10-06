@@ -1,14 +1,14 @@
-# Signal to Story
+# 星火工厂 · Signal to Story
 
-Signal to Story 是一个面向个人内容生产与 AI 协作的 **Content Ops 控制系统**。
+星火工厂（Signal to Story）是一个面向个人内容生产与 AI 协作的 **Content Ops 控制系统**。
 
 它把信息源、线索、选题、内容项目、任务、故事、脚本、分镜、人物、场景、媒体资产、发布记录和复盘数据组织成一个可查询、可审核、可追踪的生产系统。
 
-产品展示名统一为 **Signal to Story**，Web 工程目录名保留为 `sense-console`，企业及版权标识暂用 `susesne.cn`。
+产品中文名统一为 **星火工厂**，英文名为 **Signal to Story**；中英文组合展示名为 **星火工厂 · Signal to Story**。Web 工程目录名保留为 `sense-console`，企业及版权标识暂用 `susesne.cn`。
 
 ## 核心定位
 
-> Signal to Story Console 是内容生产系统的控制面和资产关系可视化中心；Supabase 管理运行状态、关系与审计；Agent 和 Worker 在后台异步完成认知及媒体生产；原始媒体物料保存在独立对象存储中。
+> 星火工厂控制台（Signal to Story Console）是内容生产系统的控制面和资产关系可视化中心；Supabase 管理运行状态、关系与审计；Agent 和 Worker 在后台异步完成认知及媒体生产；原始媒体物料保存在独立对象存储中。
 
 | 组成 | 主要职责 |
 | --- | --- |
@@ -17,7 +17,8 @@ Signal to Story 是一个面向个人内容生产与 AI 协作的 **Content Ops 
 | AI Agent | 信息收集、分析、选题、Brief、草稿、脚本和分镜 Proposal |
 | Worker | 模型调用、轮询、下载、上传、转码、渲染、重试和状态回写 |
 | 对象存储 | 图片、音频、视频、字幕和其他原始二进制物料 |
-| Obsidian Vault | 深度研究、原稿、脚本和创作过程的主编辑来源 |
+| 云端内容工作室 | 在线母稿、平台版本、审核与发布记录的主存储 |
+| Obsidian Vault | 独立本地创作方式，可接收显式导出的 Markdown |
 
 ## 核心原则
 
@@ -28,7 +29,7 @@ Signal to Story 是一个面向个人内容生产与 AI 协作的 **Content Ops 
 5. 服务端 Secret、Webhook、强校验和受控 Agent 接口使用 Edge Functions 或可信执行环境。
 6. Agent 提交 Proposal/Draft，人类保留批准、发布和关键资产选择权。
 7. Worker 负责可靠执行，异步任务必须可重试、可取消、可追踪并记录成本。
-8. Obsidian 是原稿主编辑端，CMS 只接收单向快照，不静默反向覆盖。
+8. 在线创作以平台云端存储为主；Obsidian 可独立使用，平台不静默覆盖本地文件。
 9. 所有正式产物都必须能追溯来源、版本、任务、模型、成本和人工审核。
 10. 先验证单条真实链路，再增加抽象、模型和自动化。
 
@@ -54,15 +55,16 @@ signal-to-story/
 
 ## 当前阶段
 
-当前优先建设：
+2026-10-06 首版采用云端内容创作与人工发布闭环：
 
-- React + shadcn/ui Base UI 的 `sense-console` 工程基座。
-- Supabase 邮箱和密码登录、RLS 边界及数据访问层。
-- 轻量 AppShell、两层以内菜单、驾驶舱、列表和详情页面模式。
-- Agent Contract、幂等、审计和安全约定。
-- 独立数据库模型设计文档。
+- 线索与选题立项、在线内容项目和 Markdown 母稿。
+- 不可变版本历史、多人编辑冲突检测、人工提审与审核。
+- 文字 AI 草案提案，由人工采纳后保存与审核。
+- 视频号、公众号、小红书、抖音、X、YouTube、Reddit 的账号登记与平台稿件。
+- 审核版本导出、人工发布记录、指标快照与复盘。
+- 视频生成单独建设；现有视频页面仍为演示，内容项目提供脚本与素材交接包。
 
-当前不建设完整 Agent 编排平台、Media Worker、自动发布系统、三级菜单或 Obsidian 双向同步。
+具体范围见 [云端内容 MVP](docs-site/plan/cloud-content-mvp.md)，数据字典与接口见 [Cloud Content API](sense-console/docs/cloud-content-api.md)。
 
 ## 文档导航
 

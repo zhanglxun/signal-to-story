@@ -7,7 +7,10 @@ import { AssetDetailPage } from "@/pages/asset-detail-page"
 import { AssetsPage } from "@/pages/assets-page"
 import { CanvasPage } from "@/pages/canvas-page"
 import { CharactersPage } from "@/pages/characters-page"
-import { DashboardPage } from "@/pages/dashboard-page"
+import { ContentOverviewPage } from "@/pages/content-overview-page"
+import { ContentProjectsPage } from "@/pages/content-projects-page"
+import { ContentProjectDetailPage } from "@/pages/content-project-detail-page"
+import { PublishingPage } from "@/pages/publishing-page"
 import { ForbiddenPage } from "@/pages/forbidden-page"
 import { ForgotPasswordPage } from "@/pages/forgot-password-page"
 import { IntakePage } from "@/pages/intake-page"
@@ -38,7 +41,14 @@ export default function App() {
       <Route element={<RequireAuth />}>
         <Route element={<AppShell />}>
           <Route index element={<Navigate to="/dashboard" replace />} />
-          <Route path="/dashboard" element={<DashboardPage />} />
+          <Route path="/dashboard" element={<ContentOverviewPage />} />
+          <Route path="/content/projects" element={<ContentProjectsPage />} />
+          <Route path="/content/projects/:projectId" element={<ContentProjectDetailPage />} />
+          <Route path="/content/reviews" element={<ContentOverviewPage mode="reviews" />} />
+          <Route path="/production/flow" element={<ContentOverviewPage mode="pipeline" />} />
+          <Route path="/publishing/channels" element={<PublishingPage mode="channels" />} />
+          <Route path="/publishing/plans" element={<PublishingPage />} />
+          <Route path="/analytics" element={<ContentOverviewPage mode="analytics" />} />
           <Route path="/intake" element={<IntakePage />} />
           <Route path="/intake/prompts" element={<PromptExamplesPage />} />
           <Route path="/sources/categories" element={<SourceCategoriesPage />} />

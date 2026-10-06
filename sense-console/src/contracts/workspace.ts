@@ -10,4 +10,6 @@ export type ContentWorkspace = {
     name: string
   } | null
   canManage: boolean
+  canReview?: boolean
+  canPublish?: boolean
 }

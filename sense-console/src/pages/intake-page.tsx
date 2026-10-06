@@ -2,6 +2,7 @@ import { useDeferredValue, useState } from "react"
 import { useQuery } from "@tanstack/react-query"
 import { ExternalLinkIcon, InboxIcon, PencilIcon, PlusIcon, SearchIcon, SparklesIcon, Trash2Icon } from "lucide-react"
 
+import { SelectionDialog } from "@/components/topics/selection-dialog"
 import { SignalDialog } from "@/components/intake/signal-dialog"
 import { PageHeader } from "@/components/page-header"
 import { PaginationBar } from "@/components/pagination-bar"
@@ -142,6 +143,7 @@ export function IntakePage() {
                       <TableCell>
                         <div className="flex items-center justify-end gap-1">
                           <Button variant="ghost" size="icon-sm" disabled aria-label="AI 分析（即将上线）" title="AI 分析（即将上线）"><SparklesIcon /></Button>
+                          {canManage && <SelectionDialog organizationId={organizationId} sourceSignal={signal} signalOptions={[{ id: signal.id, name: signal.name }]} trigger={<Button variant="outline" size="sm">转为选题</Button>} />}
                           {siteUrl && <Button variant="ghost" size="icon-sm" render={<a href={siteUrl} target="_blank" rel="noreferrer" />} aria-label="打开来源链接"><ExternalLinkIcon /></Button>}
                           {canManage && <SignalDialog organizationId={organizationId} signal={signal} categories={categories} trigger={<Button variant="ghost" size="icon-sm" aria-label={`编辑 ${signal.name}`}><PencilIcon /></Button>} />}
                           {canManage && (

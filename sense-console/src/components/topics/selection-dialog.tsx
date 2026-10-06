@@ -2,6 +2,7 @@ import { useId, useState, type FormEvent, type ReactElement } from "react"
 import { useMutation, useQueryClient } from "@tanstack/react-query"
 import { PlusIcon, XIcon } from "lucide-react"
 import { toast } from "sonner"
+import { useNavigate } from "react-router"
 
 import { Button } from "@/components/ui/button"
 import {
@@ -30,6 +31,7 @@ type SignalOption = { id: number; name: string }
 type SelectionDialogProps = {
   organizationId: string
   selection?: Selection
+  sourceSignal?: { id: number; name: string; summary: string | null }
   signalOptions: SignalOption[]
   trigger: ReactElement
 }
@@ -49,11 +51,13 @@ function initialForm(selection?: Selection, defaultSignalId?: number) {
   }
 }
 
-export function SelectionDialog({ organizationId, selection, signalOptions, trigger }: SelectionDialogProps) {
+export function SelectionDialog({ organizationId, selection, signalOptions, sourceSignal, trigger }: SelectionDialogProps) {
   const queryClient = useQueryClient()
+  const navigate = useNavigate()
+  const initial = () => ({ ...initialForm(selection, sourceSignal?.id ?? signalOptions[0]?.id), ...(!selection && sourceSignal ? { name: sourceSignal.name.slice(0, 64), coreThesis: sourceSignal.summary ?? "" } : {}) })
   const fieldPrefix = `selection-${selection?.id ?? "new"}-${useId()}`
   const [open, setOpen] = useState(false)
-  const [form, setForm] = useState(() => initialForm(selection, signalOptions[0]?.id))
+  const [form, setForm] = useState(initial)
   const editing = Boolean(selection)
 
   const mutation = useMutation({
@@ -69,16 +73,17 @@ export function SelectionDialog({ organizationId, selection, signalOptions, trig
         queryClient.invalidateQueries({ queryKey: ["selections"] }),
         queryClient.invalidateQueries({ queryKey: ["selection", saved.id] }),
       ])
-      setForm(initialForm(selection, signalOptions[0]?.id))
+      setForm(initial())
       setOpen(false)
       toast.success(editing ? "选题已更新。" : "选题已创建。")
+      if (sourceSignal && !editing) navigate(`/topics/${saved.id}`)
     },
     onError: (error) => toast.error(error instanceof Error ? error.message : editing ? "选题更新失败。" : "选题创建失败。"),
   })
 
   const changeOpen = (nextOpen: boolean) => {
     if (!nextOpen && mutation.isPending) return
-    if (nextOpen) setForm(initialForm(selection, signalOptions[0]?.id))
+    if (nextOpen) setForm(initial())
     setOpen(nextOpen)
   }
 

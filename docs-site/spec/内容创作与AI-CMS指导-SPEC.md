@@ -21,6 +21,9 @@ tags:
 
 # 内容创作与 AI-CMS 指导 SPEC
 
+> 2026-10-06 决策更新：在线创作以平台云端存储为主，Obsidian 为独立可选本地形式。本文原有的 Obsidian 主编辑及必经导入流程属于历史方案；最新范围以 [云端内容 MVP](../plan/cloud-content-mvp.md) 为准。
+
+
 > [!abstract] 一句话结论
 > 把 `4_Conttent` 从“资料堆放目录”升级成个人 IP 的 **Content Operating System**：以“AI 如何真正变成产品、系统和生意”为核心认知标签，用结构化情报、分级选题、一题多载体、AI 辅助生产、人类终审和数据复盘形成可持续复利。
 
