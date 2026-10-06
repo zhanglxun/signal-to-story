@@ -284,6 +284,12 @@
               "label": "系统设置",
               "path": "/settings",
               "icon": "SlidersHorizontal"
+            },
+            {
+              "id": "integrations",
+              "label": "外部接入",
+              "path": "/system/integrations",
+              "icon": "Workflow"
             }
           ]
         }

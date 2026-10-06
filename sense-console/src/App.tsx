@@ -13,6 +13,7 @@ import { ContentProjectDetailPage } from "@/pages/content-project-detail-page"
 import { PublishingPage } from "@/pages/publishing-page"
 import { ForbiddenPage } from "@/pages/forbidden-page"
 import { ForgotPasswordPage } from "@/pages/forgot-password-page"
+import { IntegrationsPage } from "@/pages/integrations-page"
 import { IntakePage } from "@/pages/intake-page"
 import { LoginPage } from "@/pages/login-page"
 import { NotFoundPage } from "@/pages/not-found-page"
@@ -67,6 +68,7 @@ export default function App() {
           <Route path="/system/accounts" element={<OrganizationAccountsPage />} />
           <Route path="/system/roles" element={<RolesPage />} />
           <Route path="/account" element={<AccountPage />} />
+          <Route path="/system/integrations" element={<IntegrationsPage />} />
           <Route path="/settings" element={<SettingsPage />} />
         </Route>
       </Route>

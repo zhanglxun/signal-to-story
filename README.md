@@ -53,6 +53,18 @@ signal-to-story/
 
 当前不创建 `packages/` 或 Worker。只有 Web、Worker、本机同步器确实需要共享契约时，才将 `sense-console/src/contracts/` 提升为共享 package。
 
+## 最终目标与任务路线
+
+以 IM、分享快捷操作和浏览器采集作为日常入口：随手发来来源或想法，云端自动处理到待审核；人类批准具体版本和账号后，由发布服务执行并回传结果。Web 保留为编辑、资产、任务与权限控制台，后台任务独立运行。
+
+详见 [多入口个人内容助手任务路线图](docs-site/plan/personal-content-agent-roadmap.md)。这是后续实施目标，不代表 IM 或自动发布已上线。线上入口为 https://story.susense.cn/ 。
+
+## 外部助手接入
+
+统一接入层支持外部助手发送文字和链接，原子保存信源并形成候选选题；支持回执、防重和撤销。控制台入口：系统管理 → 外部接入。当前方案为 Dot 云端直接调用 HTTPS 收录 API，不使用插件或个人 Mac。手机端尚未验收，进度与阻碍统一记录在 [Dot 云端接入任务](docs-site/plan/dot-cloud-intake.md)。
+
+部署及首次连接见 [外部接入说明](sense-console/docs/external-intake.md)。本阶段只收录到选题池，自动创作是下一阶段。
+
 ## 当前阶段
 
 2026-10-06 首版采用云端内容创作与人工发布闭环：

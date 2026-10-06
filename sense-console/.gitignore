@@ -33,3 +33,7 @@ video-factory/projects/demo_*/output/
 *.njsproj
 *.sln
 *.sw?
+
+# Scoped external-agent credentials (downloaded configuration).
+spark-intake-credentials*.json
+intake.credentials*.json
