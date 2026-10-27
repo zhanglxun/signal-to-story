@@ -97,3 +97,7 @@ approved 的最新平台版本 + 同平台账号 → planned → published / can
 - `textHandoffMarkdown`：同一数据导出为可人工阅读的文字交接包；项目页面也提供可复制预览，内嵌浏览器下载不可用时仍能交接。
 - `reviewWindows(actual_published_at)`：计算实际发布后 24 / 48 小时的复盘时间，展示在真实发布记录上；不是自动采集任务。
 - 原有数据库验收扩展为信息源 → 选题 → 项目 → X / 公众号独立审核和账号匹配 → 两次模拟观察；所有测试记录事务回滚。
+
+## 自有内容站扩展（规划，未实施）
+
+同仓库 `sense-site` 将读取独立站点发布层。现有组织稿件与审核表不对 anon 开放；独立快照、站点发布事务及读者注册权限见 [sense-site SPEC](../../docs-site/spec/sense-site-SPEC.md)。现有七个平台发布接口维持现状，尚无站点接口或表可调用。

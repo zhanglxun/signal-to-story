@@ -35,7 +35,7 @@
 
 ## 工程目录
 
-当前工程代码统一放在 `signal-to-story/sense-console/`：
+当前管理后台代码放在 `signal-to-story/sense-console/`；读者内容站规划放在同级 `sense-site/`，详见 [内容站建设计划](docs-site/plan/sense-site-plan.md)。内容站尚未实现：
 
 ```text
 signal-to-story/
@@ -44,6 +44,7 @@ signal-to-story/
 │   ├── supabase/
 │   ├── docs/
 │   └── workers/             # 出现真实长任务后再创建
+├── sense-site/              # 读者内容站（规划阶段，待确认后建设）
 ├── docs-site/
 │   ├── design/
 │   ├── plan/
@@ -77,6 +78,12 @@ signal-to-story/
 - 视频生成单独建设；现有视频页面仍为演示，内容项目提供脚本与素材交接包。
 
 具体范围见 [云端内容 MVP](docs-site/plan/cloud-content-mvp.md)，数据字典与接口见 [Cloud Content API](sense-console/docs/cloud-content-api.md)。
+
+## 读者内容站（规划）
+
+在同一仓库规划独立的 `sense-site`，沿用控制台 UI 框架与组件，由现有 Supabase 提供受 RLS 保护的内容读取。游客可读明确上线的基础内容；读者注册不授予后台组织权限。站点发布采用人工批准版本的独立快照，付费会员后续建设。
+
+本轮只完成规划，确认后开工。详见 [内容站 PRD](docs-site/design/sense-site-PRD.md)、[架构与权限 SPEC](docs-site/spec/sense-site-SPEC.md)、[建设计划](docs-site/plan/sense-site-plan.md)。
 
 ## 文档导航
 
