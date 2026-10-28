@@ -29,8 +29,6 @@ sense-console/video-factory/projects/demo_*/subtitles/
 sense-console/video-factory/projects/demo_*/output/
 
 # Automated daily run logs (state lives in Supabase; keep only real deliverables)
-sense-console/content-runs/*/followup-*.md
-sense-console/content-runs/*-topic-discovery/
 
 # OS and Editors
 .DS_Store
