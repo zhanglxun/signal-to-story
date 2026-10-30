@@ -12,7 +12,7 @@ import { AuthProvider } from "@/features/auth/auth-provider"
 import { createStubCatalog } from "@/services/stub-catalog"
 import { CatalogProvider } from "@/services/catalog"
 
-function renderSite(path: string, service?: CatalogService) {
+function renderSite(path: string, service: CatalogService = createStubCatalog()) {
   const client = new QueryClient({
     defaultOptions: { queries: { retry: false } },
   })
@@ -35,9 +35,16 @@ function renderSite(path: string, service?: CatalogService) {
 describe("reader routes", () => {
   it("renders the home shell", async () => {
     renderSite("/")
-    expect(await screen.findByRole("heading", { name: "把已发布的内容读清楚" })).toBeInTheDocument()
-    expect(screen.getByRole("link", { name: "批准之后，站点才看得到" })).toBeInTheDocument()
+    expect(await screen.findByRole("heading", { name: "把值得读的信号，整理成可核对的故事" })).toBeInTheDocument()
+    expect(screen.getAllByRole("link", { name: "批准之后，站点才看得到" }).length).toBeGreaterThan(0)
     expect(screen.getByText("开发占位数据，不是已发布内容。直达链接只验证路由和版面。")).toBeInTheDocument()
+  })
+
+  it("shows not-connected state without stub content", async () => {
+    const { createDisconnectedCatalog } = await import("@/services/supabase-catalog")
+    renderSite("/", createDisconnectedCatalog())
+    expect(await screen.findByText("未连接数据库")).toBeInTheDocument()
+    expect(screen.queryByText("开发占位数据，不是已发布内容。直达链接只验证路由和版面。")).not.toBeInTheDocument()
   })
 
   it("shows an empty explore result from the url", async () => {

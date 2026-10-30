@@ -8,3 +8,8 @@ dist-ssr
 .DS_Store
 .vite
 node_modules/.tmp
+
+.herenow/
+.env
+.env.*
+!.env.example

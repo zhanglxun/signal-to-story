@@ -17,7 +17,7 @@ export const contentColumnSchema = z.enum([
   "how_to",
   "case",
 ])
-export const accessLevelSchema = z.enum(["public", "registered"])
+export const accessLevelSchema = z.enum(["public", "registered", "member"])
 
 export type ContentForm = z.infer<typeof contentFormSchema>
 export type ContentColumn = z.infer<typeof contentColumnSchema>
@@ -41,6 +41,7 @@ export const columnLabel: Record<ContentColumn, string> = {
 export const accessLabel: Record<AccessLevel, string> = {
   public: "公开",
   registered: "注册可读",
+  member: "会员专享",
 }
 
 /** Forms that have reader-facing entries in the first baseline. */
@@ -136,7 +137,7 @@ export class CatalogRequestError extends Error {
 }
 
 export type CatalogService = {
-  source: "stub"
+  source: "stub" | "supabase" | "disconnected"
   listEntries(query?: ListEntriesQuery): Promise<ListEntriesResult>
   getEntry(slug: string): Promise<EntryCard | null>
   getEntryBody(slug: string, reader: ReaderContext): Promise<EntryBodyResult>

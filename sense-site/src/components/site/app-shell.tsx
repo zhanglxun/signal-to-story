@@ -109,6 +109,13 @@ export function AppShell() {
           </p>
         </div>
       ) : null}
+      {catalog.source === "disconnected" ? (
+        <div className="border-b bg-muted/70">
+          <p className="mx-auto w-full max-w-5xl px-4 py-2 text-sm text-muted-foreground sm:px-6">
+            未连接数据库。配置 VITE_SUPABASE_URL 与 anon / publishable key 后即可读取已发布内容。
+          </p>
+        </div>
+      ) : null}
       <main id="main" tabIndex={-1} className="mx-auto w-full max-w-5xl px-4 py-8 outline-none sm:px-6">
         <Outlet />
       </main>

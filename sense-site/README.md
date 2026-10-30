@@ -2,7 +2,7 @@
 
 Signal to Story 的读者站。工程名是 `sense-site`，页面上的产品名是 Signal to Story。
 
-这是 P1 可运行基线：独立的 Vite + React + TypeScript 单页应用，带首页、探索、正文、专题、资源库和个人入口。内容来自 `src/services/` 里的占位目录，用来核对路由和版面，不是已发布快照。数据库迁移仍只放在 `sense-console/supabase`。
+这是 P2/P3 读者站：独立的 Vite + React + TypeScript 单页应用，带首页、探索、正文、专题、资源库和个人入口。默认通过 Supabase Data API 读取 `site_*` 已发布快照；未配置环境变量时显示「未连接数据库」，不会用 stub 冒充发布内容。占位目录仅供测试注入。数据库迁移仍只放在 `sense-console/supabase`。
 
 - [产品页面与首版范围](../docs-site/design/sense-site-PRD.md)
 - [架构、数据与权限方案](../docs-site/spec/sense-site-SPEC.md)
@@ -29,13 +29,13 @@ npm run preview
 
 `npm run build` 会先做类型检查，再把生产包输出到 `sense-site/dist/`，入口是 `dist/index.html`。
 
-没有 Supabase 环境变量也可以开发和构建。需要预留连接时，复制 `.env.example` 为 `.env.local`，只填写项目 URL 和 anon / publishable key。不要写入 `service_role`、`sb_secret` 或数据库密码；浏览器里遇到这类密钥会直接忽略。当前即使填了 URL，目录数据仍走占位服务，账号登录才会使用 Supabase Auth。
+没有 Supabase 环境变量也可以开发和构建，此时首页会显示未连接状态。复制 `.env.example` 为 `.env.local`，填写项目 URL 和 anon / publishable key 后，目录走真实 Data API。不要写入 `service_role`、`sb_secret` 或数据库密码；浏览器里遇到这类密钥会直接忽略。
 
 ## 路由
 
 | 路径 | 页面 |
 | --- | --- |
-| `/` | 首页：精选、最新、专题 |
+| `/` | 首页：价值主张、今日精选、最新、频道速览、专题、会员预告 |
 | `/explore` | 探索。分类、形式、栏目、搜索和游标写在查询字符串里 |
 | `/content/:slug` | 正文、目录、来源、收藏 |
 | `/topics`、`/topics/:slug` | 专题列表和有序篇目 |
