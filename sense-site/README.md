@@ -43,7 +43,7 @@ npm run preview
 | `/me` | 登录后的收藏 |
 | `/login`、`/register`、`/forgot-password` | 辅助账号页，不进主导航 |
 
-未知地址显示 404。`/explore?category=lab` 是一个没有内容的分类。`/content/status-error` 用来看请求失败和重试。未登录打开 `/content/model-limits` 只能看到摘要。
+未知地址显示 404。未配置数据库时首页显示「未连接数据库」。有已发布数据后，游客只见 public；注册验证后可读 registered；member 仅锁态预告。
 
 主导航只有一层：首页、探索、专题、资源库、我的。正文和专题详情高亮各自的上级，不做成第三级菜单。
 
