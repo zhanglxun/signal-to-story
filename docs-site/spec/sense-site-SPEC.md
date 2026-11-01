@@ -1,6 +1,6 @@
 # Signal to Story 内容站 SPEC（规划草案）
 
-日期：2026-10-27。状态：待用户确认；尚未实施。本文明确允许应用代码放在根目录 `sense-site/`，作为既有“应用代码放在 sense-console”约定的专项例外。
+日期：2026-10-27。状态：P2/P3 落地中（2026-10-29）。`site_*` 表与 publish/unpublish/ensure_site_settings/ingest_harvested_signals 已写入 migrations 并应用到项目 ryhdcdljryllgkekfjan。本文明确允许应用代码放在根目录 `sense-site/`，作为既有“应用代码放在 sense-console”约定的专项例外。
 
 ## 定位与工程边界
 

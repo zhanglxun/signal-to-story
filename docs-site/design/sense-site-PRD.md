@@ -1,6 +1,6 @@
 # Signal to Story 内容站 PRD（规划草案）
 
-日期：2026-10-27。状态：待确认。工程、数据与授权见 [SPEC](../spec/sense-site-SPEC.md)，实施顺序见 [建设计划](../plan/sense-site-plan.md)。
+日期：2026-10-27。状态：P2/P3 实施中（2026-10-29）：site_* 迁移、控制台站点发布、sense-site Data API、intake→signals 试跑已落地；member 支付仍后置。工程、数据与授权见 [SPEC](../spec/sense-site-SPEC.md)，实施顺序见 [建设计划](../plan/sense-site-plan.md)。
 
 ## 首版目标
 

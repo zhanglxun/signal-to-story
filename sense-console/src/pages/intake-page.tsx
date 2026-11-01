@@ -18,6 +18,8 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { getContentWorkspace } from "@/services/content-workspace-service"
 import { getSourceCategories } from "@/services/source-category-service"
 import { deleteSignal, getSignalsPage } from "@/services/signal-service"
+import { ingestHarvestedSignals } from "@/services/site-publishing-service"
+import { toast } from "sonner"
 
 const workspaceKey = ["content-workspace"] as const
 const PAGE_SIZE = 10
@@ -87,6 +89,47 @@ export function IntakePage() {
           />
         )}
       />
+
+      {canManage && (
+        <Card>
+          <CardContent className="space-y-3 py-5">
+            <div className="flex flex-wrap items-center justify-between gap-3">
+              <div>
+                <p className="font-medium">采集入库（试跑）</p>
+                <p className="text-sm text-muted-foreground">
+                  调用 ingest_harvested_signals，把有效信息写入 signals 并分类。不会自动发布到站点。
+                </p>
+              </div>
+              <Button
+                type="button"
+                variant="outline"
+                onClick={() => {
+                  void (async () => {
+                    try {
+                      const sample = [
+                        {
+                          title: `采集试跑 ${new Date().toISOString().slice(0, 16)}`,
+                          url: `https://example.com/harvest/${Date.now()}`,
+                          summary: "控制台触发的可运行采集路径样例，请人工核实后再选题。",
+                          category_name: "自动采集",
+                        },
+                      ]
+                      const result = await ingestHarvestedSignals(organizationId, sample)
+                      toast.success(`入库完成：新建 ${result.created}，更新 ${result.updated}，跳过 ${result.skipped}`)
+                      await signalsQuery.refetch()
+                      await categoriesQuery.refetch()
+                    } catch (error) {
+                      toast.error(error instanceof Error ? error.message : "采集入库失败")
+                    }
+                  })()
+                }}
+              >
+                运行一次采集入库
+              </Button>
+            </div>
+          </CardContent>
+        </Card>
+      )}
 
       <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
         <div className="relative min-w-0 flex-1 sm:max-w-sm"><SearchIcon className="absolute top-1/2 left-3 size-4 -translate-y-1/2 text-muted-foreground" /><Input className="pl-9" value={queryText} onChange={(event) => changeQueryText(event.target.value)} placeholder="搜索名称" /></div>

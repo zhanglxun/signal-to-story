@@ -11,6 +11,7 @@ import { ContentOverviewPage } from "@/pages/content-overview-page"
 import { ContentProjectsPage } from "@/pages/content-projects-page"
 import { ContentProjectDetailPage } from "@/pages/content-project-detail-page"
 import { PublishingPage } from "@/pages/publishing-page"
+import { SitePublishingPage } from "@/pages/site-publishing-page"
 import { ForbiddenPage } from "@/pages/forbidden-page"
 import { ForgotPasswordPage } from "@/pages/forgot-password-page"
 import { IntegrationsPage } from "@/pages/integrations-page"
@@ -49,6 +50,7 @@ export default function App() {
           <Route path="/production/flow" element={<ContentOverviewPage mode="pipeline" />} />
           <Route path="/publishing/channels" element={<PublishingPage mode="channels" />} />
           <Route path="/publishing/plans" element={<PublishingPage />} />
+          <Route path="/publishing/site" element={<SitePublishingPage />} />
           <Route path="/analytics" element={<ContentOverviewPage mode="analytics" />} />
           <Route path="/intake" element={<IntakePage />} />
           <Route path="/intake/prompts" element={<PromptExamplesPage />} />

@@ -112,6 +112,12 @@
               "label": "渠道与账号",
               "path": "/publishing/channels",
               "icon": "Users"
+            },
+            {
+              "id": "site-publishing",
+              "label": "站点发布",
+              "path": "/publishing/site",
+              "icon": "Globe"
             }
           ]
         }
