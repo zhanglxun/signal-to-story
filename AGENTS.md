@@ -35,3 +35,10 @@ npm run build
 ```
 
 Run E2E checks when the environment supports them.
+
+## Cursor Cloud specific instructions
+
+- npm scripts live in `sense-console/`. Run install, dev, typecheck, lint, test, and build from that directory. The repository root has no application `package.json`.
+- Dev server: `npm run dev -- --host 0.0.0.0 --port 5173` inside `sense-console`. A boot script should skip startup when `http://127.0.0.1:5173/` already responds.
+- `sense-console/.env.local` is optional for boot. Without `VITE_SUPABASE_URL` and `VITE_SUPABASE_PUBLISHABLE_KEY`, `/dashboard` redirects to `/login`, the form shows “认证尚未配置”, and submit stays disabled. Do not add an auth bypass.
+- `npm run test:e2e` uses Playwright Chromium and its own Vite server on `http://127.0.0.1:4173`. Install the browser with `npx playwright install chromium` from `sense-console` when the cache is missing.
