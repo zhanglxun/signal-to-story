@@ -26,6 +26,7 @@ import {
   videoRenderJobTypes,
 } from "@/contracts/video-studio"
 import { getSupabaseClient } from "@/lib/supabase"
+import { createAsset } from "@/services/asset-service"
 
 export const VIDEO_STUDIO_BUCKET = "video-studio"
 
@@ -91,6 +92,7 @@ export interface VideoShotPatch {
   voice?: string | null
   sfxDescription?: string
   targetDurationMs?: number
+  keyframeAssetId?: number | null
 }
 
 export function shotPatchToRow(patch: VideoShotPatch): Record<string, unknown> {
@@ -103,6 +105,7 @@ export function shotPatchToRow(patch: VideoShotPatch): Record<string, unknown> {
   if (patch.voice !== undefined) row.voice = patch.voice
   if (patch.sfxDescription !== undefined) row.sfx_description = patch.sfxDescription
   if (patch.targetDurationMs !== undefined) row.target_duration_ms = patch.targetDurationMs
+  if (patch.keyframeAssetId !== undefined) row.keyframe_asset_id = patch.keyframeAssetId
   return row
 }
 
@@ -288,4 +291,37 @@ export async function getCanApproveVideoRender(organizationId: string, userId: s
   if (error || !member) return false
   const { data: role } = await db().from("organization_roles").select("permissions").eq("organization_id", organizationId).eq("role_key", (member as { role: string }).role).maybeSingle()
   return Boolean((role as { permissions?: string[] } | null)?.permissions?.includes("agent.approve"))
+}
+
+const KEYFRAME_EXTENSIONS: Record<string, string> = {
+  "image/jpeg": "jpg",
+  "image/png": "png",
+  "image/webp": "webp",
+}
+
+/** Upload a shot keyframe image into video-studio storage and register it in assets. */
+export async function uploadShotKeyframeAsset(input: {
+  organizationId: string
+  planId: string
+  shotId: string
+  file: File
+}) {
+  const ext = KEYFRAME_EXTENSIONS[input.file.type]
+  if (!ext) throw new Error("关键帧仅支持 JPG、PNG 或 WebP 图片。")
+  if (input.file.size > 10 * 1024 * 1024) throw new Error("关键帧图片不能超过 10MB。")
+  const path = `${input.organizationId}/${input.planId}/${input.shotId}-kf-${crypto.randomUUID()}.${ext}`
+  const { error } = await db().storage.from(VIDEO_STUDIO_BUCKET).upload(path, input.file, {
+    contentType: input.file.type,
+    upsert: false,
+  })
+  if (error) throw new Error("关键帧上传失败，请检查权限或存储桶配置。")
+  return createAsset({
+    organizationId: input.organizationId,
+    assetType: "scene",
+    category: "keyframe",
+    mediaType: "image",
+    name: input.file.name || `keyframe.${ext}`,
+    cloudUrl: `supabase://${VIDEO_STUDIO_BUCKET}/${path}`,
+    isActive: true,
+  })
 }

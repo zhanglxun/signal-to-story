@@ -24,6 +24,7 @@ import {
 } from "@/contracts/video-studio"
 import { useAuth } from "@/features/auth/auth-context"
 import { decideApprovalRequest } from "@/services/agent-job-service"
+import { getImageAssetOptions } from "@/services/asset-service"
 import { videoPublishEligibility } from "@/lib/video-publish-plan"
 import { listChannels, listDocuments, planPublication } from "@/services/content-service"
 import { getContentWorkspace } from "@/services/content-workspace-service"
@@ -49,6 +50,7 @@ import {
   reorderVideoShots,
   requestVideoRenderApproval,
   updateVideoShot,
+  uploadShotKeyframeAsset,
   type VideoShotPatch,
 } from "@/services/video-studio-service"
 
@@ -56,7 +58,7 @@ const KEY = "video-studio"
 const ACTIVE = new Set(["queued", "running"])
 
 function shotKey(s: VideoShot) {
-  return [s.id, s.narration, s.visualPrompt, s.voice, s.motionMode, s.cameraMotion, s.shotSize, s.targetDurationMs, s.sfxDescription].join("|")
+  return [s.id, s.narration, s.visualPrompt, s.voice, s.motionMode, s.cameraMotion, s.shotSize, s.targetDurationMs, s.sfxDescription, s.keyframeAssetId].join("|")
 }
 
 export function StoryboardsPage() {
@@ -93,10 +95,11 @@ export function StoryboardsPage() {
 
   const shotList = useMemo(() => shots.data ?? [], [shots.data])
   const assetIds = useMemo(() => [
-    ...shotList.flatMap((s) => [s.audioAssetId, s.videoAssetId]),
+    ...shotList.flatMap((s) => [s.keyframeAssetId, s.audioAssetId, s.videoAssetId]),
     plan?.composedVideoAssetId ?? null,
   ].filter((id): id is number => id != null), [shotList, plan?.composedVideoAssetId])
   const media = useQuery({ queryKey: [KEY, "media", assetIds.join(",")], queryFn: () => getVideoAssetUrls(assetIds), enabled: assetIds.length > 0, staleTime: 5 * 60_000 })
+  const keyframeOptions = useQuery({ queryKey: [KEY, "keyframe-options", organizationId], queryFn: () => getImageAssetOptions(organizationId!), enabled })
 
   const docs = useQuery({ queryKey: [KEY, "publish-docs", organizationId], queryFn: () => listDocuments(organizationId!), enabled: enabled && Boolean(plan?.composedVideoAssetId) })
   const channelList = useQuery({ queryKey: [KEY, "publish-channels", organizationId], queryFn: () => listChannels(organizationId!), enabled: enabled && Boolean(plan?.composedVideoAssetId) })
@@ -222,9 +225,15 @@ export function StoryboardsPage() {
                 media={{
                   audioUrl: shot.audioAssetId ? media.data?.[shot.audioAssetId]?.url : null,
                   videoUrl: shot.videoAssetId ? media.data?.[shot.videoAssetId]?.url : null,
+                  keyframeUrl: shot.keyframeAssetId ? media.data?.[shot.keyframeAssetId]?.url : null,
                   videoPlaceholder: shot.videoAssetId ? media.data?.[shot.videoAssetId]?.mediaType !== "video" : false,
                 }}
+                keyframeOptions={keyframeOptions.data ?? []}
                 onSave={(patch: VideoShotPatch) => act(() => updateVideoShot(shot.id, patch), "已保存，分镜版本 +1")}
+                onUploadKeyframe={organizationId ? (file) => act(async () => {
+                  const asset = await uploadShotKeyframeAsset({ organizationId, planId: plan.id, shotId: shot.id, file })
+                  await updateVideoShot(shot.id, { keyframeAssetId: asset.id })
+                }, "关键帧已上传并绑定，分镜版本 +1") : undefined}
                 onMove={(direction) => {
                   const order = moveShotOrder(shotList, shot.id, direction)
                   if (order) act(() => reorderVideoShots(plan.id, order))

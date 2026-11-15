@@ -23,8 +23,16 @@ function client() {
   if (!c) throw new Error("尚未配置云端连接")
   return c
 }
+export type IntakeAdapter = "dot" | "generic" | "feishu" | "wecom"
+
 export function intakeEndpoint() {
   return `${import.meta.env.VITE_SUPABASE_URL?.replace(/\/$/, "")}/functions/v1/intake-gateway`
+}
+export function imWebhookEndpoint(
+  channel: "feishu" | "wecom",
+  connectionId: string
+) {
+  return `${import.meta.env.VITE_SUPABASE_URL?.replace(/\/$/, "")}/functions/v1/im-webhook/${channel}/${connectionId}`
 }
 export async function listIntakeConnections(
   org: string
@@ -55,7 +63,7 @@ export async function listIntakeReceipts(
 export async function createIntakeConnection(
   org: string,
   name: string,
-  adapter: "dot" | "generic"
+  adapter: IntakeAdapter
 ) {
   const { token, hash } = generateIntakeCredential()
   const { data, error } = await client()
@@ -69,8 +77,30 @@ export async function createIntakeConnection(
     .select(columns)
     .single()
   if (error) throw new Error("创建失败，请确认名称与内容管理权限。")
+  const connection = data as IntakeConnection
+  if (adapter === "feishu" || adapter === "wecom") {
+    const { error: imError } = await client().from("im_channels").insert({
+      connection_id: connection.id,
+      organization_id: org,
+      channel: adapter,
+    })
+    if (imError) {
+      throw new Error("已创建连接，但绑定 IM 渠道失败，请确认 IM 渠道迁移已部署。")
+    }
+    const webhookUrl = imWebhookEndpoint(adapter, connection.id)
+    return {
+      connection,
+      webhookUrl,
+      config: JSON.stringify(
+        { channel: adapter, connectionId: connection.id, webhookUrl },
+        null,
+        2
+      ),
+    }
+  }
   return {
-    connection: data as IntakeConnection,
+    connection,
+    webhookUrl: null as string | null,
     config: JSON.stringify({ endpoint: intakeEndpoint(), token }, null, 2),
   }
 }

@@ -1,11 +1,11 @@
-// Thin Deno wrapper. All protocol logic lives in ../../../adapters/im/ (pure TS, tested with vitest).
+// Thin Deno wrapper. Protocol logic is synced from ../../../adapters/im/ (pure TS, tested with vitest).
 // Secrets (set with `supabase secrets set`, never in the repo or the browser):
 //   FEISHU_VERIFICATION_TOKEN, FEISHU_ENCRYPT_KEY (optional), FEISHU_APP_ID, FEISHU_APP_SECRET,
 //   WECOM_BOT_TOKEN, WECOM_ENCODING_AES_KEY, CONSOLE_BASE_URL (optional, default https://story.susense.cn)
-// Deploy with --no-verify-jwt: authenticity is the platform signature, not a Supabase JWT.
+// Configured in supabase/config.toml with verify_jwt = false (authenticity is the platform signature).
 import { createClient } from "npm:@supabase/supabase-js@2.57.4"
-import { createFeishuSender } from "../../../adapters/im/feishu.ts"
-import { createImHandler } from "../../../adapters/im/handler.ts"
+import { createFeishuSender } from "./adapters/feishu.ts"
+import { createImHandler } from "./adapters/handler.ts"
 
 const env = (k: string) => Deno.env.get(k)?.trim() || ""
 const admin = createClient(env("SUPABASE_URL"), env("SUPABASE_SERVICE_ROLE_KEY"), { auth: { persistSession: false } })

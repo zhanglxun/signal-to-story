@@ -189,18 +189,18 @@ npm --prefix sense-site run dev:demo -- --host 127.0.0.1
 
 **没有做**
 
-- 部署用的 Dockerfile 和 docker-compose（原定的集成收尾第 7 项，因额度暂停未做）。
 - 组织级模型密钥配置（BYOK）及其加密存储；worker 目前读自己的环境变量。
 - 按组织签发的受限 worker 凭证；worker 目前使用数据库最高权限凭证，放在个人电脑上有风险。
 - 计费、租户自助入驻。
 - IM 内一键批准：需要先设计 IM 用户与后台账号的身份绑定，目前卡片只是跳转链接。
-- 创建飞书 / 企微连接的界面（目前需要用 SQL 插入）。
-- 视频：关键帧上传或自动生成、云端 TTS 引擎、图形化多轨时间线、拖拽排序。真实引擎下，没有关键帧的本地镜头会失败。
+- 视频：关键帧 AI 自动生成、云端 TTS 引擎、图形化多轨时间线、拖拽排序（分镜卡片已支持手动选择/上传关键帧资产）。
+
+（已补齐：`Dockerfile` 与 `docker-compose.yml` 容器化打包、`/integrations` 创建飞书/企微连接与 Webhook 展示、`im-webhook` 自包含目录与 `verify_jwt = false` 配置、分镜关键帧资产绑定/上传、`sense-console/docs/supabase-data-model.md` 并入 Supabase 安全验收清单。）
 
 **没有验证**
 
 - 真实 Supabase 下的 Data API、存储签名链接、注册登录：全部只在进程内 Postgres 和假客户端上测过。
-- Edge Function 的入队模式，以及 `im-webhook` 在 Deno 下能否打包（它引用了函数目录外的文件）。
+- Edge Function 的入队模式，以及 `im-webhook` 在真实 Supabase CLI / Deno 下的线上部署（已消除函数目录外相对导入并配置 `verify_jwt = false`）。
 - 飞书的握手、事件结构、卡片 JSON、发消息接口，企微的签名算法和群机器人推送格式：按记忆实现，没有对照官方文档，真实联调时很可能要调整。
 - Codex 没有真实调用过；pi、opencode、agy 的无交互参数未核实，worker 会拒绝使用它们。
 - 真实视频模型、真实 TTS、全分辨率合成和真实计费。
@@ -210,4 +210,3 @@ npm --prefix sense-site run dev:demo -- --host 127.0.0.1
 
 1. 工作区物化协议与 CLI 会话续接要不要做。建议暂不做：需要放弃只读沙箱，安全模型要重新设计。
 2. 预算口径：旧文档是“不设硬预算、只记 token”，V2 内核已实现预算熔断。建议以 V2 为准。
-3. 被删除的 `frame-work.md` 里的 Supabase 安全验收清单是否并入 `sense-console/docs/supabase-data-model.md`。建议并入。

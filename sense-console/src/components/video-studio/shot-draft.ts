@@ -5,12 +5,16 @@ export const renderStatusVariant: Record<ShotRenderStatus, "default" | "secondar
   pending: "outline", queued: "secondary", rendering: "secondary", rendered: "default", failed: "destructive",
 }
 
-export type ShotDraft = Required<Pick<VideoShotPatch, "narration" | "visualPrompt" | "sfxDescription" | "shotSize" | "cameraMotion" | "motionMode" | "targetDurationMs">> & { voice: string }
+export type ShotDraft = Required<Pick<VideoShotPatch, "narration" | "visualPrompt" | "sfxDescription" | "shotSize" | "cameraMotion" | "motionMode" | "targetDurationMs">> & {
+  voice: string
+  keyframeAssetId: number | null
+}
 
 export function toShotDraft(shot: VideoShot, defaultVoice: string): ShotDraft {
   return {
     narration: shot.narration, visualPrompt: shot.visualPrompt, sfxDescription: shot.sfxDescription, shotSize: shot.shotSize,
     cameraMotion: shot.cameraMotion, motionMode: shot.motionMode, targetDurationMs: shot.targetDurationMs, voice: shot.voice ?? defaultVoice,
+    keyframeAssetId: shot.keyframeAssetId,
   }
 }
 
@@ -25,6 +29,7 @@ export function diffShotDraft(shot: VideoShot, draft: ShotDraft, defaultVoice: s
   if (draft.motionMode !== shot.motionMode) patch.motionMode = draft.motionMode
   if (draft.targetDurationMs !== shot.targetDurationMs) patch.targetDurationMs = draft.targetDurationMs
   if (draft.voice !== (shot.voice ?? defaultVoice)) patch.voice = draft.voice === defaultVoice ? null : draft.voice
+  if (draft.keyframeAssetId !== shot.keyframeAssetId) patch.keyframeAssetId = draft.keyframeAssetId
   return patch
 }
 

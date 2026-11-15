@@ -1,5 +1,5 @@
-import { useState } from "react"
-import { ArrowDownIcon, ArrowUpIcon, ClapperboardIcon, PlusIcon, SaveIcon, SparklesIcon, Trash2Icon, Volume2Icon } from "lucide-react"
+import { useRef, useState } from "react"
+import { ArrowDownIcon, ArrowUpIcon, ClapperboardIcon, ImagePlusIcon, PlusIcon, SaveIcon, SparklesIcon, Trash2Icon, Volume2Icon } from "lucide-react"
 
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
@@ -27,6 +27,7 @@ import { diffShotDraft, renderStatusVariant, type ShotDraft as Draft, toShotDraf
 export interface ShotMedia {
   audioUrl?: string | null
   videoUrl?: string | null
+  keyframeUrl?: string | null
   videoPlaceholder?: boolean
 }
 
@@ -38,10 +39,12 @@ export interface ShotCardProps {
   locked: boolean
   canManage: boolean
   media?: ShotMedia
+  keyframeOptions?: { id: number; name: string }[]
   /** Cloud re-roll cost estimate in cents (shown before asking for approval). */
   cloudCostCents: number
   busy?: boolean
   onSave: (patch: VideoShotPatch) => void
+  onUploadKeyframe?: (file: File) => void | Promise<void>
   onMove: (direction: -1 | 1) => void
   onDelete: () => void
   onInsertAfter: () => void
@@ -54,11 +57,13 @@ export function ShotCard(props: ShotCardProps) {
   const { shot, defaultVoice } = props
   // Parent passes key={`${shot.id}:${shot.updatedKey}`} semantics via `key`, so local draft resets on server changes.
   const [draft, setDraft] = useState<Draft>(() => toDraft(shot, defaultVoice))
+  const fileRef = useRef<HTMLInputElement>(null)
   const patch = diffShotDraft(shot, draft, defaultVoice)
   const dirty = Object.keys(patch).length > 0
   const disabled = !props.canManage || props.locked || props.busy
   const set = <K extends keyof Draft>(key: K, value: Draft[K]) => setDraft((d) => ({ ...d, [key]: value }))
   const id = (name: string) => `shot-${shot.id}-${name}`
+  const keyframeOptions = props.keyframeOptions ?? []
 
   return (
     <Card data-testid="shot-card">
@@ -67,6 +72,8 @@ export function ShotCard(props: ShotCardProps) {
           <div className="flex aspect-video items-center justify-center overflow-hidden rounded-lg border bg-muted/50">
             {props.media?.videoUrl && !props.media.videoPlaceholder ? (
               <video src={props.media.videoUrl} controls className="h-full w-full object-contain" aria-label={`镜头 ${props.index + 1} 预览`} />
+            ) : props.media?.keyframeUrl ? (
+              <img src={props.media.keyframeUrl} alt={`镜头 ${props.index + 1} 关键帧`} className="h-full w-full object-cover" />
             ) : (
               <ClapperboardIcon className="size-6 text-muted-foreground" aria-hidden />
             )}
@@ -137,6 +144,47 @@ export function ShotCard(props: ShotCardProps) {
               <Label htmlFor={id("sfx")}>SFX 音效</Label>
               <Input id={id("sfx")} value={draft.sfxDescription} disabled={disabled} maxLength={500} onChange={(e) => set("sfxDescription", e.target.value)} />
             </div>
+          </div>
+
+          <div className="flex flex-wrap items-end gap-2">
+            <div className="min-w-48 flex-1 space-y-1.5">
+              <Label htmlFor={id("keyframe")}>关键帧资产</Label>
+              <NativeSelect
+                id={id("keyframe")}
+                className="w-full"
+                value={draft.keyframeAssetId != null ? String(draft.keyframeAssetId) : ""}
+                disabled={disabled}
+                onChange={(e) => set("keyframeAssetId", e.target.value ? Number(e.target.value) : null)}
+              >
+                <NativeSelectOption value="">未绑定（本地运镜需关键帧）</NativeSelectOption>
+                {keyframeOptions.map((opt) => (
+                  <NativeSelectOption key={opt.id} value={String(opt.id)}>{opt.name}</NativeSelectOption>
+                ))}
+                {draft.keyframeAssetId != null && !keyframeOptions.some((o) => o.id === draft.keyframeAssetId) ? (
+                  <NativeSelectOption value={String(draft.keyframeAssetId)}>资产 #{draft.keyframeAssetId}</NativeSelectOption>
+                ) : null}
+              </NativeSelect>
+            </div>
+            {props.onUploadKeyframe ? (
+              <>
+                <input
+                  ref={fileRef}
+                  type="file"
+                  accept="image/jpeg,image/png,image/webp"
+                  className="hidden"
+                  aria-label={`上传镜头 ${props.index + 1} 关键帧`}
+                  disabled={disabled}
+                  onChange={(e) => {
+                    const file = e.target.files?.[0]
+                    e.target.value = ""
+                    if (file) void props.onUploadKeyframe?.(file)
+                  }}
+                />
+                <Button type="button" size="sm" variant="outline" disabled={disabled} onClick={() => fileRef.current?.click()}>
+                  <ImagePlusIcon data-icon="inline-start" />上传关键帧
+                </Button>
+              </>
+            ) : null}
           </div>
 
           <div className="flex flex-wrap gap-2">

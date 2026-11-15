@@ -45,19 +45,13 @@ worker 任务结束(pending_review / blocked_needs_human)
 
 限制：当前一套 Secret 对应一个飞书应用 / 一个企微机器人（部署级），按组织区分的是路径中的 `connection_id`。多个机器人需要把密钥按连接存储，尚未实现。
 
-## worker 集成（待集成，未改 `runner.ts`）
+## worker 集成（已完成）
 
-在 `workers/agent/runner.ts` 的 `processNextJob` 中、`log.info("job finished", …)` 之后加一行：
+`workers/agent/runner.ts` 已在 `processNextJob` 完成任务后调用 `notifyJobNeedsHuman`（位于 `workers/agent/notify/im-notify.ts`）。函数永不抛错，只对 `pending_review` / `blocked_needs_human` 且来自 IM 连接的任务发送。
 
-```ts
-await notifyJobNeedsHuman({ rpc: (fn, args) => backend.rpc(fn, args), log: (e, f) => log.warn(e, f) }, { id: job.id, status: outcome.status })
-```
+## 控制台指引与创建
 
-并 `import { notifyJobNeedsHuman } from "./notify/im-notify"`。`backend` 需要暴露一个调用 service_role RPC 的 `rpc(fn, args)`（返回 `{data, error}`）；若 `AgentQueueBackend` 尚无此方法，包装底层 supabase client 的 `.rpc` 即可。函数永不抛错，只对 `pending_review` / `blocked_needs_human` 且来自 IM 连接的任务发送。
-
-## 控制台指引组件挂载
-
-`<ImChannelGuide />`（`src/components/intake/im-channel-guide.tsx`）可直接放在 `integrations-page.tsx` 的一个 Tab/分区中；它不依赖数据、只展示步骤、Webhook 模板和 Secret 名称。
+`integrations-page.tsx` 已支持选择 `feishu` / `wecom` 适配器创建接入并自动写入 `im_channels`，展示可直接填入开放平台的 Webhook URL，并挂载 `<ImChannelGuide />`（`src/components/intake/im-channel-guide.tsx`）。
 
 ## 验证状态
 
@@ -69,7 +63,7 @@ await notifyJobNeedsHuman({ rpc: (fn, args) => backend.rpc(fn, args), log: (e, f
 | 飞书 url_verification、事件 v2 信封、post 富文本结构、card.action.trigger 应答、发送/回复/tenant_access_token 接口、卡片 JSON 1.0 | 按公开结构实现，**未对照官方文档**（页面为前端渲染，抓取不到） |
 | 企微群机器人 markdown 推送格式 | 凭记忆，**未对照官方文档** |
 | 时间戳 5 分钟重放窗口 | 本项目自定策略（官方未规定） |
-| Edge Function 能否打包 `../../../adapters/im/*.ts`（函数目录外的相对导入）及 `node:crypto` | **未验证**（本机无 Deno / supabase CLI）；若部署工具不支持，可把 `adapters/im` 复制进函数目录或改用 import map |
+| Edge Function 打包与 JWT 配置 | 已将 `adapters/im/{feishu,handler,shared,wecom}.ts` 同步至 `supabase/functions/im-webhook/adapters/` 并消除函数目录外相对导入，且已在 `supabase/config.toml` 配置 `[functions.im-webhook] verify_jwt = false`；真实 Supabase CLI / Deno 部署尚未在本地运行验证 |
 | 真实飞书 / 企微联调、手机端、卡片在客户端的渲染 | **未做**（不调用真实 API） |
 
 自动化测试：`adapters/im/im-adapters.test.ts`（协议与路由、通知）、`src/test/db/im-channels-db.test.ts`（PGlite：重复 message_id 只收录一次、撤销/过期/错配连接被拒、auto_draft 产生 job、通知目标解析、RLS）。

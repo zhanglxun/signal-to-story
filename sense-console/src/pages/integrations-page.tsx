@@ -3,16 +3,19 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query"
 import { Link } from "react-router"
 import { toast } from "sonner"
 import { PageHeader } from "@/components/page-header"
+import { ImChannelGuide } from "@/components/intake/im-channel-guide"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { getContentWorkspace } from "@/services/content-workspace-service"
 import {
   createIntakeConnection,
+  imWebhookEndpoint,
   intakeEndpoint,
   listIntakeConnections,
   listIntakeReceipts,
   revokeIntakeConnection,
+  type IntakeAdapter,
 } from "@/services/intake-gateway-service"
 
 export function IntegrationsPage() {
@@ -23,10 +26,12 @@ export function IntegrationsPage() {
   })
   const org = workspace.data?.organization?.id
   const [name, setName] = useState("我的 Dot")
-  const [adapter, setAdapter] = useState<"dot" | "generic">("dot")
-  const [secret, setSecret] = useState<{ org: string; config: string } | null>(
-    null
-  )
+  const [adapter, setAdapter] = useState<IntakeAdapter>("dot")
+  const [secret, setSecret] = useState<{
+    org: string
+    config: string
+    webhookUrl?: string | null
+  } | null>(null)
   const connections = useQuery({
     queryKey: ["intake-connections", org],
     queryFn: () => listIntakeConnections(org!),
@@ -44,7 +49,11 @@ export function IntegrationsPage() {
   const create = useMutation({
     mutationFn: () => createIntakeConnection(org!, name, adapter),
     onSuccess: async (data) => {
-      setSecret({ org: org!, config: data.config })
+      setSecret({
+        org: org!,
+        config: data.config,
+        webhookUrl: data.webhookUrl,
+      })
       await refresh()
     },
     onError: (e: Error) => toast.error(e.message),
@@ -163,11 +172,11 @@ export function IntegrationsPage() {
               <select
                 className="ml-3 rounded border bg-background p-2"
                 value={adapter}
-                onChange={(e) =>
-                  setAdapter(e.target.value as "dot" | "generic")
-                }
+                onChange={(e) => setAdapter(e.target.value as IntakeAdapter)}
               >
                 <option value="dot">Dot</option>
+                <option value="feishu">飞书机器人</option>
+                <option value="wecom">企业微信机器人</option>
                 <option value="generic">其他助手 / 通用接口</option>
               </select>
             </label>
@@ -183,9 +192,34 @@ export function IntegrationsPage() {
             </Button>
             {config && (
               <div className="space-y-3 rounded border p-4">
-                <p>
-                  配置仅本次显示。保存到助手可访问的私密文件中，不要放入聊天、代码仓库或公开网页。
-                </p>
+                {secret?.webhookUrl ? (
+                  <div className="space-y-2">
+                    <p className="text-sm font-medium">
+                      IM Webhook 回调地址（填入飞书 / 企业微信开放平台）：
+                    </p>
+                    <div className="flex items-center gap-2">
+                      <code className="flex-1 overflow-auto rounded bg-muted px-2 py-1 text-xs">
+                        {secret.webhookUrl}
+                      </code>
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        onClick={() => {
+                          void navigator.clipboard?.writeText(
+                            secret.webhookUrl!
+                          )
+                          toast.success("Webhook 地址已复制")
+                        }}
+                      >
+                        复制地址
+                      </Button>
+                    </div>
+                  </div>
+                ) : (
+                  <p>
+                    配置仅本次显示。保存到助手可访问的私密文件中，不要放入聊天、代码仓库或公开网页。
+                  </p>
+                )}
                 <div className="flex gap-2">
                   <Button onClick={downloadConfig}>下载连接配置</Button>
                   <Button variant="outline" onClick={() => setSecret(null)}>
@@ -238,6 +272,11 @@ export function IntegrationsPage() {
                           : "有效"}{" "}
                       · 到期 {new Date(c.expires_at).toLocaleString()}
                     </p>
+                    {(c.adapter === "feishu" || c.adapter === "wecom") && (
+                      <p className="mt-1 break-all text-xs text-muted-foreground">
+                        Webhook: {imWebhookEndpoint(c.adapter, c.id)}
+                      </p>
+                    )}
                   </div>
                   <Button
                     variant="outline"
@@ -252,6 +291,7 @@ export function IntegrationsPage() {
           </CardContent>
         </Card>
       )}
+      <ImChannelGuide />
       <Card>
         <CardHeader>
           <CardTitle>最近收录（50 条）</CardTitle>

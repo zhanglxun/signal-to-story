@@ -1,9 +1,15 @@
 // @vitest-environment node
-import { createServer, type Server } from "node:http"
-import type { AddressInfo } from "node:net"
-import { afterAll, beforeAll, describe, expect, it } from "vitest"
+import { describe, expect, it } from "vitest"
 
-import { assertFetchableUrl, createSafeLookup, fetchSourceText, htmlToText, isBlockedAddress } from "./fetch-source"
+import {
+  assertFetchableUrl,
+  createSafeLookup,
+  FetchBlockedError,
+  fetchSourceText,
+  htmlToText,
+  isBlockedAddress,
+  type FetchSourceTransport,
+} from "./fetch-source"
 
 describe("SSRF address policy", () => {
   it.each([
@@ -32,37 +38,49 @@ describe("SSRF address policy", () => {
 })
 
 describe("fetchSourceText", () => {
-  let server: Server
-  let port = 0
-  beforeAll(async () => {
-    server = createServer((req, res) => {
-      if (req.url === "/page") {
-        res.writeHead(200, { "content-type": "text/html; charset=utf-8" })
-        res.end("<html><head><title>T &amp; T</title><script>alert(1)</script></head><body><p>第一段</p><p>第二段 &lt;b&gt;</p></body></html>")
-      } else if (req.url === "/big") {
-        res.writeHead(200, { "content-type": "text/plain" })
-        res.end("x".repeat(5000))
-      } else if (req.url === "/bin") {
-        res.writeHead(200, { "content-type": "application/octet-stream" })
-        res.end("bin")
-      } else if (req.url === "/redirect-internal") {
-        res.writeHead(302, { location: "http://127.0.0.1/secret" })
-        res.end()
-      } else {
-        res.writeHead(404)
-        res.end()
-      }
-    })
-    await new Promise<void>((r) => server.listen(0, "127.0.0.1", r))
-    port = (server.address() as AddressInfo).port
-  })
-  afterAll(() => new Promise<void>((r) => server.close(() => r())))
+  const port = 18080
+
+  const fixtureTransport: FetchSourceTransport = async (url, _lookup, maxBytes) => {
+    let status = 404
+    let location: string | null = null
+    let contentType = ""
+    let body = Buffer.alloc(0)
+
+    if (url.pathname === "/page") {
+      status = 200
+      contentType = "text/html; charset=utf-8"
+      body = Buffer.from(
+        "<html><head><title>T &amp; T</title><script>alert(1)</script></head><body><p>第一段</p><p>第二段 &lt;b&gt;</p></body></html>"
+      )
+    } else if (url.pathname === "/big") {
+      status = 200
+      contentType = "text/plain"
+      body = Buffer.from("x".repeat(5000))
+    } else if (url.pathname === "/bin") {
+      status = 200
+      contentType = "application/octet-stream"
+      body = Buffer.from("bin")
+    } else if (url.pathname === "/redirect-internal") {
+      status = 302
+      location = "http://127.0.0.1/secret"
+    }
+
+    if (body.length > maxBytes) {
+      throw new FetchBlockedError("too_large", `正文超过 ${maxBytes} 字节上限`)
+    }
+    return { status, location, contentType, body }
+  }
 
   // Test-only: route the public-looking hostname to the loopback fixture (the safe lookup would refuse it).
   const toFixture = ((_h: string, opts: { all?: boolean }, cb: (...a: unknown[]) => void) =>
     opts?.all ? cb(null, [{ address: "127.0.0.1", family: 4 }]) : cb(null, "127.0.0.1", 4)) as never
   const viaFixture = (path: string, extra: Parameters<typeof fetchSourceText>[2] = {}) =>
-    fetchSourceText(`http://fixture.example:${port}${path}`, undefined, { lookup: toFixture, testOnlyAllowPort: String(port), ...extra })
+    fetchSourceText(`http://fixture.example:${port}${path}`, undefined, {
+      lookup: toFixture,
+      testOnlyAllowPort: String(port),
+      transport: fixtureTransport,
+      ...extra,
+    })
 
   it("default policy blocks the loopback server and non-default ports", async () => {
     expect(await fetchSourceText(`http://127.0.0.1:${port}/page`)).toMatchObject({ ok: false, code: "blocked_port" })

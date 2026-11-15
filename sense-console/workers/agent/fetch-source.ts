@@ -149,6 +149,20 @@ export function htmlToText(html: string): { title: string; text: string } {
   return { title, text }
 }
 
+export interface FetchSourceResponse {
+  status: number
+  location: string | null
+  contentType: string
+  body: Buffer
+}
+
+export type FetchSourceTransport = (
+  url: URL,
+  lookup: LookupFunction,
+  maxBytes: number,
+  signal: AbortSignal
+) => Promise<FetchSourceResponse>
+
 export interface FetchSourceOptions {
   lookup?: LookupFunction
   maxBytes?: number
@@ -157,10 +171,12 @@ export interface FetchSourceOptions {
   maxTextChars?: number
   /** Tests only: permit one non-default port (the local fixture server). */
   testOnlyAllowPort?: string
+  /** Tests only: custom HTTP transport for environments where loopback sockets are blocked. */
+  transport?: FetchSourceTransport
 }
 
-function requestOnce(url: URL, lookup: LookupFunction, maxBytes: number, signal: AbortSignal) {
-  return new Promise<{ status: number; location: string | null; contentType: string; body: Buffer }>((resolve, reject) => {
+function requestOnce(url: URL, lookup: LookupFunction, maxBytes: number, signal: AbortSignal): Promise<FetchSourceResponse> {
+  return new Promise<FetchSourceResponse>((resolve, reject) => {
     const mod = url.protocol === "https:" ? https : http
     const req = mod.request(url, {
       method: "GET",
@@ -202,13 +218,14 @@ function requestOnce(url: URL, lookup: LookupFunction, maxBytes: number, signal:
 export async function fetchSourceText(rawUrl: string, signal?: AbortSignal, options: FetchSourceOptions = {}): Promise<FetchSourceResult> {
   const maxBytes = options.maxBytes ?? FETCH_LIMITS.maxBytes
   const lookup = options.lookup ?? createSafeLookup()
+  const transport = options.transport ?? requestOnce
   const timeout = AbortSignal.timeout(options.timeoutMs ?? FETCH_LIMITS.timeoutMs)
   const combined = signal ? AbortSignal.any([signal, timeout]) : timeout
   try {
     const policy = { testOnlyAllowPort: options.testOnlyAllowPort }
     let url = assertFetchableUrl(rawUrl, policy)
     for (let hop = 0; ; hop++) {
-      const res = await requestOnce(url, lookup, maxBytes, combined)
+      const res = await transport(url, lookup, maxBytes, combined)
       if (res.status >= 300 && res.status < 400) {
         if (!res.location) throw new FetchBlockedError("bad_redirect", "重定向缺少目标")
         if (hop >= (options.maxRedirects ?? FETCH_LIMITS.maxRedirects)) throw new FetchBlockedError("too_many_redirects", "重定向次数过多")

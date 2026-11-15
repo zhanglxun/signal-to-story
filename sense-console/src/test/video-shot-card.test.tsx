@@ -60,7 +60,25 @@ describe("ShotCard", () => {
   })
 
   it("maps the default voice back to null", () => {
-    const draft = { narration: shot.narration, visualPrompt: shot.visualPrompt, sfxDescription: "", shotSize: shot.shotSize, cameraMotion: shot.cameraMotion, motionMode: shot.motionMode, targetDurationMs: 4000, voice: "zh-CN-XiaoxiaoNeural" }
+    const draft = { narration: shot.narration, visualPrompt: shot.visualPrompt, sfxDescription: "", shotSize: shot.shotSize, cameraMotion: shot.cameraMotion, motionMode: shot.motionMode, targetDurationMs: 4000, voice: "zh-CN-XiaoxiaoNeural", keyframeAssetId: null }
     expect(diffShotDraft({ ...shot, voice: "zh-CN-YunxiNeural" }, draft, "zh-CN-XiaoxiaoNeural")).toEqual({ voice: null })
+  })
+
+  it("binds and uploads a keyframe asset", async () => {
+    const user = userEvent.setup()
+    const onUploadKeyframe = vi.fn()
+    const h = setup({
+      keyframeOptions: [{ id: 42, name: "bakery-hero.png" }],
+      media: { keyframeUrl: "https://example.test/kf.png" },
+      onUploadKeyframe,
+    })
+    expect(screen.getByAltText("镜头 1 关键帧")).toHaveAttribute("src", "https://example.test/kf.png")
+    await user.selectOptions(screen.getByLabelText("关键帧资产"), "42")
+    await user.click(screen.getByRole("button", { name: "保存修改" }))
+    expect(h.onSave).toHaveBeenCalledWith({ keyframeAssetId: 42 })
+
+    const file = new File(["img"], "kf.png", { type: "image/png" })
+    await user.upload(screen.getByLabelText("上传镜头 1 关键帧"), file)
+    expect(onUploadKeyframe).toHaveBeenCalledWith(file)
   })
 })

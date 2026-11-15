@@ -98,6 +98,18 @@ Supabase Storage 当前只是默认的图例存储，并不是长期媒体归档
 4. 普通 CRUD 由 `supabase-js` 直接访问；密钥调用、Webhook、复杂校验才使用 Edge Function。
 5. 原始大文件不进数据库。数据库保存存储 provider、bucket/path、版本、哈希和关系。
 
+## Supabase 安全验收清单
+
+每次新增表、View、RPC、Storage bucket 或 Edge Function 时逐项核对：
+
+- [ ] **RLS 覆盖**：所有 `public` 业务表均已 `ENABLE ROW LEVEL SECURITY`，并按组织成员与角色权限编写最小 `SELECT`/`INSERT`/`UPDATE`/`DELETE` policy。
+- [ ] **显式 GRANT**：`authenticated`（及公开只读场景的 `anon`）具备所需的 schema/table/sequence/function `GRANT`，未依赖默认全开权限。
+- [ ] **禁止信任 `user_metadata`**：鉴权与角色判断一律基于服务端表（如 `organization_members` / `organization_roles`）与 `auth.uid()`，绝不从用户可改写的 `user_metadata` 读取权限。
+- [ ] **View / 函数安全性**：View 使用 `security_invoker = true`；`SECURITY DEFINER` 函数显式固定 `SET search_path = public, pg_temp` 并在函数体内校验调用者权限或原子令牌。
+- [ ] **私有 Bucket 与签名 URL**：非公开素材（图例、草稿分镜、工作流资产）使用私有 Storage bucket，仅在读取时生成短时签名 URL；公开成片/封面才放入受发布状态约束的公开路径。
+- [ ] **密钥隔离**：浏览器与 `VITE_*` 环境变量中不包含 `service_role`、数据库密码、对象存储长期密钥或 IM/LLM 密钥；Webhook 类 Edge Function 在 `supabase/config.toml` 配置 `verify_jwt = false` 并在入口完成平台签名/令牌校验。
+- [ ] **迁移与 RLS 测试**：新增迁移均附带 PGlite / 数据库测试（`src/test/db/*.test.ts`）验证跨组织隔离、权限边界与幂等性。
+
 ## 下一步设计输出
 
 内容生产领域 ER 图与状态机、RLS 权限矩阵与测试、生成式 TypeScript Database 类型、Agent 写入契约与幂等机制。
