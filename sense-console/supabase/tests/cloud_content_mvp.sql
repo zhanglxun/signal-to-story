@@ -37,7 +37,8 @@ begin
  denied:=false;
  begin update public.content_publications set status='published',published_url='https://example.com/test',published_at=now() where id=pub; exception when others then denied:=true; end;
  assert denied,'stale approved version must not publish';
- update public.content_publications set status='cancelled' where id=pub;
+ -- The revision bump already invalidated the stale plan (cancelled + invalidated_at), so it cannot be recorded or edited.
+ assert (select status='cancelled' and invalidated_at is not null from public.content_publications where id=pub),'stale plan must be invalidated by new revision';
  -- Editor can submit, but cannot approve or publish.
  perform set_config('request.jwt.claim.sub',editor_id::text,true);
  update public.content_documents set status='in_review' where id=doc;

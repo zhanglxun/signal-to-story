@@ -297,16 +297,18 @@
 
             <div class="p-3 rounded-lg bg-[var(--content)] border-l-4 border-[var(--success)]">
               <div class="flex items-center justify-between">
-                <span class="font-bold">通道 B：Headless Agent CLI Driver（高阶深研 & 本地算力复用）</span>
-                <span class="text-[var(--muted-foreground)]">沙箱容器或本地桥接</span>
+                <span class="font-bold">通道 B：Headless Agent CLI Driver + 工作区物化协议</span> <span class="text-[var(--warning)]">【目标设计，未实现】</span>
+                <span class="text-[var(--muted-foreground)]">sense-runner（目标设计）；现状为 workers/agent，<code>npm run worker:agent</code></span>
               </div>
               <p class="text-[var(--muted-foreground)] mt-1">
-                Harness 将任务打包为临时工作目录（<code class="text-[var(--code-foreground)]">context.json</code> + <code class="text-[var(--code-foreground)]">SKILL.md</code>），以非交互 JSON 模式调用外部 CLI：
+                <em>【目标设计，未实现】现状：CLI 在空临时目录 + 只读沙箱中运行，prompt 走 stdin，无物化目录、无 <code>cli_session_id</code>、无 <code>--resume</code>；<code>npm run start</code> 与 <code>npm run runner</code> 不存在，worker 读自身环境变量，不注入租户 Key。详见实施总计划第五节。</em><br/>目标设计的「三步物化协议」：<br/>
+                ① <strong>Checkout</strong>：把数据库 Brief、记忆与爬虫原文写成 <code class="text-[var(--code-foreground)]">/workspaces/job_id/*.md</code>；<br/>
+                ② <strong>Execute & Session</strong>：以 stdin 传入指令调 CLI，记录 <code class="text-[var(--code-foreground)]">cli_session_id</code> 支持多轮 <code class="text-[var(--code-foreground)]">--resume</code>；<br/>
+                ③ <strong>Commit</strong>：将 <code class="text-[var(--code-foreground)]">outputs/draft.md</code> 写回数据库提案表并上传附件。
               </p>
               <ul class="mt-1.5 space-y-1 text-[var(--muted-foreground)] list-disc list-inside">
-                <li><strong>Pi CLI / SDK</strong>：<code class="text-[var(--code-foreground)]">pi -p --output-format json</code>（极简、支持 Qwen/Kimi 挂载 Skill）</li>
-                <li><strong>OpenCode CLI</strong>：<code class="text-[var(--code-foreground)]">opencode run --format json</code>（多模型开源 Agent 标杆）</li>
-                <li><strong>Codex CLI / agy CLI</strong>：通过本机 <code class="text-[var(--code-foreground)]">sense-node-agent</code> 反向拉取深度研究任务</li>
+                <li><strong>单机/容器合体部署 (<code class="text-[var(--code-foreground)]">npm run start</code>)</strong>：1 个 Node 进程同时托管 <code class="text-[var(--code-foreground)]">dist/</code> 网页 + 跑后台 Loop + 内存级注入租户 API Key</li>
+                <li><strong>跨网本机挂载 (BYO-Node <code class="text-[var(--code-foreground)]">npm run runner</code>)</strong>：Mac 反向拉取云端任务，直接复用本机已登录的 Codex 个人订阅态</li>
               </ul>
             </div>
           </div>

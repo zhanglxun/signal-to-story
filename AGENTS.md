@@ -11,9 +11,9 @@
 - `sense-console` is the visual control plane. Do not run long AI or media jobs in the browser.
 - Use Supabase Auth and RLS-protected Data API calls for ordinary CRUD; do not add a traditional backend API without an approved need.
 - Never expose `service_role`, database passwords, provider secrets, or other privileged keys to browser code.
-- Agents submit proposals or drafts. They must not approve, publish, delete, or directly overwrite Obsidian source documents.
+- Agents submit proposals or drafts; humans retain approval and publishing authority. They must not bypass Mandate database gates or directly approve, publish, delete, or overwrite approved/published documents.
 - Store media binaries in object storage and relational metadata in Postgres.
-- Do not create Worker or shared-package infrastructure until a real long-running or cross-runtime requirement exists.
+- Long-running Agent/Media tasks run in independent `sense-console/workers/` processes (`agent/`, later `video/`), never in browser code; monorepo and `packages/` shared infrastructure remain forbidden until a real cross-runtime requirement exists.
 
 ## Frontend conventions
 

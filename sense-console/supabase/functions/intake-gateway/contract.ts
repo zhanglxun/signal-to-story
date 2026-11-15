@@ -1,6 +1,17 @@
+export const AUTO_DRAFT_PLATFORMS = [
+  "wechat_channels",
+  "wechat_official",
+  "xiaohongshu",
+  "douyin",
+  "x",
+  "youtube",
+  "reddit",
+] as const
 export type IntakeInput = {
   version: 1
-  intent: "capture"
+  intent: "capture" | "auto_draft"
+  /** Only present for auto_draft (capture payloads keep their original shape for receipt dedupe). */
+  platforms?: string[]
   external_id: string
   text: string
   title: string
@@ -19,11 +30,31 @@ export function normalizeIntake(value: unknown): IntakeInput {
     "title",
     "url",
     "angle",
+    "platforms",
   ]
   if (Object.keys(v).some((k) => !keys.includes(k)))
     throw new Error("存在不支持的字段；组织和身份由接入凭证确定")
-  if (v.version !== 1 || v.intent !== "capture")
-    throw new Error("本入口仅支持 version=1、intent=capture（收录选题）")
+  if (v.version !== 1 || (v.intent !== "capture" && v.intent !== "auto_draft"))
+    throw new Error(
+      "本入口仅支持 version=1、intent=capture（收录选题）或 auto_draft（自动出稿到待审）"
+    )
+  let platforms: string[] | undefined
+  if (v.intent === "auto_draft") {
+    const list = v.platforms === undefined ? [] : v.platforms
+    if (
+      !Array.isArray(list) ||
+      list.length > AUTO_DRAFT_PLATFORMS.length ||
+      list.some(
+        (p) =>
+          typeof p !== "string" ||
+          !(AUTO_DRAFT_PLATFORMS as readonly string[]).includes(p)
+      )
+    )
+      throw new Error("platforms 只能包含受支持的平台")
+    platforms = [...new Set(list as string[])]
+  } else if (v.platforms !== undefined) {
+    throw new Error("platforms 仅用于 auto_draft")
+  }
   const field = (name: string, max: number, required = false) => {
     if (v[name] === undefined && !required) return ""
     if (typeof v[name] !== "string") throw new Error(`${name} 必须是文字`)
@@ -51,7 +82,8 @@ export function normalizeIntake(value: unknown): IntakeInput {
   // URL is stored as evidence only: no fetch, redirects or server-side browser work.
   return {
     version: 1,
-    intent: "capture",
+    intent: v.intent,
+    ...(platforms ? { platforms } : {}),
     external_id: field("external_id", 128, true),
     text,
     title:

@@ -3,6 +3,15 @@
 -- publish gate on approved revision, immutable snapshots, unpublish, republish,
 -- bookmarks, resource download authorization and back-office isolation.
 begin;
+-- Test helper (rolled back): request + approve a publish_site Mandate as the current user.
+create function public.tst_approve_site(p_org uuid, p_site uuid, p_doc uuid, p_rev integer) returns void
+language plpgsql as $f$
+declare a public.approval_requests;
+begin
+  a := public.create_approval_request(p_org, 'publish_site', 'content_document', p_doc::text, p_rev, 'test',
+    jsonb_build_object('site_id', p_site));
+  perform public.decide_approval_request(a.id, 'approved');
+end; $f$;
 do $$
 declare
   org uuid := gen_random_uuid(); other_org uuid := gen_random_uuid();
@@ -33,6 +42,7 @@ begin
 
   -- Back office prepares two approved documents and one draft.
   perform set_config('request.jwt.claim.sub', publisher::text, true);
+  perform set_config('request.jwt.claim.role', 'authenticated', true);
   set local role authenticated;
   insert into public.content_projects (organization_id, title) values (org, 'Site test project') returning id into project;
   insert into public.content_documents (organization_id, project_id, platform, title, body)
@@ -57,6 +67,25 @@ begin
   denied := false;
   begin perform public.publish_site_entry(site, doc_public, 1, '{"slug":"bad","summary":"s","cover_url":"javascript:alert(1)","cover_alt":"x"}'); exception when others then denied := true; end;
   assert denied, 'unsafe cover url must be rejected';
+
+  -- Mandate: an approved review alone is not enough; a publish_site approval for this revision and site is required.
+  denied := false; msg := null;
+  begin perform public.publish_site_entry(site, doc_public, 1, '{"slug":"public-article","summary":"Public summary"}'); exception when sqlstate 'MD001' then denied := true; end;
+  assert denied, 'publish without approval must raise MD001';
+  -- An editor without content.publish may request but cannot approve.
+  perform set_config('request.jwt.claim.sub', editor::text, true);
+  perform public.create_approval_request(org, 'publish_site', 'content_document', doc_public::text, 1, 'req', jsonb_build_object('site_id', site));
+  denied := false;
+  begin perform public.decide_approval_request((select id from public.approval_requests where target_id = doc_public::text and status = 'pending'), 'approved'); exception when insufficient_privilege then denied := true; end;
+  assert denied, 'editor must not approve publish_site';
+  perform set_config('request.jwt.claim.sub', publisher::text, true);
+  -- Approval for another site does not unlock this site.
+  perform public.tst_approve_site(org, other_site, doc_registered, 1);
+  denied := false;
+  begin perform public.publish_site_entry(site, doc_registered, 1, '{"slug":"registered-article","summary":"s"}'); exception when sqlstate 'MD001' then denied := true; end;
+  assert denied, 'approval bound to another site must not unlock';
+  perform public.tst_approve_site(org, site, doc_public, 1);
+  perform public.tst_approve_site(org, site, doc_registered, 1);
 
   result := public.publish_site_entry(site, doc_public, 1, jsonb_build_object('slug', 'public-article', 'summary', 'Public summary', 'category_id', category));
   entry_public := (result ->> 'entry_id')::uuid;
@@ -186,6 +215,11 @@ begin
   perform set_config('request.jwt.claim.sub', publisher::text, true);
   update public.content_documents set status = 'in_review' where id = doc_public;
   update public.content_documents set status = 'approved', review_note = 'ok again' where id = doc_public;
+  denied := false;
+  begin perform public.publish_site_entry(site, doc_public, 2, '{"slug":"public-article","summary":"Public summary v2"}'); exception when sqlstate 'MD001' then denied := true; end;
+  assert denied, 'old approval must not cover a new revision';
+  assert (select status from public.approval_requests where target_id = doc_public::text and target_revision = 1 and payload ->> 'site_id' = site::text) = 'expired', 'rev 1 approval must expire on revision bump';
+  perform public.tst_approve_site(org, site, doc_public, 2);
   result := public.publish_site_entry(site, doc_public, 2, '{"slug":"public-article","summary":"Public summary v2"}');
   assert result ->> 'action' = 'republish' and (result ->> 'version')::int = 2, 'republish failed';
   assert (select count(*) from public.site_entry_releases where entry_id = entry_public) = 2, 'release history lost';

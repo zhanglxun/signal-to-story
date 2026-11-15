@@ -109,13 +109,20 @@ beforeAll(async () => {
           [id]
         )
       }
-      const publish = async (doc: string, meta: object) =>
-        (
+      const publish = async (doc: string, meta: object) => {
+        // Database-level Mandate: a human-approved publish_site request is required per revision and site.
+        const request = await tx.query<{ id: string }>(
+          "select (public.create_approval_request($1, 'publish_site', 'content_document', $2, 1, 'test', $3::jsonb)).id as id",
+          [ids.org, doc, JSON.stringify({ site_id: siteId })]
+        )
+        await tx.query("select public.decide_approval_request($1, 'approved')", [request.rows[0].id])
+        return (
           await tx.query<{ r: { entry_id: string } }>(
             "select public.publish_site_entry($1, $2, 1, $3::jsonb) as r",
             [siteId, doc, JSON.stringify(meta)]
           )
         ).rows[0].r.entry_id
+      }
       publicEntry = await publish(publicDoc, { slug: "public-one", summary: "Public summary" })
       registeredEntry = await publish(registeredDoc, {
         slug: "registered-one",

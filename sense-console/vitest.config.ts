@@ -8,7 +8,7 @@ export default defineConfig({
   test: {
     environment: "jsdom",
     setupFiles: "./src/test/setup.ts",
-    include: ["src/**/*.test.{ts,tsx}", "workers/**/*.test.ts"],
+    include: ["src/**/*.test.{ts,tsx}", "workers/**/*.test.ts", "adapters/**/*.test.ts"],
     // PGlite boots a WASM Postgres and applies every migration per test file.
     testTimeout: 60_000,
     hookTimeout: 60_000,

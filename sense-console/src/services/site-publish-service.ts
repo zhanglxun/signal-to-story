@@ -1,5 +1,7 @@
 import { sitePublishMetaSchema, type SitePublishMetaInput, type SitePublishResult, type SiteRelease, type SiteSettings, type SiteUnpublishResult } from '@/contracts/site-publish'
 import { getSupabaseClient } from '@/lib/supabase'
+import { mapApprovalRequest, type ApprovalRequest } from '@/contracts/agent-job'
+import { createApprovalRequest, decideApprovalRequest } from '@/services/agent-job-service'
 
 // Writes go only through the security-reviewed RPCs; there is no direct table write path.
 function db() {
@@ -11,6 +13,7 @@ function db() {
 export function siteError(error: { message: string; code?: string } | null) {
   if (!error) return
   if (error.code === '42501') throw new Error('当前账号没有站点发布权限，或稿件不属于该组织。')
+  if (error.code === 'MD001' || error.code === 'MD002') throw new Error(error.message)
   if (error.code === '23505') throw new Error('站点链接标识已被其他内容使用。')
   if (error.code === 'P0001' || error.code === '22023' || error.code === 'P0002') throw new Error(error.message)
   throw new Error('站点操作未完成，请检查网络与数据库迁移。')
@@ -57,3 +60,26 @@ export async function listSiteReleasesForDocument(documentId: string): Promise<S
     entry: Array.isArray(site_entries) ? (site_entries[0] ?? null) : site_entries,
   }))
 }
+
+export type SiteCategory = { id: string; name: string }
+export async function listSiteCategories(siteId: string): Promise<SiteCategory[]> {
+  const { data, error } = await db().from('site_categories').select('id,name').eq('site_id', siteId).eq('enabled', true).order('name')
+  siteError(error)
+  return (data ?? []) as SiteCategory[]
+}
+
+/** Mandate requests for publishing one document to a site, newest first. */
+export async function listSitePublishApprovals(documentId: string): Promise<ApprovalRequest[]> {
+  const { data, error } = await db().from('approval_requests').select('*').eq('action', 'publish_site').eq('target_type', 'content_document').eq('target_id', documentId).order('created_at', { ascending: false }).limit(30)
+  siteError(error)
+  return (data ?? []).map(mapApprovalRequest)
+}
+
+/** Ask a human with content.publish to approve publishing this exact revision to this site. */
+export function requestSitePublishApproval(input: { organizationId: string; siteId: string; documentId: string; revision: number; slug: string; summary?: string }) {
+  return createApprovalRequest({
+    organizationId: input.organizationId, action: 'publish_site', targetType: 'content_document', targetId: input.documentId,
+    targetRevision: input.revision, summary: input.summary ?? `发布到读者站：${input.slug}`, payload: { site_id: input.siteId, slug: input.slug },
+  })
+}
+export const decideSitePublishApproval = decideApprovalRequest

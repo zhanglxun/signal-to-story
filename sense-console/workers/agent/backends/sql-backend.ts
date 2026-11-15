@@ -16,6 +16,20 @@ export class SqlBackend implements AgentQueueBackend {
     this.run = run
   }
 
+  async rpc(fn: string, args: Record<string, unknown>) {
+    const ident = /^[a-z_][a-z0-9_]*$/
+    if (!ident.test(fn)) return { data: null, error: { message: "invalid function name" } }
+    const keys = Object.keys(args).filter((k) => ident.test(k))
+    try {
+      return await this.run(async (sql) => {
+        const r = await sql.query<{ r: unknown }>(`select public.${fn}(${keys.map((k, i) => `${k} => $${i + 1}`).join(", ")}) as r`, keys.map((k) => args[k]))
+        return { data: (r.rows[0]?.r ?? null) as unknown, error: null }
+      })
+    } catch (error) {
+      return { data: null, error: { message: error instanceof Error ? error.message : String(error) } }
+    }
+  }
+
   async claim(workerId: string, jobTypes: string[], leaseSeconds: number) {
     return this.run(async (sql) => {
       const r = await sql.query<ClaimedJobRow>("select * from public.claim_agent_job($1, $2, $3)", [workerId, jobTypes, leaseSeconds])

@@ -16,6 +16,7 @@ import { RememberDecisionField } from '@/components/decision-memory/remember-dec
 import { buildDecisionMemoryInput, emptyRememberValue } from '@/lib/remember-decision'
 import { createDecisionMemory } from '@/services/decision-memory-service'
 import { toast } from 'sonner'
+import { groupSchedule, isInvalidatedPlan } from '@/lib/publication-schedule'
 import { cancelPublication, createChannel, planPublication, publicationSnapshot, recordPublication, saveMetric } from '@/services/content-service'
 
 export function PublishingPage({ mode = 'plans' }: { mode?: 'plans' | 'channels' }) {
@@ -51,6 +52,10 @@ export function PublishingPage({ mode = 'plans' }: { mode?: 'plans' | 'channels'
         <Field label="计划时间（本地时区）"><Input required type="datetime-local" value={scheduledAt} onChange={e => setScheduledAt(e.target.value)} /></Field>
         <div className="flex items-end gap-2"><Button type="submit" disabled={busy || !selected || !channelId}>保存发布计划</Button><Link className="text-sm underline" to="/publishing/channels">管理账号</Link></div>
       </form></CardContent></Card>}
+      {groupSchedule(publications).length > 0 && <Card><CardHeader><CardTitle>排期视图</CardTitle></CardHeader><CardContent className="space-y-3">
+        <p className="text-xs text-muted-foreground">排期只是计划记录，不会自动发布；到点后仍需人工发布并回填链接。稿件改版后旧排期自动失效。</p>
+        {groupSchedule(publications).map(g => <div key={g.date}><p className="text-sm font-medium">{g.date}</p><ul className="mt-1 space-y-1 text-sm">{g.items.map(p => <li key={p.id} className="flex flex-wrap items-center gap-2"><span className="text-muted-foreground">{new Date(p.scheduled_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</span><span>{p.title_snapshot ?? documents.find(d => d.id === p.document_id)?.title ?? '稿件'}</span><Badge variant="outline">v{p.revision}</Badge>{isInvalidatedPlan(p) ? <Badge variant="destructive">已失效：稿件已改版</Badge> : <Badge>待人工发布</Badge>}</li>)}</ul></div>)}
+      </CardContent></Card>}
       {!publications.length && <p className="text-muted-foreground">还没有发布计划。先完成平台稿件审核，再选择目标账号。</p>}
       {publications.map(p => <PublicationCard key={p.id} publication={p} document={documents.find(d => d.id === p.document_id)} channel={channels.find(c => c.id === p.channel_id)} metrics={metrics.filter(m => m.publication_id === p.id)} canPublish={canPublish} />)}
     </>}
@@ -65,7 +70,7 @@ function PublicationCard({ publication, document, channel, metrics, canPublish }
   const [remember, setRemember] = useState(emptyRememberValue)
   const { busy, run } = useContentAction()
   const stale = document?.revision !== publication.revision || document?.status !== 'approved'
-  return <Card><CardHeader><CardTitle className="flex flex-wrap items-center gap-2">{publication.title_snapshot ?? document?.title ?? '稿件'}<Badge variant="outline">v{publication.revision}</Badge><Badge>{({ planned: '待人工发布', published: '已发布', cancelled: '已取消' })[publication.status]}</Badge></CardTitle></CardHeader><CardContent className="space-y-4">
+  return <Card><CardHeader><CardTitle className="flex flex-wrap items-center gap-2">{publication.title_snapshot ?? document?.title ?? '稿件'}<Badge variant="outline">v{publication.revision}</Badge><Badge>{publication.status === 'cancelled' && publication.invalidated_at ? '已失效（稿件改版）' : ({ planned: '待人工发布', published: '已发布', cancelled: '已取消' })[publication.status]}</Badge></CardTitle></CardHeader><CardContent className="space-y-4">
     <p className="text-sm text-muted-foreground">{channel && `${platforms[channel.platform]} · ${channel.name}`} · 计划 {new Date(publication.scheduled_at).toLocaleString()}</p>
     {publication.published_at && <p className="text-sm text-muted-foreground">复盘时间：{reviewWindows(publication.published_at).map(w => `${w.hours} 小时 ${new Date(w.dueAt).toLocaleString()}`).join(" · ")}</p>}
     <div className="flex flex-wrap gap-2"><Button variant="outline" disabled={busy} onClick={() => void run(async () => { const snapshot = await publicationSnapshot(publication); downloadText(`publication-${publication.id}.md`, exportMarkdown({ ...snapshot, platform: channel!.platform })) }, '已导出绑定的历史版本')}>导出发布版本</Button>{document && <Button variant="ghost" nativeButton={false} render={<Link to={`/content/projects/${document.project_id}`} />}>查看内容项目</Button>}</div>

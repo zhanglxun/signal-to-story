@@ -15,7 +15,14 @@ export const MAX_TRUSTED_KNOWLEDGE = 8
 export const MAX_REFERENCE_KNOWLEDGE = 3
 
 /** Turn DB rows into the loop controller's input. Pure; tested through the PGlite e2e test. */
-export function assembleDraftContext(job: HarnessJob, rows: DraftContextRows): HarnessDraftContext {
+/** Text extracted from the captured link by the controlled fetcher (untrusted). */
+export interface FetchedSource {
+  url: string
+  title: string
+  text: string
+}
+
+export function assembleDraftContext(job: HarnessJob, rows: DraftContextRows, fetched: FetchedSource | null = null): HarnessDraftContext {
   const instruction = String(job.payload.instruction ?? "").trim()
   if (!instruction) throw new Error("任务缺少创作要求 (payload.instruction)")
   if (job.targetRevision != null && rows.document.revision !== job.targetRevision) {
@@ -50,6 +57,9 @@ export function assembleDraftContext(job: HarnessJob, rows: DraftContextRows): H
       content: [rows.signal.name, rows.signal.site_url, rows.signal.summary, rows.signal.description].filter(Boolean).join("\n"),
     })
   }
+  if (fetched && rows.signal) {
+    sources.push({ sourceId: `web:${rows.signal.id}`, content: [fetched.title, fetched.url, fetched.text].filter(Boolean).join("\n") })
+  }
 
   const forbiddenPhrases = [
     ...(Array.isArray(job.payload.forbidden_phrases) ? (job.payload.forbidden_phrases as unknown[]).map(String) : []),
@@ -74,7 +84,7 @@ export function assembleDraftContext(job: HarnessJob, rows: DraftContextRows): H
       ...trusted.map((k) => ({ slug: k.slug, title: k.title, content: k.content, trustLevel: "trusted" as KnowledgeTrustLevel })),
       ...reference.map((k) => ({ slug: k.slug, title: k.title, content: k.content, trustLevel: "unreviewed" as KnowledgeTrustLevel })),
     ],
-    untrustedSources: sources.map((s) => ({ sourceId: s.sourceId, channel: "signal", url: rows.signal?.site_url ?? null, rawText: s.content, capturedAt: rows.signal ? new Date(rows.signal.created_at).toISOString() : new Date().toISOString() })),
+    untrustedSources: sources.map((s) => ({ sourceId: s.sourceId, channel: s.sourceId.startsWith("web:") ? "web_fetch" : "signal", url: rows.signal?.site_url ?? null, rawText: s.content, capturedAt: rows.signal ? new Date(rows.signal.created_at).toISOString() : new Date().toISOString() })),
   })
 
   return {

@@ -20,6 +20,11 @@ export class SupabaseBackend implements AgentQueueBackend {
     this.client = client
   }
 
+  async rpc(fn: string, args: Record<string, unknown>) {
+    const { data, error } = await this.client.rpc(fn, args)
+    return { data: data as unknown, error: error ? { message: error.message } : null }
+  }
+
   async claim(workerId: string, jobTypes: string[], leaseSeconds: number) {
     const data = check(await this.client.rpc("claim_agent_job", { p_worker_id: workerId, p_job_types: jobTypes, p_lease_seconds: leaseSeconds }), "claim")
     const rows = (Array.isArray(data) ? data : data ? [data] : []) as ClaimedJobRow[]

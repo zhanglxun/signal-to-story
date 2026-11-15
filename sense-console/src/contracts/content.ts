@@ -27,7 +27,7 @@ export type ReviewEvent = { id: string; revision: number; status: DocumentStatus
 export type PublishingChannel = { id: string; organization_id: string; platform: Platform; name: string; profile_url: string }
 export type Publication = {
   id: string; organization_id: string; document_id: string; revision: number; channel_id: string;
-  title_snapshot?: string; scheduled_at: string; status: 'planned' | 'published' | 'cancelled'; published_url: string; published_at: string | null
+  title_snapshot?: string; scheduled_at: string; status: 'planned' | 'published' | 'cancelled'; published_url: string; published_at: string | null; invalidated_at?: string | null; video_asset_id?: number | null
 }
 export type Metric = { id: string; publication_id: string; observed_at: string; views: number | null; likes: number | null; saves: number | null; comments: number | null; retrospective: string }
 export const urlSchema = z.url().refine(value => ['http:', 'https:'].includes(new URL(value).protocol), '请填写 http 或 https 链接')

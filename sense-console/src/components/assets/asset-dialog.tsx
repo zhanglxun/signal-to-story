@@ -18,7 +18,7 @@ import { NativeSelect, NativeSelectOption } from "@/components/ui/native-select"
 import { Textarea } from "@/components/ui/textarea"
 import {
   assetTypeLabels,
-  assetTypes,
+  manualAssetTypes,
   mediaTypeLabels,
   mediaTypes,
   type Asset,
@@ -92,7 +92,7 @@ export function AssetDialog({ organizationId, asset, trigger }: AssetDialogProps
           </DialogHeader>
           <div className="grid gap-4 py-2 sm:grid-cols-2">
             <div className="grid gap-2 sm:col-span-2"><Label htmlFor={`${fieldPrefix}-name`}>资产名称</Label><Input id={`${fieldPrefix}-name`} value={form.name} onChange={(event) => setForm((current) => ({ ...current, name: event.target.value }))} maxLength={120} required /></div>
-            <div className="grid gap-2"><Label htmlFor={`${fieldPrefix}-type`}>资产类别</Label><NativeSelect id={`${fieldPrefix}-type`} className="w-full" value={form.assetType} onChange={(event) => setForm((current) => ({ ...current, assetType: event.target.value as AssetType }))}>{assetTypes.map((type) => <NativeSelectOption key={type} value={type}>{assetTypeLabels[type]}</NativeSelectOption>)}</NativeSelect></div>
+            <div className="grid gap-2"><Label htmlFor={`${fieldPrefix}-type`}>资产类别</Label><NativeSelect id={`${fieldPrefix}-type`} className="w-full" value={form.assetType} onChange={(event) => setForm((current) => ({ ...current, assetType: event.target.value as AssetType }))}>{manualAssetTypes.map((type) => <NativeSelectOption key={type} value={type}>{assetTypeLabels[type]}</NativeSelectOption>)}</NativeSelect></div>
             <div className="grid gap-2"><Label htmlFor={`${fieldPrefix}-category`}>二级分类</Label><Input id={`${fieldPrefix}-category`} value={form.category} onChange={(event) => setForm((current) => ({ ...current, category: event.target.value }))} maxLength={80} placeholder="例如：food、office" required /></div>
             <div className="grid gap-2"><Label htmlFor={`${fieldPrefix}-media-type`}>媒介类型</Label><NativeSelect id={`${fieldPrefix}-media-type`} className="w-full" value={form.mediaType} onChange={(event) => setForm((current) => ({ ...current, mediaType: event.target.value as AssetMediaType }))}>{mediaTypes.map((type) => <NativeSelectOption key={type} value={type}>{mediaTypeLabels[type]}</NativeSelectOption>)}</NativeSelect></div>
             <div className="grid gap-2"><Label htmlFor={`${fieldPrefix}-status`}>状态</Label><NativeSelect id={`${fieldPrefix}-status`} className="w-full" value={form.isActive ? "active" : "disabled"} onChange={(event) => setForm((current) => ({ ...current, isActive: event.target.value === "active" }))}><NativeSelectOption value="active">启用</NativeSelectOption><NativeSelectOption value="disabled">停用</NativeSelectOption></NativeSelect></div>

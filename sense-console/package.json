@@ -15,7 +15,11 @@
     "preview": "vite preview",
     "worker:agent": "tsx workers/agent/main.ts",
     "demo:harness": "tsx workers/agent/demo-harness.ts",
-    "kb:seed": "tsx scripts/generate-knowledge-seed.ts"
+    "demo:capture": "tsx workers/agent/demo-capture.ts",
+    "kb:seed": "tsx scripts/generate-knowledge-seed.ts",
+    "demo:video": "tsx workers/agent/demo-video-studio.ts",
+    "video:contract": "tsx scripts/generate-video-contract.ts",
+    "test:video-worker": "python3 -m unittest discover -s workers/video/tests -t workers/video"
   },
   "dependencies": {
     "@base-ui/react": "^1.7.0",

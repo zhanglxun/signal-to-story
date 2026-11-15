@@ -27,7 +27,7 @@ export function readWorkerConfig(env: NodeJS.ProcessEnv = process.env): WorkerCo
     supabaseUrl: required(env, "SUPABASE_URL"),
     serviceRoleKey: required(env, "SUPABASE_SERVICE_ROLE_KEY"),
     workerId: env.SENSE_WORKER_ID?.trim() || `${hostname()}-${process.pid}`,
-    jobTypes: (env.SENSE_WORKER_JOB_TYPES ?? "content_draft").split(",").map((s) => s.trim()).filter(Boolean),
+    jobTypes: (env.SENSE_WORKER_JOB_TYPES ?? "content_draft,video_storyboard").split(",").map((s) => s.trim()).filter(Boolean),
     leaseSeconds: Number(env.SENSE_WORKER_LEASE_SECONDS ?? 120),
     pollIntervalMs: Number(env.SENSE_WORKER_POLL_MS ?? 5000),
   }

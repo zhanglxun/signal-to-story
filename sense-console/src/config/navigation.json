@@ -99,6 +99,18 @@
               "label": "提示词与图例",
               "path": "/intake/prompts",
               "icon": "ImagePlus"
+            },
+            {
+              "id": "knowledge-base",
+              "label": "知识库",
+              "path": "/content/knowledge",
+              "icon": "BookOpen"
+            },
+            {
+              "id": "decision-memories",
+              "label": "决定记忆",
+              "path": "/content/memories",
+              "icon": "Brain"
             }
           ]
         },

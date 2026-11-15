@@ -6,10 +6,13 @@ import { AccountPage } from "@/pages/account-page"
 import { AssetDetailPage } from "@/pages/asset-detail-page"
 import { AssetsPage } from "@/pages/assets-page"
 import { CanvasPage } from "@/pages/canvas-page"
+import { CapturePage } from "@/pages/capture-page"
 import { CharactersPage } from "@/pages/characters-page"
 import { ChatAssistantPage } from "@/pages/chat-assistant-page"
 import { CliAgentsPage } from "@/pages/cli-agents-page"
 import { ContentOverviewPage } from "@/pages/content-overview-page"
+import { DecisionMemoriesPage } from "@/pages/decision-memories-page"
+import { KnowledgeBasePage } from "@/pages/knowledge-base-page"
 import { ContentProjectsPage } from "@/pages/content-projects-page"
 import { ContentProjectDetailPage } from "@/pages/content-project-detail-page"
 import { PublishingPage } from "@/pages/publishing-page"
@@ -44,6 +47,7 @@ export default function App() {
       <Route path="/forbidden" element={<ForbiddenPage />} />
       <Route path="/h5/chat" element={<ChatAssistantPage standaloneH5 />} />
       <Route element={<RequireAuth />}>
+        <Route path="/capture" element={<CapturePage />} />
         <Route element={<AppShell />}>
           <Route index element={<Navigate to="/dashboard" replace />} />
           <Route path="/dashboard" element={<ContentOverviewPage />} />
@@ -68,6 +72,8 @@ export default function App() {
           <Route path="/video/characters" element={<CharactersPage />} />
           <Route path="/video/scenes" element={<ScenesPage />} />
           <Route path="/video/canvas" element={<CanvasPage />} />
+          <Route path="/content/memories" element={<DecisionMemoriesPage />} />
+          <Route path="/content/knowledge" element={<KnowledgeBasePage />} />
           <Route path="/assets" element={<AssetsPage />} />
           <Route path="/assets/:assetId" element={<AssetDetailPage />} />
           <Route path="/system/accounts" element={<OrganizationAccountsPage />} />

@@ -1,5 +1,6 @@
 # 对 Signal to Story 的启示(研究假设,待人工确认)
 
+> **归档状态（2026-11-15）**：下述 §2 中的核心机制（Mandate 门禁清单化与数据库强制、Decision Memory、3 轮循环上限、指令数据物理隔离、只读 Evaluator、挂起零消耗等）已正式采纳并落地于 [V2.0 实施总计划](../plan/v2-master-execution-plan.md)（P1 / P1.5 / P6a）及 [agent-harness.md](../../sense-console/docs/agent-harness.md)；第 4 节本机 vs 云端取舍已演进为 `workers/agent/` 兼顾“云端容器 + BYO-Node 本机反向认领”双部署形态。
 > 第二版,2026-11-05。这是**假设清单**,不是已采纳的决策。采纳前需与 [总体架构 SPEC](../spec/Signal-to-Story总体架构-SPEC.md) 的边界对齐,并写入相应 plan。
 > 依据:[00-综合判断.md](00-综合判断.md) 与 [sources/](sources/)。
 

@@ -5,8 +5,9 @@ Read @README.md before making architectural changes.
 Also follow:
 
 - @docs-site/spec/Signal-to-Story总体架构-SPEC.md
-- @docs-site/spec/内容系统分层与Obsidian单向同步-SPEC.md
-- @docs-site/plan/frame-work.md
+- @docs-site/plan/v2-unified-architecture-plan.md
+- @docs-site/plan/v2-master-execution-plan.md
+- @sense-console/docs/agent-harness.md
 
 ## Non-negotiable boundaries
 

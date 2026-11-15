@@ -14,8 +14,10 @@ import { RememberDecisionField } from '@/components/decision-memory/remember-dec
 import { buildDecisionMemoryInput, emptyRememberValue } from '@/lib/remember-decision'
 import { createDecisionMemory } from '@/services/decision-memory-service'
 import { toast } from 'sonner'
+import { ProposalJobLink } from '@/components/content/proposal-job-link'
+import { SitePublishPanel } from '@/components/content/site-publish-panel'
 
-export function DocumentEditor({ document, canEdit, canReview }: { document: ContentDocument; canEdit: boolean; canReview: boolean }) {
+export function DocumentEditor({ document, canEdit, canReview, canPublish = false }: { document: ContentDocument; canEdit: boolean; canReview: boolean; canPublish?: boolean }) {
   const [base, setBase] = useState(document)
   const [title, setTitle] = useState(document.title)
   const [body, setBody] = useState(document.body)
@@ -58,6 +60,7 @@ export function DocumentEditor({ document, canEdit, canReview }: { document: Con
         <Button variant="outline" disabled={busy || dirty || stale || !note.trim()} onClick={() => void transition('changes_requested')}>退回修改</Button>
       </div></div>}
     </CardContent></Card>
+    {!stale && <SitePublishPanel document={base} canRequest={canEdit} canPublish={canPublish} />}
     {canEdit && <Card><CardHeader><CardTitle>AI 创作提案</CardTitle></CardHeader><CardContent className="space-y-3">
       <Field label="创作要求"><Textarea value={instruction} maxLength={4000} onChange={e => setInstruction(e.target.value)} /></Field>
       <Button variant="outline" disabled={busy || dirty || stale || !instruction.trim() || proposals.data?.some(p => p.status === 'running')} onClick={() => void run(async () => { try { await generateDraft(base.id, instruction) } finally { await proposals.refetch() } }, '草案已生成，请审阅后采纳')}>生成文字草案</Button>
@@ -65,6 +68,7 @@ export function DocumentEditor({ document, canEdit, canReview }: { document: Con
       {proposals.error && <p role="alert" className="text-sm">提案记录读取失败。</p>}
       {proposals.data?.map(p => <details className="rounded-lg border p-3" key={p.id}><summary className="cursor-pointer text-sm">{p.model} · 输入 v{p.input_revision} · {({ running: '生成中', succeeded: '待人工审阅', failed: '失败' })[p.status]} · {new Date(p.created_at).toLocaleString()}</summary>
         {p.error && <p className="mt-2 text-sm text-destructive">{p.error}</p>}{p.body && <><pre className="my-3 max-h-96 overflow-auto whitespace-pre-wrap text-sm">{p.body}</pre><Button variant="outline" disabled={busy || dirty || stale || p.input_revision !== base.revision} onClick={() => setBody(p.body!)}>采纳到编辑区</Button>{p.input_revision !== base.revision && <p className="text-xs text-muted-foreground">输入版本已过期，请复制需要的片段后手动合并。</p>}</>}
+        {p.agent_job_id && <ProposalJobLink jobId={p.agent_job_id} />}
         {p.usage?.total_tokens != null && <p className="mt-2 text-xs text-muted-foreground">Token 用量：{p.usage.total_tokens} · 实际费用以供应商账单为准</p>}
       </details>)}
     </CardContent></Card>}

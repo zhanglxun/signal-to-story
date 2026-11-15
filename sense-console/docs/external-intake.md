@@ -1,6 +1,6 @@
-# 多助手统一接入：Dot 首次试用与部署
+# 多助手统一接入：HTTPS 收录网关说明
 
-更新：2026-10-06。当前状态优先查看 [Dot 云端任务](../../docs-site/plan/dot-cloud-intake.md)。范围：**外部消息 → 信源 → 候选选题 → 真实回执**。选题默认未完成、待核实和待选定；不抓取正文、不调用生成模型、不启动创作、不审核或发布。
+范围：**外部消息 → 信源（`signals`） → 候选选题（`selections`） → 真实回执**。默认仅收录为待核实、待选定的候选选题，不自动抓取正文、不审核或发布；Web 速记与飞书/企微双向通道的演进规划见 [V2.0 实施总计划](../../docs-site/plan/v2-master-execution-plan.md)（P3 / P4）。
 
 ## 已实现与环境边界
 
@@ -106,6 +106,16 @@ HTTP `POST`，`Authorization: Bearer stk_…`，`Content-Type: application/json`
 
 本次修复验证：27 项单元测试、类型检查、Lint 和生产构建通过；浏览器在 `isSecureContext=false` 且 `crypto.subtle` 不存在的 HTTP 来源成功生成凭证，摘要与服务端 SHA-256 一致。E2E 2 项通过，需独立账号的 2 项云端流程本次跳过；未声称重跑真实 Dot。最新产物已生成于 `sense-console/dist/`。
 
-## 当前 Dot 云端任务
+## 后续多入口演进
 
-目标为手机 Dot → Dot 云端直接 HTTPS POST → intake-gateway。插件方案已撤回。当前进度与阻碍见 [任务记录](../../docs-site/plan/dot-cloud-intake.md)，该记录优先于上面的历史本地试用步骤。HTTPS 与控制台上线不代表 Dot 已连接。
+本网关目前承载通用 HTTPS 单向收录；后续将按 [V2.0 实施总计划](../../docs-site/plan/v2-master-execution-plan.md) 的 P3（Web 极简速记 + iOS 快捷指令配置向导）与 P4（飞书 / 企业微信双向审批机器人）持续扩展。
+
+## Dot 接入状态：未验收
+
+截至 2026-11-15，Dot 手机端接入**一直未验收**，不能宣布可用。仍有效的阻碍点（依据已删除的 `dot-cloud-intake.md` 历史记录与本文残留描述）：
+
+- **凭证交付机制未建**：收录令牌的安全交付、保管与撤销没有落地；密钥不得放进聊天，也不得复制本机凭证，禁止无鉴权公开写入。
+- **没有 Dot 云端的真实回执**：仅验证过 Dot 云端对 `intake-gateway` 无凭证 GET 返回 HTTP 405（只证明可达）；历史选题来自 Mac 脚本，不算 Dot 云端成功。
+- **手机离线验收未完成**：需关掉 Mac，用手机向 Dot 发送新内容，获得回执与选题链接，网页刷新后仍存在；同一 `external_id` 重复提交须返回相同 `receipt_id` 且 `duplicate=true`。
+- 网页录入（云浏览器路线）只是待验证建议，不能冒充 API 回执验收。
+

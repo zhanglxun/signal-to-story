@@ -1,5 +1,7 @@
 # 研究归档:Agent 自循环 / Harness 工程
 
+> **归档状态（2026-11-15）**：本目录的核心研究结论（指令数据分离、Generator ↔ Evaluator ≤3 轮自循环、决定记忆 Decision Memory、Mandate 数据库强制门禁、挂起零消耗、规则前置过滤）已正式采纳并落地于 [V2.0 统一架构规划](../plan/v2-unified-architecture-plan.md)、[V2.0 实施总计划](../plan/v2-master-execution-plan.md)（P1 / P1.5 / P6a）及 [Agent Harness 内核文档](../../sense-console/docs/agent-harness.md)。本目录保留作为理论溯源归档。
+>
 > 建立日期:2026-11-05(第二版,已纳入用户 Notion 页附件)。本目录归档"Agent 进入自循环、持续工作阶段"方向的外部资料与分析,供后续改进 Signal to Story 的 Agent 工程方案时引用。
 > 这里是**研究输入**,不是决策。进入 SPEC 或 plan 之前,需要人工确认。
 

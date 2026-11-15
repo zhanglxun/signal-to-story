@@ -42,6 +42,8 @@ export interface AgentQueueBackend {
   updateProgress(jobId: string, progress: HarnessProgress): Promise<void>
   saveProposal(input: SaveProposalInput): Promise<{ proposalId: string }>
   loadDraftContext(job: HarnessJob): Promise<DraftContextRows>
+  /** service_role RPC passthrough (e.g. im_notify_target). Returns {data, error}. */
+  rpc(fn: string, args: Record<string, unknown>): Promise<{ data: unknown; error: { message: string } | null }>
 }
 
 export function toHarnessJob(row: ClaimedJobRow): HarnessJob {

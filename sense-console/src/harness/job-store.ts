@@ -1,6 +1,6 @@
 import type { LlmUsage } from "./llm"
 
-export type HarnessStepKind = "context" | "generate" | "precheck" | "evaluate" | "persist"
+export type HarnessStepKind = "context" | "fetch" | "generate" | "precheck" | "evaluate" | "persist"
 
 /** Mirrors a row of public.agent_job_steps. (jobId, round, stepKind) is unique. */
 export interface HarnessStepRecord {

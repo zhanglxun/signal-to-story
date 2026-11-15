@@ -1,6 +1,8 @@
-# Signal to Story 内容站 SPEC（规划草案）
+# Signal to Story 内容站 SPEC
 
-日期：2026-10-27。状态：待用户确认；尚未实施。本文明确允许应用代码放在根目录 `sense-site/`，作为既有“应用代码放在 sense-console”约定的专项例外。
+> **V2 定位（2026-11-15）**：本模块对应 [V2.0 实施总计划](../plan/v2-master-execution-plan.md) 中的 **P7（方向 D：独立读者内容站 `sense-site`）**。
+
+日期：2026-10-27。状态：首版已实现，未部署（2026-11-15 更新；见 [sense-site/README.md](../../sense-site/README.md)）。以下设计内容未改动。本文明确允许应用代码放在根目录 `sense-site/`，作为既有“应用代码放在 sense-console”约定的专项例外。
 
 ## 定位与工程边界
 

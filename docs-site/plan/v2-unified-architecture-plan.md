@@ -1,6 +1,6 @@
 # 星火工厂（Signal to Story）V2.0 统一架构升级与 SaaS 演进规划
 
-> **状态**：架构设计草案（待评审）  
+> **状态**：架构设计文档。P1～P7 代码均已完成并通过本地验证，线上未部署（见第 6 节）；其中 `sense-runner` 三形态、工作区物化协议、`cli_session_id` 续接、租户密钥注入为「目标设计，未实现」，集中见第 7 节。  
 > **更新日期**：2026-11-15  
 > **修订说明（2026-11-15）**：阶段编号统一指向 [实施总计划](v2-master-execution-plan.md) 的 P1～P7（新增 P1.5）；pgmq 改为任务表队列；目录改为 `sense-console/workers/`；模型 ID 改为示例并以控制台配置为准；CLI 先只接通 Codex；SaaS 范围收敛；「方向 D」定义为独立读者站 `sense-site`。
 > **核心目标**：将「控制台资产管理（`sense-console`）、读者展示站（`sense-site`）、Agent 自循环 Harness（方向 A）、多入口内容助手（方向 B）、Web 视频工坊与多平台发布（方向 C）、独立读者站（方向 D = `sense-site`）」收敛到一套**去 Obsidian 化、可独立服务端部署、支持云端大模型与本地/容器 Agent CLI 混合调度、保留 SaaS 演进余地（当前仅 `organization_id` + RLS）**的统一架构。
@@ -23,20 +23,20 @@
 
 ## 2. 关键架构决策：去 Obsidian 化、服务端独立部署与 SaaS 化
 
-### 2.1 彻底去 Obsidian 化（Cloud-Native Single Source of Truth）
+### 2.1 去 Obsidian 化（Cloud-Native Single Source of Truth）
 - **权威数据源唯一化**：Postgres（文本、版本、结构化分镜、关系、审计）+ 对象存储（R2 / S3 / OSS / Supabase Storage）成为唯一权威事实源。
 - **Markdown 仅作为导入/导出格式**：不再维护复杂的本地 Vault 同步协议，僅在页面提供标准的 `.md` / `.zip` 导入导出功能。系统在任何 Linux 云服务器上均可 100% 独立运行。
 
-### 2.2 服务端主运行 + 本地电脑算力按需挂载（Hybrid Compute Node）
-- **标准服务端模式（Server-First）**：Web 前端、Supabase、Agent worker、FFmpeg 基础合成容器化部署在云服务器，关掉个人电脑依然可自动采集、出稿、渲染；发布仍需人类批准。
-- **同一 worker，两种部署**：`sense-console/workers/agent/` 是同一个 Node worker 程序——部署在云端容器即 Agent Runtime；跑在个人电脑上即本地算力节点（原 `sense-node-agent`）。本地节点通过 **outbound 反向认领**任务表中的任务（`FOR UPDATE SKIP LOCKED` 认领 RPC），无需公网 IP，也不必把个人凭证上传云端。
-- **BYO-Node 边界**：个人订阅的 CLI（如本机已登录的 Codex）只适用于 BYO-Node（自带节点）模式，不得用于给多租户托管服务供能。
-- **开发期本地桥**：Vite dev server 中的 `/__sense_bridge` 仅为开发期配置与连通性自测工具，带 loopback / Origin / Token 校验，生产环境不存在；正式的本地算力路径是 worker 反向认领。
+### 2.2 服务端主运行 + 本地电脑算力按需挂载（`workers/agent` 出站 worker）
+- **标准服务端模式（Server-First）**：Web 前端、Supabase、Agent worker 分别部署；worker 是**纯出站进程**，通过 `FOR UPDATE SKIP LOCKED` 认领 RPC 拉取 `agent_jobs`，不需要公网 IP，不托管前端。关掉浏览器后，已入队任务照常推进到 `pending_review`；发布仍需人类批准。
+- **现状**：只有一个启动命令 `npm run worker:agent`（位于 `sense-console/workers/agent/`）。部署与算力形态（合体单进程、个人电脑挂载）的多形态设计见第 7 节「目标设计，未实现」，当前**不存在**。
+- **自带节点边界**：个人订阅的 CLI（如本机已登录的 Codex）只适用于自带节点模式、继承宿主机登录态，不得用于给多租户托管服务供能。
+- **开发期本地桥**：Vite dev server 中的 `/__sense_bridge` 仅为开发期配置与连通性自测工具，带 loopback / Origin / Token 校验，生产不存在；正式任务队列由 worker 反向认领。
 
 ### 2.3 SaaS 演进余地（当前范围收敛）
 - **当前只保留**：全表绑定 `organization_id`（已具备基础），RLS 按组织隔离；`sense-site` 通过 `site_id` 绑定对应组织。
 - **推后**：计费、用量账单、租户自助入驻，推后到单条真实链路（采集 → 出稿 → 审核 → 发布）跑通之后再评估。
-- **密钥存储统一**：BYOK 密钥统一为**组织级 provider 配置（服务端加密存储）**，不再并存 `.env.local`、Edge Function env、BYOK 三套方案。
+- **密钥存储统一**：目标：BYOK 密钥统一为**组织级 provider 配置（服务端加密存储）**；该配置表**尚未建设**，目前 worker 读自身环境变量（见第 7 节）。
 - **算力模式（远期方向，非当前交付）**：平台托管算力 与 BYOK / BYO-Node 两种商业模式，待上述推后项启动时再设计。
 
 ---
@@ -74,11 +74,16 @@
      - **说明**：模型 ID 和各 CLI 的无交互参数必须以厂商文档 / `--help` 实测为准，不凭记忆硬编码。
      - 适用场景：快速意图分类、选题摘要、结构化分镜 `video_plan.json` 拆解、只读评估器打分。
    - **Driver B：Headless Agent CLI Bridge（CLI 驱动，复用外部最强 Agent 执行体）**
-     - 将任务封装为标准 Workspace 任务包（输入文件、Skill 指令、输出 JSON Schema 契约），由 worker 以子进程调用。
+     - 由 worker 以子进程调用（现状：空临时目录 + 只读沙箱；「Workspace 任务包」物化为目标设计，未实现，见第 7 节）。
      - **当前只接通 Codex CLI**；Pi、OpenCode、Antigravity（`agy`）保留在驱动注册表，标注「未验证」，参数以实测为准后再启用。
      - **prompt 经 stdin 传入，不走 argv**（避免进程列表泄露与长度限制）。
      - CLI 只读写指定的任务输入/输出文件，不触碰生产数据库凭证。**「受限沙箱」只有在容器内运行才成立**；在个人电脑上直接运行时只是目录约定，不是隔离。
-     - 个人订阅的 CLI 仅适用于 BYO-Node 模式，不用于给多租户托管服务供能。
+     - 个人订阅的 CLI 仅适用于自带节点（BYO-Node）模式，不用于给多租户托管服务供能。
+
+### 3.3 后台自循环 Loop 的宿主（现状）
+- **不在浏览器跑 Loop**：`Generator ↔ Evaluator（确定性预检 + 独立 LLM 评估，≤3 轮）` 循环由独立运行的 Node worker（`workers/agent/`，`npm run worker:agent`）掌控。浏览器关闭后，已入队任务照常推进直到产出 `pending_review` 提案。
+- **CLI 驱动现状**：空临时目录 + 只读沙箱，prompt 走 stdin；worker 读自身环境变量。
+- 原「工作区物化协议、Session 续接与密钥动态注入」设计已移至第 7 节，标注为「目标设计，未实现」。
 
 ---
 
@@ -195,7 +200,7 @@ flowchart TB
 
 ### 5.2 目录结构演进规划（无 monorepo，无 `packages/`）
 
-在保留现有成果的基础上，工程结构平滑演进（无须推翻重写）。`workers/` 在 P1.5 / P5 建设，目前尚未创建；根目录 `knowledge-base/` 是默认种子，运行时权威是 Postgres。
+在保留现有成果的基础上，工程结构平滑演进（无须推翻重写）。`workers/agent/`（P1.5）与 `workers/video/`（P5）已创建；根目录 `knowledge-base/` 是默认种子，运行时权威是 Postgres。
 
 ```text
 signal-to-story/
@@ -209,11 +214,11 @@ signal-to-story/
 │   │   ├── migrations/             # agent_jobs、decision_memories、knowledge_entries、approval_requests 等
 │   │   └── functions/              # intake-gateway、content-draft（仅入队）、im-webhook、site-publish
 │   ├── video-factory/              # 既有 Python 视频引擎（由 workers/video 封装）
-│   └── workers/                    # 独立运行、独立部署的后台进程（P1.5 起建设）
+│   └── workers/                    # 独立运行、独立部署的后台进程
 │       ├── agent/                  # Node worker：认领 agent_jobs，跑 Generator ↔ Evaluator；
 │       │                           #   云端容器 = Agent Runtime，个人电脑 = 本地算力节点
 │       └── video/                  # Python worker：封装 video-factory（P5）
-├── sense-site/                     # [应用2] 独立读者内容站（获批的同级工程，P7 建设）
+├── sense-site/                     # [应用2] 独立读者内容站（首版已实现，未部署，P7）
 ├── knowledge-base/                 # 默认种子（导入 knowledge_entries）；非运行时权威
 └── docs-site/                      # 架构规范、PRD 与演进计划
 ```
@@ -228,12 +233,44 @@ signal-to-story/
 | :--- | :--- | :--- | :--- |
 | P1 | Harness 契约与纯函数（Context Pack、评估循环、Mandate 检查、驱动注册表） | A | 已完成 |
 | P2 | 去 Obsidian 化：知识库种子 + Markdown 导入导出 | A | 已完成（纯函数） |
-| P1.5 | Harness 内核服务端落地：`agent_jobs` 队列、`workers/agent/`、`decision_memories` / `knowledge_entries` / `approval_requests`、数据库 Mandate 门禁、两层评估器、`content-draft` 入队、PGlite 测试 | A | 建设中 |
-| P3 | Web 极简速记入口 + 采集 → 出稿待审闭环 | B | 待开始 |
-| P6a | Decision Memory 回灌最小版 | A | 待开始 |
-| P4 | 飞书（TOP 1）+ 企业微信（TOP 3）IM 通道与交互审批卡片 | B | 待开始 |
-| P5 | Web 视频工坊 + `workers/video/` | C | 待开始 |
-| P6b | 图文 + 视频统一多平台发布排期与复盘 | C | 待开始 |
-| P7 | `sense-site` 读者站 + 部署封装（计费与租户自助入驻推后） | D | 待开始 |
+| P1.5 | Harness 内核服务端落地：`agent_jobs` 队列、`workers/agent/`、`decision_memories` / `knowledge_entries` / `approval_requests`、数据库 Mandate 门禁、两层评估器、`content-draft` 入队、PGlite 测试 | A | 代码完成，本地验证通过，线上未部署 |
+| P3 | Web 极简速记入口 + 采集 → 出稿待审闭环 | B | 代码完成，本地验证通过，线上未部署 |
+| P6a | Decision Memory 回灌最小版 | A | 代码完成，本地验证通过，线上未部署 |
+| P4 | 飞书（TOP 1）+ 企业微信（TOP 3）IM 通道、回执与待审通知卡片 | B | 代码完成，未联调；按钮仅为跳转链接，IM 内一键批准未做（缺身份绑定） |
+| P5 | Web 视频工坊 + `workers/video/` | C | 代码完成，本地验证通过，线上未部署；关键帧界面、云端 TTS、多轨时间线、拖拽排序未做 |
+| P6b | 图文 + 视频统一多平台发布排期与复盘 | C | 代码完成，本地验证通过，线上未部署 |
+| P7 | `sense-site` 读者站 + 部署封装（计费与租户自助入驻推后） | D | 代码完成，本地验证通过，线上未部署 |
 
 > 方向 D 即独立读者站 `sense-site`，其自身的 P0～P5 子阶段见 [sense-site 建设计划](sense-site-plan.md)，不与本表 P 编号混用。
+
+---
+
+## 7. 目标设计，未实现
+
+以下内容曾被写成已具备的能力，但**代码中不存在**，仅作目标设计保留。
+
+- **a. `sense-runner` 三形态**（开发态、`npm run start` 单进程托管前端并跑循环、`npm run runner` 个人电脑挂载）。*差异*：实际只有 `npm run worker:agent`，worker 是纯出站进程，不托管前端。
+- **b. 工作区物化协议**：认领后在 `/workspaces/job_<id>/` 生成 `TASK.md`、`MEMORY.md`、`inputs/`，CLI 写 `outputs/draft.md` 后归档。*差异*：实际 CLI 驱动使用空临时目录 + 只读沙箱 + prompt 走 stdin；只读沙箱下无法写 `outputs/`，若要做需重新设计安全模型。
+- **c. `cli_session_id` 与 `--resume` 续接会话**。*差异*：不存在；现有 `resume_agent_job` 指任务重新排队并增加轮次，是另一回事。
+- **d. 每次任务向子进程注入租户 API Key**（组织级 provider 配置加密存储）。*差异*：该配置表未建，worker 读自身环境变量；BYOK 加密存储与按组织签发的受限 worker 凭证均未做。
+
+## 8. 已知断层与未验证项
+
+1. 线上 migration（20261115 及之后）与知识库种子尚未应用。
+2. 真实 Supabase 的 PostgREST / Storage / Auth 行为未验证，目前只在 PGlite 与假客户端上验证。
+3. Edge Function 的入队模式与 `im-webhook` 的 Deno 打包未实测。
+4. Codex 未真实调用；pi / opencode / agy 的无交互参数未验证。
+5. worker 使用 `service_role`（数据库最高权限），在个人电脑节点上有凭证风险；按组织签发的受限凭证未实现。
+6. IM 用户与后台账号的身份绑定未设计，因此 IM 内不能直接批准。
+7. 飞书 / 企微部分协议字段未对照官方文档、未联调。
+8. 视频真实引擎（TTS、云端视频模型、全分辨率合成）与真实计费未验证。
+9. Dot 手机端接入一直未验收。
+10. 各页面未在真实浏览器里点测过，只有编译加载与组件测试。
+
+## 9. 待负责人决定
+
+仅列问题与总架构师建议，不替负责人决定。
+
+1. **物化协议与会话续接是否要做？** 建议暂不做。
+2. **预算口径**：旧文档「不设硬预算、只记 token」与 V2 已实现的预算熔断不一致。建议以 V2 为准。
+3. **已删除的 `frame-work.md` 中的 Supabase 安全验收清单**是否并入 `sense-console/docs/supabase-data-model.md`？建议并入。

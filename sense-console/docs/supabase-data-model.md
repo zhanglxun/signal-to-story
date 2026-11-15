@@ -41,7 +41,7 @@
 
 ## 已落地：知识库内容（分类 / 待处理信息 / 选题）
 
-`source_categories`、`signals`、`selections` 对应 `docs-site/spec/SignalToStory项目数据库文档.md` 的 `c_category`/`c_signal`/`c_selection` 草案，字段调整如下：
+`source_categories`、`signals`、`selections` 对应早期 `c_category`/`c_signal`/`c_selection` 草案，字段调整如下：
 
 | 表 | 原草案 | 当前字段 | 调整原因 |
 | --- | --- | --- | --- |
@@ -84,13 +84,11 @@ Supabase Storage 当前只是默认的图例存储，并不是长期媒体归档
 
 访问规则与知识库内容一致：`content.view` 可读取，`content.manage` 可新建、编辑和删除；审计触发器维护创建与更新时间及操作人。
 
-## 拟覆盖的核心对象
+## 后续扩展与关联数据文档
 
-- `profiles`：账号展示资料与状态；可信角色关系存放在 `organization_members`，不使用可由用户修改的 `user_metadata` 做授权。
-- `agent_tasks`：异步任务、执行者、输入引用、进度、错误与输出引用。
-- `stories` / `story_nodes`：故事与章节、场景、分镜等结构关系。
-- `assets` / `asset_versions`：图片、音频、人物、场景与视频的元数据、外部存储地址和版本。
-- 关系表：选题、任务、故事节点和资产之间的可追踪关联。
+- 云端内容项目、不可变版本、审核事件与发布排期明细见 [Cloud Content API 字典](cloud-content-api.md)。
+- P1.5 任务队列（`agent_jobs` / `agent_job_steps`）、决定记忆（`decision_memories`）、知识库（`knowledge_entries`）与数据库 Mandate 门禁（`approval_requests`）见 [Agent Harness 内核文档](agent-harness.md)。
+- 后续待设计扩展：故事与分镜结构表（`video_plans` / `video_shots`，P5）及 `asset_versions`。
 
 ## 安全与访问约束
 

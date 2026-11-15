@@ -1,6 +1,8 @@
-# Signal to Story 内容站 PRD（规划草案）
+# Signal to Story 内容站 PRD
 
-日期：2026-10-27。状态：待确认。工程、数据与授权见 [SPEC](../spec/sense-site-SPEC.md)，实施顺序见 [建设计划](../plan/sense-site-plan.md)。
+> **V2 定位（2026-11-15）**：本模块对应 [V2.0 实施总计划](../plan/v2-master-execution-plan.md) 中的 **P7（方向 D：独立读者内容站 `sense-site`）**。
+
+日期：2026-10-27。状态：首版已实现，未部署（2026-11-15 更新；见 [sense-site/README.md](../../sense-site/README.md)）。以下设计内容未改动。工程、数据与授权见 [SPEC](../spec/sense-site-SPEC.md)，实施顺序见 [建设计划](../plan/sense-site-plan.md)。
 
 ## 首版目标
 

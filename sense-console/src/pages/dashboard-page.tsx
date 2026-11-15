@@ -4,6 +4,7 @@ import { ArrowRightIcon, CircleAlertIcon, PlusIcon, WandSparklesIcon } from "luc
 import { ChartAreaInteractive } from "@/components/chart-area-interactive"
 import { PageHeader } from "@/components/page-header"
 import { SectionCards } from "@/components/section-cards"
+import { TaskAttentionCard } from "@/components/task-attention-card"
 import { StatusBadge } from "@/components/status-badge"
 import { Avatar, AvatarFallback } from "@/components/ui/avatar"
 import { Button } from "@/components/ui/button"
@@ -16,6 +17,7 @@ export function DashboardPage() {
   return <div className="flex flex-col gap-6">
     <PageHeader eyebrow="工作台" title="内容生产驾驶舱" description="聚合重要信号、Agent 任务和待审核资产，把注意力放在需要决策的地方。" actions={<><Button variant="outline"><WandSparklesIcon />编排任务</Button><Button><PlusIcon />新建选题</Button></>} />
     <SectionCards />
+    <TaskAttentionCard />
     <div className="grid gap-4 @5xl/main:grid-cols-[minmax(0,1.5fr)_minmax(280px,.5fr)]">
       <ChartAreaInteractive />
       <Card><CardHeader><CardTitle>需要你处理</CardTitle><CardDescription>按影响和等待时间排序</CardDescription></CardHeader><CardContent className="space-y-2">{[

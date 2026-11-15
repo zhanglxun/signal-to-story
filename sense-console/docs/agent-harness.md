@@ -44,6 +44,7 @@ queued ──claim──▶ running ──▶ pending_review ──▶ succeeded
 ### 2.2 Mandate（数据库强制）
 
 - 受门禁的任务类型：`publish_external`、`publish_site`、`video_render`（→ `paid_video_render`）。触发器 `agent_job_mandate`：这些任务要进入 `queued/running/succeeded`，必须带 `approval_request_id`，且该请求 `approved`、未过期、动作/对象一致、`target_revision` 等于对象当前版本。插入时不满足直接拒绝（对 service_role 同样生效）；排队后失效则在认领时被停放为 `blocked_needs_human`（`error_code=mandate_invalid`），不会中断 worker 的认领事务。
+- **视频工坊（P5，`20261120100100_video_studio_mandate.sql`）**：`video_tts_preview` / `video_shot_render` / `video_compose` 按**服务端估算**（从当前镜头计算，不信任 payload）决定是否门禁：会调用云端视频模型，或估算 > 10 分（`private.video_cost_rate('free_threshold')`）→ 需要 `paid_video_render` 批准（目标 `video_plan` / 计划 id / 计划 revision，决定人需 `agent.approve`）；本地 Ken Burns 预览与 Edge TTS 试听为 0 成本，免批准。同一批准下所有任务的估算合计不得超过批准额度。计划 revision 变化使旧批准失效；排队中的视频任务在认领时若版本已变直接 `failed`（`stale_target`）。详见 [workers/video/README.md](../workers/video/README.md)。
 - 稿件版本变化（`content_documents.revision` 递增）时，触发器把该稿件及其发布计划上 `pending/approved` 的旧版本请求置为 `expired`。
 - `decide_approval_request` 只允许登录的人类成员（`auth.role()='authenticated'`），并按动作检查能力：发布类 `content.publish`，付费渲染/删除 `agent.approve`，凭证/权限 `account.manage`。`service_role` 无 EXECUTE 权限，也没有表的 UPDATE 权限。
 - 现有 `content_publications` 已具备等价的人类门禁（需稿件 `approved` 且版本一致，写入必须有 `auth.uid()`，service_role 无法写），**原流程复用不变**；新的发布 worker（P6）应走 `publish_external` 任务 + 批准请求。

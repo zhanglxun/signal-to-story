@@ -51,7 +51,7 @@ export interface AgentJob {
   finishedAt: string | null
 }
 
-export type AgentJobStepKind = "context" | "generate" | "precheck" | "evaluate" | "persist"
+export type AgentJobStepKind = "context" | "fetch" | "generate" | "precheck" | "evaluate" | "persist"
 
 export interface AgentJobStep {
   id: string

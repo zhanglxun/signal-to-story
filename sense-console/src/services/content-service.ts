@@ -77,9 +77,9 @@ export async function createChannel(org: string, platform: Platform, name: strin
   const { error } = await db().from('publishing_channels').insert({ organization_id: org, platform, name: name.trim(), profile_url: profileUrl.trim() })
   fail(error)
 }
-export async function planPublication(document: ContentDocument, channelId: string, scheduledAt: string) {
+export async function planPublication(document: ContentDocument, channelId: string, scheduledAt: string, videoAssetId?: number | null) {
   if (document.status !== 'approved') throw new Error('请先审核对应的平台稿件。')
-  const { error } = await db().from('content_publications').insert({ organization_id: document.organization_id, document_id: document.id, revision: document.revision, channel_id: channelId, scheduled_at: new Date(scheduledAt).toISOString() })
+  const { error } = await db().from('content_publications').insert({ organization_id: document.organization_id, document_id: document.id, revision: document.revision, channel_id: channelId, scheduled_at: new Date(scheduledAt).toISOString(), ...(videoAssetId != null ? { video_asset_id: videoAssetId } : {}) })
   fail(error)
 }
 export async function recordPublication(publication: Publication, url: string, publishedAt: string) {
@@ -108,7 +108,7 @@ export async function publicationSnapshot(publication: Publication) {
   fail(error); return data as Revision
 }
 
-export type AiProposal = { id: string; input_revision: number; model: string; status: 'running' | 'succeeded' | 'failed'; body: string | null; error: string | null; created_at: string; usage: { total_tokens?: number } | null }
+export type AiProposal = { id: string; input_revision: number; model: string; status: 'running' | 'succeeded' | 'failed'; body: string | null; error: string | null; created_at: string; usage: { total_tokens?: number } | null; agent_job_id?: string | null }
 export async function getAiProposals(documentId: string) {
   const { data, error } = await db().from('content_ai_proposals').select('*').eq('document_id', documentId).order('created_at', { ascending: false }).limit(20)
   fail(error); return (data ?? []) as AiProposal[]

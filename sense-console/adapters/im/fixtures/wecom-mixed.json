@@ -1,0 +1,5 @@
+{
+  "msgid": "MSGID_0002", "aibotid": "AIBOTID", "chatattype": "single", "chattype": "single",
+  "from": { "userid": "lisi" }, "msgtype": "mixed",
+  "mixed": { "msg_item": [ { "msgtype": "text", "text": { "content": "做这个 视频号" } }, { "msgtype": "image", "image": { "url": "https://example.invalid/i" } }, { "msgtype": "text", "text": { "content": "https://example.com/c" } } ] }
+}

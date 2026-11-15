@@ -7,6 +7,7 @@ import { createClient } from "@supabase/supabase-js"
 import { SupabaseBackend } from "./backends/supabase-backend"
 import { buildLlmClientFromEnv, readWorkerConfig } from "./config"
 import { consoleLogger, runWorkerLoop } from "./runner"
+import { createVideoStoryboardHandler, SupabaseVideoStoryboardStore } from "./video-storyboard"
 
 async function main() {
   const config = readWorkerConfig()
@@ -33,6 +34,7 @@ async function main() {
     generator,
     evaluator,
     signal: controller.signal,
+    jobHandlers: { video_storyboard: createVideoStoryboardHandler(new SupabaseVideoStoryboardStore(client)) },
   })
 }
 
