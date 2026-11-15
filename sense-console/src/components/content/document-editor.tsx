@@ -10,12 +10,17 @@ import { canTransition, exportMarkdown, platforms, statusLabels, type ContentDoc
 import { documentHistory, reviewDocument, saveDocument, getAiProposals, generateDraft } from '@/services/content-service'
 import { Field } from '@/components/content/content-common'
 import { downloadText, useContentAction } from '@/hooks/use-content-action'
+import { RememberDecisionField } from '@/components/decision-memory/remember-decision-field'
+import { buildDecisionMemoryInput, emptyRememberValue } from '@/lib/remember-decision'
+import { createDecisionMemory } from '@/services/decision-memory-service'
+import { toast } from 'sonner'
 
 export function DocumentEditor({ document, canEdit, canReview }: { document: ContentDocument; canEdit: boolean; canReview: boolean }) {
   const [base, setBase] = useState(document)
   const [title, setTitle] = useState(document.title)
   const [body, setBody] = useState(document.body)
   const [note, setNote] = useState('')
+  const [remember, setRemember] = useState(emptyRememberValue)
   const [instruction, setInstruction] = useState('根据项目 Brief 和当前稿件完善一份可审核的内容草案。')
   const { busy, run } = useContentAction()
   const history = useQuery({ queryKey: ['document-history', document.id], queryFn: () => documentHistory(document.id) })
@@ -23,7 +28,18 @@ export function DocumentEditor({ document, canEdit, canReview }: { document: Con
   const dirty = title !== base.title || body !== base.body
   const stale = base.revision !== document.revision || base.status !== document.status
   async function transition(status: DocumentStatus) {
-    await run(async () => { const updated = await reviewDocument(base, status, note); setBase(updated); setNote('') }, '审核状态已更新')
+    // Validate the optional memory first so a bad summary never leaves the review half-applied.
+    let memory = null
+    try {
+      memory = status === 'approved' || status === 'changes_requested'
+        ? buildDecisionMemoryInput(remember, { organizationId: base.organization_id, kind: status === 'approved' ? 'approved_preference' : 'rejected_pattern', quote: note, platform: base.platform, source: 'review_event', sourceRef: `document:${base.id}@v${base.revision}` })
+        : null
+    } catch (error) { toast.error(error instanceof Error ? error.message : '偏好摘要无效'); return }
+    const ok = await run(async () => { const updated = await reviewDocument(base, status, note); setBase(updated); setNote('') }, '审核状态已更新')
+    if (ok && memory) {
+      try { await createDecisionMemory(memory); setRemember(emptyRememberValue); toast.success('已记入长期创作偏好') }
+      catch (error) { toast.error(`审核已提交，但未能记入偏好：${error instanceof Error ? error.message : '请稍后在「决定记忆」页手动添加'}`) }
+    }
   }
   return <div className="space-y-4">
     <Card><CardHeader><CardTitle className="flex flex-wrap items-center gap-2">{base.platform === 'master' ? '母稿' : platforms[base.platform]}<Badge variant="outline">v{base.revision}</Badge><Badge>{statusLabels[base.status]}</Badge></CardTitle></CardHeader><CardContent className="space-y-4">
@@ -37,7 +53,7 @@ export function DocumentEditor({ document, canEdit, canReview }: { document: Con
         <span className="text-xs text-muted-foreground">{dirty ? '有未保存修改' : '已保存到云端'} · 改稿后需要重新审核</span>
       </div>
       {base.review_note && <p className="text-sm">最近审核意见：{base.review_note}</p>}
-      {canReview && base.status === 'in_review' && <div className="space-y-3 border-t pt-4"><Field label="审核意见"><Textarea value={note} maxLength={4000} onChange={e => setNote(e.target.value)} placeholder="退回时请说明需要修改的内容" /></Field><div className="flex gap-2">
+      {canReview && base.status === 'in_review' && <div className="space-y-3 border-t pt-4"><Field label="审核意见"><Textarea value={note} maxLength={4000} onChange={e => setNote(e.target.value)} placeholder="退回时请说明需要修改的内容" /></Field><RememberDecisionField value={remember} onChange={setRemember} platform={base.platform} disabled={busy} hint="退回将记为「要避免的做法」，通过将记为「认可的做法」；之后同类稿件生成时会自动遵守。" /><div className="flex gap-2">
         <Button disabled={busy || dirty || stale} onClick={() => void transition('approved')}>审核通过</Button>
         <Button variant="outline" disabled={busy || dirty || stale || !note.trim()} onClick={() => void transition('changes_requested')}>退回修改</Button>
       </div></div>}

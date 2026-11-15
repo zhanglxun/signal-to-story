@@ -298,10 +298,15 @@ signal-to-story/
 │   ├── src/                    # React Web Console
 │   ├── supabase/               # 配置、migration、RLS、Functions 和 seed
 │   ├── docs/                   # 数据模型和工程设计
-│   └── workers/                # 真实长任务出现后再创建
+│   └── workers/                # 2026-11-15 起建立：agent/（Node）、video/（Python，P5）
+├── sense-site/                 # 获批的同级读者站工程（建设中，见 sense-site-plan）
+├── knowledge-base/             # 默认种子，运行时权威是 Postgres
 ├── docs-site/
 └── README.md
 ```
+
+> [!note] 2026-11-15 决策更新
+> 已出现真实长任务：生成 ↔ 评估多轮循环超出 Edge Function 单请求时限。因此在 `sense-console/workers/` 建立 Agent worker（`workers/agent/`，认领 Postgres 任务表 `agent_jobs`；云端容器部署即 Agent Runtime，个人电脑部署即本地算力节点）；视频 worker（`workers/video/`）待 P5 再建。Worker 仍是独立进程、独立依赖与部署，不属于 Web 包。仍**不建立 `packages/` monorepo**。详见 [V2.0 实施总计划](../plan/v2-master-execution-plan.md) 的 P1.5。
 
 当前不创建 `packages/`。只有 Web、Worker 或本机同步器需要共享同一套版本化 Schema 时，才将 `sense-console/src/contracts/` 提升为 `sense-console/packages/contracts/`。
 
@@ -321,15 +326,19 @@ signal-to-story/
 - Agent Contract、幂等、审计和安全边界。
 - 独立数据库模型设计文档的位置与要求。
 
+> [!note] 2026-11-15 决策更新
+> 上述“当前阶段建立”清单新增：Agent worker（`workers/agent/`）、任务表队列（`agent_jobs`、`agent_job_steps`，`FOR UPDATE SKIP LOCKED` 认领，不使用 pgmq）、`decision_memories` / `knowledge_entries` / `approval_requests`。Mandate（发布、高额生成、权限变更）门禁必须由数据库触发器 / RPC 强制，前端检查只是 UX。下方“不建立”清单中，“Media Worker”仍不建立（待 P5），Agent worker 已获批。
+
 当前阶段不建立：
 
 - 独立传统后台 API 服务。
 - 完整业务数据库模型。
-- 通用 Agent 编排平台。
-- Media Worker 和完整媒体生产流水线。
+- 通用 Agent 编排平台（Agent worker 仅承载 Content Harness 的生成/评估循环）。
+- Media Worker 和完整媒体生产流水线（P5 再建）。
 - 自动发布系统。
 - 三级菜单、多标签企业工作台或复杂权限配置中心。
 - Obsidian 与 CMS 的双向正文同步。
+- `packages/` monorepo 与共享 package。
 
 ---
 
@@ -340,7 +349,7 @@ signal-to-story/
 3. **对象存储管原始物料，数据库保存可审计索引。**
 4. **Agent 提交提案，人类保留最终决策权。**
 5. **Worker 负责可靠执行，任务必须可重试、可取消、可追踪。**
-6. **Obsidian 是原稿主编辑端，CMS 不静默反向覆盖。**
+6. **在线原稿以云端 Postgres 为权威；Obsidian 是独立可选的本地创作方式，导入/导出均需显式操作，平台不静默覆盖本地文件（2026-10-06 决策）。**
 7. **前端可直连 Supabase，但必须由 RLS 保证数据安全。**
 8. **先验证单条真实链路，再增加抽象、模型和自动化。**
 9. **所有正式产物都能追溯来源、版本、成本和人工审核。**

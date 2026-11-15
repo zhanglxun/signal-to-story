@@ -9,7 +9,7 @@ Deno.serve(async req => {
   const client = createClient(Deno.env.get('SUPABASE_URL')!, Deno.env.get('SUPABASE_ANON_KEY')!, { global: { headers: { Authorization: authorization } }, auth: { persistSession: false } })
   const { data: identity, error: authError } = await client.auth.getUser()
   if (authError || !identity.user) return reply({ error: '需要登录' }, 401)
-  let input: { document_id?: string; instruction?: string }
+  let input: { document_id?: string; instruction?: string; mode?: string; idempotency_key?: string }
   try { input = await req.json() } catch { return reply({ error: '请求格式无效' }, 400) }
   if (!input.document_id || typeof input.instruction !== 'string' || !input.instruction.trim() || input.instruction.length > 4000) return reply({ error: '请填写 1–4000 字创作要求' }, 400)
   const { data: doc, error: docError } = await client.from('content_documents').select('*').eq('id', input.document_id).single()
@@ -17,6 +17,23 @@ Deno.serve(async req => {
   const { data: member } = await client.from('organization_members').select('role').eq('organization_id', doc.organization_id).eq('user_id', identity.user.id).single()
   const { data: role } = await client.from('organization_roles').select('permissions').eq('organization_id', doc.organization_id).eq('role_key', member?.role ?? '').single()
   if (!role?.permissions?.includes('content.manage')) return reply({ error: '没有创作权限' }, 403)
+  // Queue mode (P1.5): hand the work to the Agent Harness worker instead of calling the model here.
+  // Explicit `mode` wins; otherwise CONTENT_DRAFT_DEFAULT_MODE (default 'sync' keeps the legacy behaviour).
+  const mode = input.mode === 'queue' || input.mode === 'sync' ? input.mode : (Deno.env.get('CONTENT_DRAFT_DEFAULT_MODE') === 'queue' ? 'queue' : 'sync')
+  if (mode === 'queue') {
+    if (input.idempotency_key !== undefined && (typeof input.idempotency_key !== 'string' || !/^[\w:.-]{1,200}$/.test(input.idempotency_key))) return reply({ error: '幂等键格式无效' }, 400)
+    const digest = Array.from(new Uint8Array(await crypto.subtle.digest('SHA-256', new TextEncoder().encode(input.instruction.trim()))), b => b.toString(16).padStart(2, '0')).join('').slice(0, 16)
+    const idempotencyKey = input.idempotency_key ?? `content_draft:${doc.id}:r${doc.revision}:${digest}`
+    const { data: existing } = await client.from('agent_jobs').select('id,status').eq('organization_id', doc.organization_id).eq('idempotency_key', idempotencyKey).maybeSingle()
+    // RPC runs with the caller's JWT: it re-checks agent.dispatch + content.manage and the document revision.
+    const { data: job, error: enqueueError } = await client.rpc('enqueue_agent_job', {
+      p_organization_id: doc.organization_id, p_job_type: 'content_draft', p_idempotency_key: idempotencyKey,
+      p_payload: { document_id: doc.id, instruction: input.instruction.trim(), platform: doc.platform },
+      p_target_type: 'content_document', p_target_id: doc.id, p_target_revision: doc.revision,
+    })
+    if (enqueueError || !job) return reply({ error: enqueueError?.code === '42501' ? '没有调度 Agent 任务的权限' : '排队失败，稿件可能已被修改，请刷新后重试' }, enqueueError?.code === '42501' ? 403 : 409)
+    return reply({ job_id: job.id, status: job.status, duplicate: Boolean(existing) }, existing ? 200 : 202)
+  }
   const { data: project } = await client.from('content_projects').select('brief,content_kind,target_seconds,aspect_ratio').eq('id', doc.project_id).single()
   const key = Deno.env.get('CONTENT_AI_API_KEY')
   const baseUrl = Deno.env.get('CONTENT_AI_BASE_URL')

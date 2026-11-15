@@ -12,6 +12,10 @@ import { ContentState, Field } from '@/components/content/content-common'
 import { downloadText, localDateValue, useContentAction } from '@/hooks/use-content-action'
 import { exportMarkdown, optionalCount, platforms, platformKeys, type ContentDocument, type Metric, type Platform, type Publication, type PublishingChannel } from '@/contracts/content'
 import { useContentData } from '@/hooks/use-content-data'
+import { RememberDecisionField } from '@/components/decision-memory/remember-decision-field'
+import { buildDecisionMemoryInput, emptyRememberValue } from '@/lib/remember-decision'
+import { createDecisionMemory } from '@/services/decision-memory-service'
+import { toast } from 'sonner'
 import { cancelPublication, createChannel, planPublication, publicationSnapshot, recordPublication, saveMetric } from '@/services/content-service'
 
 export function PublishingPage({ mode = 'plans' }: { mode?: 'plans' | 'channels' }) {
@@ -58,6 +62,7 @@ function PublicationCard({ publication, document, channel, metrics, canPublish }
   const [observedAt, setObservedAt] = useState(localDateValue())
   const [counts, setCounts] = useState({ views: '', likes: '', saves: '', comments: '' })
   const [retrospective, setRetrospective] = useState('')
+  const [remember, setRemember] = useState(emptyRememberValue)
   const { busy, run } = useContentAction()
   const stale = document?.revision !== publication.revision || document?.status !== 'approved'
   return <Card><CardHeader><CardTitle className="flex flex-wrap items-center gap-2">{publication.title_snapshot ?? document?.title ?? '稿件'}<Badge variant="outline">v{publication.revision}</Badge><Badge>{({ planned: '待人工发布', published: '已发布', cancelled: '已取消' })[publication.status]}</Badge></CardTitle></CardHeader><CardContent className="space-y-4">
@@ -70,10 +75,14 @@ function PublicationCard({ publication, document, channel, metrics, canPublish }
       <div className="flex gap-2"><Button type="submit" disabled={busy || stale}>确认已人工发布</Button><Button variant="outline" type="button" disabled={busy} onClick={() => void run(() => cancelPublication(publication.id), '计划已取消')}>取消计划</Button></div>
     </form>}
     {publication.status === 'published' && <><a href={publication.published_url} className="block text-sm underline" target="_blank" rel="noreferrer">打开已发布内容</a>
-      {canPublish && <details className="rounded-lg border p-3"><summary className="cursor-pointer text-sm">回填数据与复盘</summary><form className="mt-4 space-y-4" onSubmit={e => { e.preventDefault(); void run(async () => { await saveMetric(publication, { observed_at: new Date(observedAt).toISOString(), views: optionalCount(counts.views), likes: optionalCount(counts.likes), saves: optionalCount(counts.saves), comments: optionalCount(counts.comments), retrospective }); setRetrospective('') }) }}>
+      {canPublish && <details className="rounded-lg border p-3"><summary className="cursor-pointer text-sm">回填数据与复盘</summary><form className="mt-4 space-y-4" onSubmit={e => { e.preventDefault(); void run(async () => {
+          const memory = buildDecisionMemoryInput(remember, { organizationId: publication.organization_id, kind: 'style_rule', quote: retrospective, platform: document?.platform ?? null, source: 'retrospective', sourceRef: `publication:${publication.id}` })
+          await saveMetric(publication, { observed_at: new Date(observedAt).toISOString(), views: optionalCount(counts.views), likes: optionalCount(counts.likes), saves: optionalCount(counts.saves), comments: optionalCount(counts.comments), retrospective }); setRetrospective('')
+          if (memory) { try { await createDecisionMemory(memory); setRemember(emptyRememberValue) } catch (error) { toast.error(`复盘已保存，但未能记入偏好：${error instanceof Error ? error.message : '请稍后在「决定记忆」页手动添加'}`) } }
+        }) }}>
         <Field label="观察时间"><Input type="datetime-local" required value={observedAt} onChange={e => setObservedAt(e.target.value)} /></Field>
         <div className="grid gap-3 sm:grid-cols-4">{Object.entries({ views: '阅读 / 播放', likes: '点赞', saves: '收藏', comments: '评论' }).map(([key, label]) => <Field key={key} label={label}><Input type="number" min={0} step={1} placeholder="未知留空" value={counts[key as keyof typeof counts]} onChange={e => setCounts({ ...counts, [key]: e.target.value })} /></Field>)}</div>
-        <Field label="复盘结论与下次实验"><Textarea maxLength={10000} value={retrospective} onChange={e => setRetrospective(e.target.value)} /></Field><Button disabled={busy} type="submit">保存观察快照</Button>
+        <Field label="复盘结论与下次实验"><Textarea maxLength={10000} value={retrospective} onChange={e => setRetrospective(e.target.value)} /></Field><RememberDecisionField value={remember} onChange={setRemember} platform={document?.platform ?? null} disabled={busy} hint="把「下次改进变量」写成长期风格规则，之后生成同平台稿件时会自动遵守。" summaryPlaceholder="例如：开头 3 秒先给结论，再展开" /><Button disabled={busy} type="submit">保存观察快照</Button>
       </form></details>}
       {metrics.map(m => <div key={m.id} className="rounded-lg bg-muted p-3 text-sm"><p>{new Date(m.observed_at).toLocaleString()} · 阅读 / 播放 {m.views ?? '未记录'} · 点赞 {m.likes ?? '未记录'} · 收藏 {m.saves ?? '未记录'} · 评论 {m.comments ?? '未记录'}</p><p className="mt-2 whitespace-pre-wrap text-muted-foreground">{m.retrospective || '暂无复盘结论'}</p></div>)}
     </>}

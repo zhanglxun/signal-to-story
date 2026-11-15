@@ -1,0 +1,576 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>星火工厂 Signal to Story V2.0 · 统一架构审阅台</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script src="https://www.gstatic.com/antigravity/web/dev/tailwindcss.min.js"></script>
+  <style>
+    :root {
+      --background: #0b0f19;
+      --content: #111827;
+      --card: #161f33;
+      --card-border: #26334d;
+      --border: #26334d;
+      --foreground: #f8fafc;
+      --muted-foreground: #94a3b8;
+      --code-foreground: #38bdf8;
+      --primary: #3b82f6;
+      --primary-foreground: #ffffff;
+      --success: #22c55e;
+      --warning: #f59e0b;
+    }
+  </style>
+</head>
+<body class="bg-[var(--background)] text-[var(--foreground)] antialiased p-4 md:p-8 m-0 min-h-screen">
+  <div class="max-w-6xl mx-auto space-y-6">
+    <!-- Top Header -->
+    <div class="bg-[var(--card)] border border-[var(--border)] rounded-xl p-5 flex flex-col md:flex-row md:items-center md:justify-between gap-4">
+      <div class="space-y-1.5">
+        <div class="flex items-center gap-2">
+          <span class="px-2.5 py-0.5 text-xs font-semibold rounded-full bg-[var(--primary)] text-[var(--primary-foreground)]">V2.0 架构蓝图</span>
+          <span class="px-2.5 py-0.5 text-xs rounded-full border border-[var(--border)] text-[var(--muted-foreground)]">Cloud-Native · 去 Obsidian 化 · SaaS Ready</span>
+        </div>
+        <h1 class="text-xl font-bold tracking-tight">星火工厂 · Signal to Story 统一能力底座与四大方向架构审阅</h1>
+        <p class="text-xs text-[var(--muted-foreground)]">
+          一套通用数据与 Agent Harness 内核，同时支撑 <code class="text-[var(--code-foreground)]">sense-console</code> 后台、<code class="text-[var(--code-foreground)]">sense-site</code> 读者站、多入口助手与 Web 视频工坊
+        </p>
+      </div>
+      <div class="flex flex-wrap gap-2 text-xs">
+        <div class="px-3 py-2 rounded-lg bg-[var(--content)] border border-[var(--card-border)]">
+          <div class="text-[var(--muted-foreground)]">部署形态</div>
+          <div class="font-semibold mt-0.5">独立云服务器 + 可选本地算力桥接</div>
+        </div>
+        <div class="px-3 py-2 rounded-lg bg-[var(--content)] border border-[var(--card-border)]">
+          <div class="text-[var(--muted-foreground)]">Agent 底座策略</div>
+          <div class="font-semibold mt-0.5">自研 Harness 中间层 + 双模驱动</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Navigation Tabs -->
+    <div class="flex flex-wrap gap-2 border-b border-[var(--border)] pb-3" id="tabs-nav">
+      <button onclick="switchTab('panorama')" id="tab-btn-panorama" class="px-4 py-2 rounded-lg text-xs font-semibold bg-[var(--primary)] text-[var(--primary-foreground)] transition">
+        1. 全景系统架构图 (交互点击)
+      </button>
+      <button onclick="switchTab('layers')" id="tab-btn-layers" class="px-4 py-2 rounded-lg text-xs font-semibold bg-[var(--card)] border border-[var(--border)] text-[var(--muted-foreground)] hover:text-[var(--foreground)] transition">
+        2. 五层逻辑与四大方向正交矩阵
+      </button>
+      <button onclick="switchTab('agent')" id="tab-btn-agent" class="px-4 py-2 rounded-lg text-xs font-semibold bg-[var(--card)] border border-[var(--border)] text-[var(--muted-foreground)] hover:text-[var(--foreground)] transition">
+        3. Agent 中间层 vs 自造 CLI 深度评估
+      </button>
+      <button onclick="switchTab('roadmap')" id="tab-btn-roadmap" class="px-4 py-2 rounded-lg text-xs font-semibold bg-[var(--card)] border border-[var(--border)] text-[var(--muted-foreground)] hover:text-[var(--foreground)] transition">
+        4. 模块划分与分阶段演进 + 决策拍板单
+      </button>
+    </div>
+
+    <!-- TAB 1: PANORAMA ARCHITECTURE -->
+    <div id="tab-panorama" class="space-y-4">
+      <div class="grid grid-cols-1 lg:grid-cols-3 gap-4">
+        <!-- Left 2 Columns: Interactive Architecture Stack -->
+        <div class="lg:col-span-2 bg-[var(--card)] border border-[var(--border)] rounded-xl p-4 space-y-3">
+          <div class="flex items-center justify-between">
+            <h2 class="text-sm font-bold">系统五层全景架构图（点击任意模块查看边界、输入输出与 SaaS 设计）</h2>
+            <span class="text-xs text-[var(--muted-foreground)]">支持 100% 服务端独立运行</span>
+          </div>
+
+          <!-- Layer 1: Presentation & Ingress -->
+          <div class="p-3 rounded-lg bg-[var(--content)] border border-[var(--card-border)] space-y-2">
+            <div class="flex items-center justify-between text-xs">
+              <span class="font-bold text-[var(--primary)]">L1 · 全渠道触达与双端应用层 (Presentation & Omnichannel Ingress)</span>
+              <span class="text-[var(--muted-foreground)]">无状态前端 & 渠道连接器</span>
+            </div>
+            <div class="grid grid-cols-1 sm:grid-cols-3 gap-2">
+              <button onclick="selectNode('console')" id="node-console" class="node-btn text-left p-2.5 rounded-lg bg-[var(--card)] border-2 border-[var(--primary)] hover:border-[var(--primary)] transition">
+                <div class="text-xs font-bold">🖥️ sense-console (后台控制面)</div>
+                <div class="text-xs text-[var(--muted-foreground)] mt-1">全资产管理 · 创作审核 · 视频工坊画布 · 租户与账号配置</div>
+              </button>
+              <button onclick="selectNode('site')" id="node-site" class="node-btn text-left p-2.5 rounded-lg bg-[var(--card)] border border-[var(--border)] hover:border-[var(--primary)] transition">
+                <div class="text-xs font-bold">🌐 sense-site (读者内容站)</div>
+                <div class="text-xs text-[var(--muted-foreground)] mt-1">只读已发布快照 · 专题专栏 · 注册读者收藏与资源下载</div>
+              </button>
+              <button onclick="selectNode('im')" id="node-im" class="node-btn text-left p-2.5 rounded-lg bg-[var(--card)] border border-[var(--border)] hover:border-[var(--primary)] transition">
+                <div class="text-xs font-bold">💬 多入口个人助手 (方向 B)</div>
+                <div class="text-xs text-[var(--muted-foreground)] mt-1">飞书机器人 · 企微/微信 · 网页速记框 · 浏览器采集插件</div>
+              </button>
+            </div>
+          </div>
+
+          <div class="flex justify-center text-xs text-[var(--muted-foreground)]">▼ HTTPS / RLS Data API / Signed Webhook ▼</div>
+
+          <!-- Layer 2 & 3: Gateway & State -->
+          <div class="p-3 rounded-lg bg-[var(--content)] border border-[var(--card-border)] space-y-2">
+            <div class="flex items-center justify-between text-xs">
+              <span class="font-bold text-[var(--primary)]">L2 & L3 · 安全网关与多租户数据资产层 (Supabase Cloud / Self-Hosted Server)</span>
+              <span class="text-[var(--muted-foreground)]">取代本地 Obsidian · 唯一事实源</span>
+            </div>
+            <div class="grid grid-cols-1 sm:grid-cols-3 gap-2">
+              <button onclick="selectNode('gateway')" id="node-gateway" class="node-btn text-left p-2.5 rounded-lg bg-[var(--card)] border border-[var(--border)] hover:border-[var(--primary)] transition">
+                <div class="text-xs font-bold">🛡️ 接入与审批网关 (Edge)</div>
+                <div class="text-xs text-[var(--muted-foreground)] mt-1">intake-gateway (防重/收录) · mandate-gateway (人工批准签名)</div>
+              </button>
+              <button onclick="selectNode('postgres')" id="node-postgres" class="node-btn text-left p-2.5 rounded-lg bg-[var(--card)] border border-[var(--border)] hover:border-[var(--primary)] transition">
+                <div class="text-xs font-bold">🗄️ Postgres + Decision Memory</div>
+                <div class="text-xs text-[var(--muted-foreground)] mt-1">租户隔离 RLS · 母稿不可变版本 · 视频分镜表 · 决定记忆库</div>
+              </button>
+              <button onclick="selectNode('oss')" id="node-oss" class="node-btn text-left p-2.5 rounded-lg bg-[var(--card)] border border-[var(--border)] hover:border-[var(--primary)] transition">
+                <div class="text-xs font-bold">📦 对象存储与任务队列</div>
+                <div class="text-xs text-[var(--muted-foreground)] mt-1">R2 / S3 / OSS 媒体桶 · 持久化任务状态机 (挂起零消耗)</div>
+              </button>
+            </div>
+          </div>
+
+          <div class="flex justify-center text-xs text-[var(--muted-foreground)]">▼ 异步事件驱动 / 任务调度 / 预算与跳数熔断 ▼</div>
+
+          <!-- Layer 4: Agent Harness -->
+          <div class="p-3 rounded-lg bg-[var(--content)] border border-[var(--card-border)] space-y-2">
+            <div class="flex items-center justify-between text-xs">
+              <span class="font-bold text-[var(--primary)]">L4 · 星火智能编排与自循环内核 (方向 A: Sense Agent Harness 中间层)</span>
+              <span class="text-[var(--muted-foreground)]">核心壁垒 · 100% 自主可控</span>
+            </div>
+            <div class="grid grid-cols-1 sm:grid-cols-2 gap-2">
+              <button onclick="selectNode('harness')" id="node-harness" class="node-btn text-left p-2.5 rounded-lg bg-[var(--card)] border border-[var(--border)] hover:border-[var(--primary)] transition">
+                <div class="text-xs font-bold">🧠 Harness 治理与自循环引擎</div>
+                <div class="text-xs text-[var(--muted-foreground)] mt-1">规则前置过滤 · 指令/数据物理隔离 · 生成器↔只读评估器循环(≤3轮) · 偏好记忆注入</div>
+              </button>
+              <button onclick="selectNode('drivers')" id="node-drivers" class="node-btn text-left p-2.5 rounded-lg bg-[var(--card)] border border-[var(--border)] hover:border-[var(--primary)] transition">
+                <div class="text-xs font-bold">🔌 双模 Agent 驱动适配层 (Unified Runtime)</div>
+                <div class="text-xs text-[var(--muted-foreground)] mt-1">① 云端 API 直连 (Qwen3.7/Kimi/DeepSeek) + ② CLI 桥接 (Pi/OpenCode/Codex/agy)</div>
+              </button>
+            </div>
+          </div>
+
+          <div class="flex justify-center text-xs text-[var(--muted-foreground)]">▼ 确定性媒体渲染 / 跨平台分发 / 可选本机算力挂载 ▼</div>
+
+          <!-- Layer 5: Execution & Workers -->
+          <div class="p-3 rounded-lg bg-[var(--content)] border border-[var(--card-border)] space-y-2">
+            <div class="flex items-center justify-between text-xs">
+              <span class="font-bold text-[var(--primary)]">L5 · 垂直生产引擎与多平台分发执行层 (方向 C: Media & Publish Workers)</span>
+              <span class="text-[var(--muted-foreground)]">容器化 Worker + 可选本地节点</span>
+            </div>
+            <div class="grid grid-cols-1 sm:grid-cols-3 gap-2">
+              <button onclick="selectNode('video')" id="node-video" class="node-btn text-left p-2.5 rounded-lg bg-[var(--card)] border border-[var(--border)] hover:border-[var(--primary)] transition">
+                <div class="text-xs font-bold">🎬 Video Factory Worker (方向 C)</div>
+                <div class="text-xs text-[var(--muted-foreground)] mt-1">Audio-First 配音对齐 · 万相2.7 单镜重抽 · FFmpeg 运镜与多轨混音</div>
+              </button>
+              <button onclick="selectNode('publisher')" id="node-publisher" class="node-btn text-left p-2.5 rounded-lg bg-[var(--card)] border border-[var(--border)] hover:border-[var(--primary)] transition">
+                <div class="text-xs font-bold">🚀 多平台发布与复盘器</div>
+                <div class="text-xs text-[var(--muted-foreground)] mt-1">X / 公众号 / 小红书 / 抖音 / 视频号 / sense-site 快照发布与指标回采</div>
+              </button>
+              <button onclick="selectNode('localnode')" id="node-localnode" class="node-btn text-left p-2.5 rounded-lg bg-[var(--card)] border border-[var(--border)] hover:border-[var(--primary)] transition">
+                <div class="text-xs font-bold">💻 可选本地算力桥接节点</div>
+                <div class="text-xs text-[var(--muted-foreground)] mt-1">Outbound 反向拉取任务 · 复用本机 Codex/agy/Pi CLI 与本地 GPU</div>
+              </button>
+            </div>
+          </div>
+        </div>
+
+        <!-- Right 1 Column: Live Inspector Panel -->
+        <div class="bg-[var(--card)] border border-[var(--border)] rounded-xl p-5 flex flex-col justify-between space-y-4">
+          <div class="space-y-4" id="inspector-content"></div>
+          <div class="pt-4 border-t border-[var(--border)] text-xs space-y-2">
+            <div class="font-semibold text-[var(--muted-foreground)]">架构黄金准则核对：</div>
+            <div class="flex items-center gap-2">
+              <span class="text-[var(--success)]">●</span>
+              <span>彻底解耦 Obsidian，云端数据库+对象存储为唯一事实源</span>
+            </div>
+            <div class="flex items-center gap-2">
+              <span class="text-[var(--success)]">●</span>
+              <span>Agent 只提 Proposal，发布与花钱强制过 Mandate 人工门禁</span>
+            </div>
+            <div class="flex items-center gap-2">
+              <span class="text-[var(--success)]">●</span>
+              <span>多租户 <code class="text-[var(--code-foreground)]">organization_id</code> 隔离，天然支持后续对外售卖 SaaS</span>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- TAB 2: 5-LAYER & 4-TRACK MATRIX -->
+    <div id="tab-layers" class="hidden space-y-4">
+      <div class="bg-[var(--card)] border border-[var(--border)] rounded-xl p-5 space-y-4">
+        <div>
+          <h2 class="text-base font-bold">为什么这 4 个方向 + 双端应用完全不冲突？——「正交共享架构矩阵」</h2>
+          <p class="text-xs text-[var(--muted-foreground)] mt-1">
+            把底层做成一套标准化的「资产 + 状态机 + Agent Harness + 异步队列」，上面挂载不同的入口（IM/网页）和不同模态的生产器（图文/视频）以及不同受众的视图（Console/Site）。
+          </p>
+        </div>
+
+        <div class="overflow-x-auto">
+          <table class="w-full text-left border-collapse text-xs">
+            <thead>
+              <tr class="border-b border-[var(--border)] text-[var(--muted-foreground)]">
+                <th class="py-3 px-3 font-semibold">架构分层</th>
+                <th class="py-3 px-3 font-semibold">sense-console (管理台)</th>
+                <th class="py-3 px-3 font-semibold">sense-site (读者站)</th>
+                <th class="py-3 px-3 font-semibold">方向 A: Agent Harness</th>
+                <th class="py-3 px-3 font-semibold">方向 B: 多入口助手</th>
+                <th class="py-3 px-3 font-semibold">方向 C: Web 视频工坊</th>
+              </tr>
+            </thead>
+            <tbody class="divide-y divide-[var(--border)]">
+              <tr>
+                <td class="py-3 px-3 font-bold">1. 交互与入口层</td>
+                <td class="py-3 px-3">创作者全功能 Web 驾驶舱与审核台</td>
+                <td class="py-3 px-3">游客/读者阅读、专题、资源下载站</td>
+                <td class="py-3 px-3">以“待我拍板/待审核”为中心的任务面板</td>
+                <td class="py-3 px-3">飞书/企微/微信机器人、极简速记框、浏览器插件</td>
+                <td class="py-3 px-3">可视化分镜卡片画布、在线改词试听、单镜重抽器</td>
+              </tr>
+              <tr>
+                <td class="py-3 px-3 font-bold">2. 权限与安全层</td>
+                <td class="py-3 px-3">租户 RBAC (Owner / Admin / Member)</td>
+                <td class="py-3 px-3">公开快照 RLS + 注册读者鉴权 (与后台权限物理隔离)</td>
+                <td class="py-3 px-3">指令数据隔离 + 人工批准类别清单 (Mandate)</td>
+                <td class="py-3 px-3">通道签名核验 + 受限收录 Token + 幂等防重</td>
+                <td class="py-3 px-3">高成本视频渲染门禁 + 私有媒体短期签名 URL</td>
+              </tr>
+              <tr>
+                <td class="py-3 px-3 font-bold">3. 共享数据契约</td>
+                <td class="py-3 px-3"><code class="text-[var(--code-foreground)]">content_projects</code> / <code class="text-[var(--code-foreground)]">assets</code></td>
+                <td class="py-3 px-3"><code class="text-[var(--code-foreground)]">site_entries</code> / <code class="text-[var(--code-foreground)]">site_entry_bodies</code></td>
+                <td class="py-3 px-3"><code class="text-[var(--code-foreground)]">tasks</code> / <code class="text-[var(--code-foreground)]">decision_memories</code></td>
+                <td class="py-3 px-3"><code class="text-[var(--code-foreground)]">signals</code> / <code class="text-[var(--code-foreground)]">selections</code> / <code class="text-[var(--code-foreground)]">receipts</code></td>
+                <td class="py-3 px-3"><code class="text-[var(--code-foreground)]">video_plans</code> / <code class="text-[var(--code-foreground)]">video_shots</code> / 多轨音视频资产</td>
+              </tr>
+              <tr>
+                <td class="py-3 px-3 font-bold">4. 执行与消费方式</td>
+                <td class="py-3 px-3">Supabase Data API 直接受控 CRUD</td>
+                <td class="py-3 px-3">只读查询已批准发布的不可变快照</td>
+                <td class="py-3 px-3">Generator ↔ 只读 Evaluator 循环 (≤3轮)</td>
+                <td class="py-3 px-3">Webhook 入库 → 唤醒 Harness → 推送审核卡片</td>
+                <td class="py-3 px-3">Web 下发指令 → Video Worker 渲染 → 回写 OSS 与状态</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+
+    <!-- TAB 3: AGENT HARNESS VS CLI EVALUATION -->
+    <div id="tab-agent" class="hidden space-y-4">
+      <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+        <div class="bg-[var(--card)] border border-[var(--border)] rounded-xl p-5 space-y-3">
+          <div class="flex items-center justify-between">
+            <h3 class="text-sm font-bold">核心问题解答：自造 Agent CLI 还是做「中间层 + 双模驱动」？</h3>
+            <span class="px-2 py-0.5 text-xs rounded bg-[var(--primary)] text-[var(--primary-foreground)]">推荐架构</span>
+          </div>
+          <p class="text-xs text-[var(--muted-foreground)] leading-relaxed">
+            <strong>结论：不要从零重复造底层通用 CLI（如重写一套 Pi 或 OpenCode），而是构建「星火 Content Harness 中间层 + 可插拔双模驱动（Cloud API + Headless CLI Bridge）」。</strong>
+          </p>
+          <div class="space-y-2 text-xs pt-2">
+            <div class="p-3 rounded-lg bg-[var(--content)] border border-[var(--card-border)]">
+              <div class="font-bold">1. 为什么不从头造通用 Agent CLI？</div>
+              <div class="text-[var(--muted-foreground)] mt-1">
+                Pi (<code class="text-[var(--code-foreground)]">pi-mono</code>)、OpenCode、Codex CLI、agy CLI 已经把底层流式解析、文件沙箱、MCP 挂载和终端交互做到了极致。自己重造底层 CLI 不会产生内容业务壁垒，反而陷入无休止的 SDK 维护。
+              </div>
+            </div>
+            <div class="p-3 rounded-lg bg-[var(--content)] border border-[var(--card-border)]">
+              <div class="font-bold">2. 我们的真正核心壁垒在哪？（自研 Content Harness 中间层）</div>
+              <div class="text-[var(--muted-foreground)] mt-1">
+                通用 CLI 不懂你的「内容选题评级、指令与不可信网页分离、租户过往审美记忆（Decision Memory）、草稿与只读审查员 3 轮自循环、分镜毫秒级配音对齐、以及跨平台人工审核门禁」。把这一层做成标准的 TypeScript 服务（<strong>Sense Agent Harness</strong>），才是可对外售卖的 SaaS 核心资产！
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div class="bg-[var(--card)] border border-[var(--border)] rounded-xl p-5 space-y-3">
+          <h3 class="text-sm font-bold">双模驱动器设计（同时兼容国内大模型 API 与本地/容器 CLI）</h3>
+          <div class="space-y-3 text-xs">
+            <div class="p-3 rounded-lg bg-[var(--content)] border-l-4 border-[var(--primary)]">
+              <div class="flex items-center justify-between">
+                <span class="font-bold">通道 A：Cloud LLM Direct Driver（SaaS 默认主通道）</span>
+                <span class="text-[var(--muted-foreground)]">云端无状态直连</span>
+              </div>
+              <p class="text-[var(--muted-foreground)] mt-1">
+                通过统一 OpenAI-Compatible 网关直接调用 <strong>Qwen3.7-Max、Kimi (k2)、DeepSeek V3/R1、Claude、Gemini</strong>。
+              </p>
+              <div class="mt-2 flex flex-wrap gap-1.5">
+                <span class="px-2 py-0.5 rounded bg-[var(--card)] border border-[var(--border)]">意图分类 & 去重</span>
+                <span class="px-2 py-0.5 rounded bg-[var(--card)] border border-[var(--border)]">分镜 JSON 拆解</span>
+                <span class="px-2 py-0.5 rounded bg-[var(--card)] border border-[var(--border)]">只读 Evaluator 审查</span>
+                <span class="px-2 py-0.5 rounded bg-[var(--card)] border border-[var(--border)]">多租户 Token 计费</span>
+              </div>
+            </div>
+
+            <div class="p-3 rounded-lg bg-[var(--content)] border-l-4 border-[var(--success)]">
+              <div class="flex items-center justify-between">
+                <span class="font-bold">通道 B：Headless Agent CLI Driver（高阶深研 & 本地算力复用）</span>
+                <span class="text-[var(--muted-foreground)]">沙箱容器或本地桥接</span>
+              </div>
+              <p class="text-[var(--muted-foreground)] mt-1">
+                Harness 将任务打包为临时工作目录（<code class="text-[var(--code-foreground)]">context.json</code> + <code class="text-[var(--code-foreground)]">SKILL.md</code>），以非交互 JSON 模式调用外部 CLI：
+              </p>
+              <ul class="mt-1.5 space-y-1 text-[var(--muted-foreground)] list-disc list-inside">
+                <li><strong>Pi CLI / SDK</strong>：<code class="text-[var(--code-foreground)]">pi -p --output-format json</code>（极简、支持 Qwen/Kimi 挂载 Skill）</li>
+                <li><strong>OpenCode CLI</strong>：<code class="text-[var(--code-foreground)]">opencode run --format json</code>（多模型开源 Agent 标杆）</li>
+                <li><strong>Codex CLI / agy CLI</strong>：通过本机 <code class="text-[var(--code-foreground)]">sense-node-agent</code> 反向拉取深度研究任务</li>
+              </ul>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- TAB 4: ROADMAP & DECISION CHECKLIST -->
+    <div id="tab-roadmap" class="hidden space-y-4">
+      <div class="grid grid-cols-1 lg:grid-cols-3 gap-4">
+        <div class="lg:col-span-2 bg-[var(--card)] border border-[var(--border)] rounded-xl p-5 space-y-4">
+          <h3 class="text-sm font-bold">四阶段平滑演进路线图（不推翻现有 MVP，逐步插拔升级）</h3>
+          <div class="space-y-3 text-xs">
+            <div class="p-3 rounded-lg bg-[var(--content)] border border-[var(--card-border)]">
+              <div class="flex items-center justify-between">
+                <span class="font-bold text-[var(--primary)]">Phase 1 · Agent Harness 内核与多模型中间层就位（方向 A 基座）</span>
+                <span class="px-2 py-0.5 rounded bg-[var(--card)] border border-[var(--border)]">最高优先级</span>
+              </div>
+              <p class="text-[var(--muted-foreground)] mt-1">
+                1) 建立统一模型与 CLI 适配层（打通 Qwen / Kimi / DeepSeek 及 Pi / OpenCode CLI 调用，解决线上 AI 出稿阻塞）；<br/>
+                2) 落地「指令数据隔离 Context Pack」、「决定记忆表 (<code class="text-[var(--code-foreground)]">decision_memories</code>)」与「生成 ↔ 只读评估（≤3轮）」自循环；<br/>
+                3) 升级任务中心为“待我拍板 / 待我审核 / 异常阻塞”视图。
+              </p>
+            </div>
+
+            <div class="p-3 rounded-lg bg-[var(--content)] border border-[var(--card-border)]">
+              <div class="flex items-center justify-between">
+                <span class="font-bold text-[var(--primary)]">Phase 2 · Web 视频工坊（Video Studio）全链路实装（方向 C）</span>
+                <span class="px-2 py-0.5 rounded bg-[var(--card)] border border-[var(--border)]">核心差异化能力</span>
+              </div>
+              <p class="text-[var(--muted-foreground)] mt-1">
+                1) 将 <code class="text-[var(--code-foreground)]">video-factory</code> 封装为服务端异步 Worker，分镜数据入库 Postgres，产物自动存 OSS；<br/>
+                2) 在 <code class="text-[var(--code-foreground)]">sense-console</code> 实装分镜画布：一键大纲拆解分镜、在线改词 TTS 试听、万相 2.7 单镜重抽、多轨合成在线播放；<br/>
+                3) 视频成片接入统一多平台发布排期（视频号、抖音、小红书、YouTube、X）。
+              </p>
+            </div>
+
+            <div class="p-3 rounded-lg bg-[var(--content)] border border-[var(--card-border)]">
+              <div class="flex items-center justify-between">
+                <span class="font-bold text-[var(--primary)]">Phase 3 · 多入口个人内容助手贯通（方向 B：飞书 / 企微 / 网页速记）</span>
+                <span class="px-2 py-0.5 rounded bg-[var(--card)] border border-[var(--border)]">高频日常入口</span>
+              </div>
+              <p class="text-[var(--muted-foreground)] mt-1">
+                1) 接入首个主力双向 IM（飞书或企微机器人）+ 控制台顶栏极简速记框；<br/>
+                2) 实现「随手发链接/想法 → 自动检索核查 → Harness 自循环出稿 → 推送 IM 审核卡片 → 点击授权自动发布」。
+              </p>
+            </div>
+
+            <div class="p-3 rounded-lg bg-[var(--content)] border border-[var(--card-border)]">
+              <div class="flex items-center justify-between">
+                <span class="font-bold text-[var(--primary)]">Phase 4 · 独立读者站 sense-site 与 SaaS 多租户商业化（方向 D + SaaS）</span>
+                <span class="px-2 py-0.5 rounded bg-[var(--card)] border border-[var(--border)]">对外展示与变现</span>
+              </div>
+              <p class="text-[var(--muted-foreground)] mt-1">
+                1) 按 P1–P4 建设 <code class="text-[var(--code-foreground)]">sense-site</code>，支持已审核图文/视频一键发布为公开/注册读者快照；<br/>
+                2) 完善租户自助开户、模型 BYOK 密钥配置、配额账单与 Docker Compose 一键独立部署包。
+              </p>
+            </div>
+          </div>
+        </div>
+
+        <div class="bg-[var(--card)] border border-[var(--border)] rounded-xl p-5 space-y-3">
+          <h3 class="text-sm font-bold">待你拍板的 4 个关键决策项</h3>
+          <p class="text-xs text-[var(--muted-foreground)]">你可以在这里勾选预览，然后直接在对话中告诉我你的想法：</p>
+          <div class="space-y-3 text-xs">
+            <label class="flex items-start gap-2.5 p-2.5 rounded-lg bg-[var(--content)] border border-[var(--card-border)] cursor-pointer">
+              <input type="checkbox" checked class="mt-0.5 accent-[var(--primary)]" />
+              <span><strong>决策 1（数据底座）</strong>：确认彻底移除 Obsidian 耦合，以云端 Postgres + 对象存储作为唯一权威存储（保留普通 Markdown 导入导出）。</span>
+            </label>
+            <label class="flex items-start gap-2.5 p-2.5 rounded-lg bg-[var(--content)] border border-[var(--card-border)] cursor-pointer">
+              <input type="checkbox" checked class="mt-0.5 accent-[var(--primary)]" />
+              <span><strong>决策 2（Agent 中间层）</strong>：采用「自研 Content Harness + 双模驱动」，云端直连 Qwen/Kimi/DeepSeek，同时支持以 JSON 子进程调用 Pi / OpenCode / Codex / agy CLI。</span>
+            </label>
+            <label class="flex items-start gap-2.5 p-2.5 rounded-lg bg-[var(--content)] border border-[var(--card-border)] cursor-pointer">
+              <input type="checkbox" checked class="mt-0.5 accent-[var(--primary)]" />
+              <span><strong>决策 3（首发 IM 渠道）</strong>：方向 B 的多入口助手，优先打通「网页极简速记框 + 飞书/企微机器人」作为第一条双向闭环。</span>
+            </label>
+            <label class="flex items-start gap-2.5 p-2.5 rounded-lg bg-[var(--content)] border border-[var(--card-border)] cursor-pointer">
+              <input type="checkbox" checked class="mt-0.5 accent-[var(--primary)]" />
+              <span><strong>决策 4（近期开工顺序）</strong>：按 Phase 1（Harness 与模型打通）➔ Phase 2（Web 视频工坊实装）➔ Phase 3（IM 助手）➔ Phase 4（sense-site 读者站）推进。</span>
+            </label>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    const nodeDetails = {
+      console: {
+        title: "🖥️ sense-console（创作者控制面与资产工作台）",
+        badge: "应用层 1 · B端管理",
+        desc: "系统的视觉控制中枢。管理信源、选题、图文母稿、多平台改写稿、视频工坊分镜画布、媒体资产库、任务队列、人工审核门禁与多租户账号权限。",
+        io: [
+          "读取/写入：通过 Supabase Data API + RLS 访问本租户全量资产",
+          "指令下发：点击「智能拆解分镜」「单镜重抽」「生成草案」「批准发布」写入任务队列",
+          "边界约束：不在浏览器执行长耗时渲染或直接持有第三方平台密钥"
+        ],
+        saas: "天然支持多租户组织切换（Organization Switcher）与角色权限（Owner/Admin/Editor/Viewer）。"
+      },
+      site: {
+        title: "🌐 sense-site（独立读者内容与品牌展示站）",
+        badge: "应用层 2 · C端消费",
+        desc: "面向外部访客与注册读者的内容消费终端。展示经 sense-console 审核通过并显式发布上线的图文、教程、视频与可下载资源。",
+        io: [
+          "只读隔离：仅查询 site_entries 与 site_entry_bodies 快照表",
+          "安全边界：源稿在后台继续修改不会污染线上已发布快照；下线即刻撤销授权",
+          "分级阅读：支持游客公开全文、注册读者全文、以及未来的付费会员解锁"
+        ],
+        saas: "每个 SaaS 租户可绑定独立的 site_id 与自定义域名，一键拥有自己的 AI 内容门户网站。"
+      },
+      im: {
+        title: "💬 多入口个人内容助手（方向 B：飞书 / 企微 / 微信 / 浏览器）",
+        badge: "方向 B · 高频入口",
+        desc: "将日常碎片化输入转化为结构化内容生产任务，并通过双向消息卡片把「待审核通知」推到人手边。",
+        io: [
+          "输入：分享链接、语音、截图、一句话灵感 + 创作意图（仅收藏 vs 立即出稿）",
+          "输出：实时回执编号 + 待审核预览卡片（支持在聊天内直接点「通过并发布」或「退回修改」）",
+          "防注入：所有外部转发文本强制标记为 untrusted_data，绝不获得系统指令权限"
+        ],
+        saas: "租户可在后台自助绑定自己的飞书应用或企业微信机器人 Webhook/凭证。"
+      },
+      gateway: {
+        title: "🛡️ 接入与审批安全网关（Supabase Edge Functions）",
+        badge: "L2 · 安全边界层",
+        desc: "处理所有需要服务端验签、幂等防重、跨表事务和人工授权签名的短请求。",
+        io: [
+          "intake-gateway：统一接收多入口消息，原子化创建信源与候选选题",
+          "mandate-gateway：校验人类审核员身份与版本号，签发不可篡改的发布/高消费执行令牌",
+          "storage-upload-token：签发对象存储短期上传/预览凭证"
+        ],
+        saas: "按租户限流（Rate Limit）与配额检查，防止单租户异常流量打满系统。"
+      },
+      postgres: {
+        title: "🗄️ Supabase Postgres + Decision Memory（核心状态与关系库）",
+        badge: "L3 · 唯一事实源",
+        desc: "彻底替代本地 Obsidian，保存从信源、线索、选题、母稿不可变版本、视频分镜脚本到发布复盘的完整关系链。",
+        io: [
+          "核心链路：Source ➔ Signal ➔ Topic ➔ Project ➔ Document/VideoPlan ➔ Asset ➔ Release",
+          "Decision Memory：新增租户级决定记忆表，记录人类每次拍板的审美偏好与拒绝原因",
+          "审计追溯：每一次生成记录模型版本、Prompt、耗时、Token 成本与审核人"
+        ],
+        saas: "全表强制 organization_id + RLS 策略，实现金融级多租户数据隔离。"
+      },
+      oss: {
+        title: "📦 对象存储与持久化任务队列（OSS + Task Queue）",
+        badge: "L3 · 媒体与异步底座",
+        desc: "所有图片、TTS 语音、SFX 音效、万相视频片段与最终成片均保存在独立对象存储（R2 / S3 / 阿里云 OSS / 七牛云）。",
+        io: [
+          "冷热分层：Worker 本地 NVMe 高速合成，完成后自动归档上传至云端对象存储",
+          "挂起零消耗：任务在等待人类审核期间仅作为数据库一条 pending_review 记录，不占进程不烧 Token"
+        ],
+        saas: "支持平台统一存储桶（按容量计费）或租户挂载自有 S3/OSS 存储桶。"
+      },
+      harness: {
+        title: "🧠 星火 Agent Harness 治理与自循环内核（方向 A）",
+        badge: "方向 A · 智能大脑",
+        desc: "吸收 DeepSeek、卡兹克 Autoloop 与 Anthropic Evaluator 精髓，解决 Agent 失控、幻觉与频繁打扰人的问题。",
+        io: [
+          "1. 规则前置过滤（Fast Path）：去重、白名单与简单路由用确定性代码处理，没事不唤醒模型",
+          "2. 指令数据分离：构建安全 Context Pack，自动注入该租户的 Decision Memory",
+          "3. 生成 ↔ 审查自循环：Generator 产出初稿/分镜后，由只读 Evaluator 按清单核查（上限 3 轮）",
+          "4. 必须问人清单（Mandate）：仅在需审核定稿、正式发布、高额视频生成时通知人类"
+        ],
+        saas: "每个租户拥有独立的 SOP 模板库、审查清单（Checklist）与记忆空间。"
+      },
+      drivers: {
+        title: "🔌 双模 Agent 驱动适配层（Unified Agent Runtime）",
+        badge: "核心底座 · 模型与 CLI 中间层",
+        desc: "不重造底层通用 CLI，而是用统一接口同时驱动「云端大模型 API」与「外部顶级 Agent CLI」。",
+        io: [
+          "Cloud LLM Driver：原生直连 Qwen3.7-Max、Kimi、DeepSeek、Claude、OpenAI（毫秒级结构化输出）",
+          "Agent CLI Driver：以 Headless JSON 模式调用 Pi (pi-mono)、OpenCode、Codex CLI、agy CLI",
+          "灵活路由：常规拆解/改写走云端 API；复杂深研/代码级工具调用走 CLI Driver"
+        ],
+        saas: "SaaS 标准版默认走云端 API 池；专业版/私有化客户可开启容器 CLI 或挂载本地 CLI 节点。"
+      },
+      video: {
+        title: "🎬 Video Factory Worker（方向 C：Web 视频工坊执行底座）",
+        badge: "方向 C · 视频生产力",
+        desc: "将已跑通的 Python 视频流水线封装为标准任务消费者，与 sense-console 的可视化分镜画布实时联动。",
+        io: [
+          "Audio-First 旁白主时钟：TTS 配音决定镜头精确毫秒时长，根治音画不同步",
+          "混合镜头渲染：静态图走本地 FFmpeg Ken Burns 0成本平滑运镜；动态镜头调通义万相 2.7",
+          "单镜交互重抽：Web 画布修改某镜头台词或点击重抽，仅重跑该 Shot 并实时回显",
+          "多轨混音合成：Voiceover + 自动 SFX 拟音 + BGM 智能避让（Audio Ducking）+ 字幕压制"
+        ],
+        saas: "按渲染任务入队并发执行，清晰计量每个镜头的云端模型成本与本地算力耗时。"
+      },
+      publisher: {
+        title: "🚀 多平台发布与数据复盘执行器（Omnichannel Publisher）",
+        badge: "闭环交付 · 跨平台分发",
+        desc: "在获得人类明确 Mandate 授权签名后，将指定版本的图文或视频分发至各大平台，并在 24/48 小时后采集复盘数据。",
+        io: [
+          "支持渠道：X (Twitter)、微信公众号、视频号、小红书、抖音、YouTube、Reddit 及 sense-site",
+          "防重保障：绑定具体 revision_id 与账号，发布结果不确定时先核验平台状态，杜绝重复发帖",
+          "数据回灌：采集阅读/播放/互动指标，生成复盘结论并反哺 Decision Memory"
+        ],
+        saas: "租户独立托管各平台 OAuth 凭证，严格加密保存在服务端。"
+      },
+      localnode: {
+        title: "💻 可选本地算力桥接节点（sense-node-agent）",
+        badge: "混合云扩展 · 零公网暴露",
+        desc: "满足你「服务器独立部署为主，最多按需调用本地电脑定义和计算能力」的设计要求。",
+        io: [
+          "工作方式：本地 Mac/PC 运行轻量客户端，通过 Outbound HTTPS/WSS 主动连接云服务器拉取任务",
+          "核心用途：安全调用本机已登录的 Codex CLI / agy CLI / Pi / OpenCode，或使用本机 GPU 跑视频合成",
+          "高可用降级：本地电脑关机时，云服务器自动路由回云端 API 与云端 Worker，绝不阻塞主流程"
+        ],
+        saas: "可作为桌面端伴侣工具（Companion App/CLI）提供给高阶创作者用户。"
+      }
+    };
+
+    function selectNode(key) {
+      const data = nodeDetails[key];
+      if (!data) return;
+
+      document.querySelectorAll('.node-btn').forEach(btn => {
+        btn.classList.remove('border-2', 'border-[var(--primary)]');
+        btn.classList.add('border', 'border-[var(--border)]');
+      });
+      const activeBtn = document.getElementById('node-' + key);
+      if (activeBtn) {
+        activeBtn.classList.remove('border', 'border-[var(--border)]');
+        activeBtn.classList.add('border-2', 'border-[var(--primary)]');
+      }
+
+      const container = document.getElementById('inspector-content');
+      container.innerHTML = `
+        <div class="space-y-3">
+          <div class="inline-block px-2.5 py-0.5 text-xs font-semibold rounded-full bg-[var(--primary)] text-[var(--primary-foreground)]">
+            ${data.badge}
+          </div>
+          <h3 class="text-base font-bold">${data.title}</h3>
+          <p class="text-xs text-[var(--muted-foreground)] leading-relaxed">${data.desc}</p>
+          <div class="pt-2 space-y-2">
+            <div class="text-xs font-semibold">核心职责与输入输出边界：</div>
+            <ul class="space-y-1.5 text-xs text-[var(--muted-foreground)] list-disc list-inside">
+              ${data.io.map(item => `<li>${item}</li>`).join('')}
+            </ul>
+          </div>
+          <div class="p-3 rounded-lg bg-[var(--content)] border border-[var(--card-border)] text-xs">
+            <span class="font-bold text-[var(--primary)]">SaaS 商业化能力：</span>
+            <span class="text-[var(--muted-foreground)]">${data.saas}</span>
+          </div>
+        </div>
+      `;
+    }
+
+    function switchTab(tabId) {
+      ['panorama', 'layers', 'agent', 'roadmap'].forEach(id => {
+        const el = document.getElementById('tab-' + id);
+        const btn = document.getElementById('tab-btn-' + id);
+        if (id === tabId) {
+          el.classList.remove('hidden');
+          btn.className = "px-4 py-2 rounded-lg text-xs font-semibold bg-[var(--primary)] text-[var(--primary-foreground)] transition";
+        } else {
+          el.classList.add('hidden');
+          btn.className = "px-4 py-2 rounded-lg text-xs font-semibold bg-[var(--card)] border border-[var(--border)] text-[var(--muted-foreground)] hover:text-[var(--foreground)] transition";
+        }
+      });
+    }
+
+    selectNode('console');
+  </script>
+</body>
+</html>

@@ -1,0 +1,121 @@
+import type { SupabaseClient } from "@supabase/supabase-js"
+
+import type { HarnessJob, HarnessProgress, HarnessStepRecord, HarnessTerminalStatus, SaveProposalInput } from "../../../src/harness/job-store"
+import { type AgentQueueBackend, type ClaimedJobRow, type DraftContextRows, rowToStep, stepToRow } from "../backend"
+
+function check<T>(result: { data: T; error: { message: string; code?: string } | null }, what: string): T {
+  if (result.error) throw new Error(`${what}: ${result.error.message}`)
+  return result.data
+}
+
+/**
+ * Production backend: supabase-js with the service_role key (worker process env only).
+ * Outbound HTTPS only, so the same worker runs in a cloud container or on a personal machine.
+ * NOTE: not exercised against a live Supabase in CI (no local stack); the SQL it relies on is
+ * covered by the PGlite tests through SqlBackend.
+ */
+export class SupabaseBackend implements AgentQueueBackend {
+  private readonly client: SupabaseClient
+  constructor(client: SupabaseClient) {
+    this.client = client
+  }
+
+  async claim(workerId: string, jobTypes: string[], leaseSeconds: number) {
+    const data = check(await this.client.rpc("claim_agent_job", { p_worker_id: workerId, p_job_types: jobTypes, p_lease_seconds: leaseSeconds }), "claim")
+    const rows = (Array.isArray(data) ? data : data ? [data] : []) as ClaimedJobRow[]
+    return rows[0] ?? null
+  }
+
+  async heartbeat(jobId: string, workerId: string, leaseSeconds: number) {
+    const data = check(await this.client.rpc("heartbeat_agent_job", { p_job_id: jobId, p_worker_id: workerId, p_lease_seconds: leaseSeconds }), "heartbeat") as { ok: boolean; cancel_requested: boolean }
+    return { ok: Boolean(data?.ok), cancelRequested: Boolean(data?.cancel_requested) }
+  }
+
+  async complete(jobId: string, workerId: string, status: HarnessTerminalStatus, result: Record<string, unknown>, error: string | null, errorCode: string | null) {
+    check(await this.client.rpc("complete_agent_job", { p_job_id: jobId, p_worker_id: workerId, p_status: status, p_result: result, p_error: error, p_error_code: errorCode }), "complete")
+  }
+
+  async fail(jobId: string, workerId: string, error: string, retryable: boolean, retryDelaySeconds: number, errorCode: string | null) {
+    check(
+      await this.client.rpc("fail_agent_job", { p_job_id: jobId, p_worker_id: workerId, p_error: error.slice(0, 4000), p_retryable: retryable, p_retry_delay_seconds: retryDelaySeconds, p_error_code: errorCode }),
+      "fail"
+    )
+  }
+
+  async listSteps(jobId: string): Promise<HarnessStepRecord[]> {
+    const data = check(await this.client.from("agent_job_steps").select("*").eq("job_id", jobId).order("round").order("created_at"), "listSteps")
+    return (data ?? []).map(rowToStep)
+  }
+
+  async insertStep(step: HarnessStepRecord) {
+    check(await this.client.from("agent_job_steps").upsert(stepToRow(step), { onConflict: "job_id,round,step_kind", ignoreDuplicates: true }), "insertStep")
+  }
+
+  async updateProgress(jobId: string, p: HarnessProgress) {
+    const patch: Record<string, unknown> = { rounds: p.rounds, hops_used: p.hopsUsed, cost_cents: p.costCents, tokens_used: p.tokensUsed }
+    if (p.driver) patch.driver = p.driver
+    if (p.model) patch.model = p.model
+    check(await this.client.from("agent_jobs").update(patch).eq("id", jobId).eq("status", "running"), "updateProgress")
+  }
+
+  async saveProposal(input: SaveProposalInput) {
+    const existing = check(await this.client.from("content_ai_proposals").select("id").eq("agent_job_id", input.job.id).maybeSingle(), "proposal lookup")
+    if (existing) return { proposalId: String((existing as { id: string }).id) }
+    const data = check(
+      await this.client
+        .from("content_ai_proposals")
+        .insert({
+          organization_id: input.job.organizationId,
+          document_id: input.documentId,
+          input_revision: input.inputRevision,
+          model: input.model,
+          prompt_version: input.promptVersion,
+          instruction: input.instruction,
+          input_brief: input.inputBrief,
+          status: "succeeded",
+          body: input.body,
+          usage: { input_tokens: input.usage.inputTokens, output_tokens: input.usage.outputTokens, total_tokens: input.usage.inputTokens + input.usage.outputTokens },
+          created_by: input.job.createdBy,
+          finished_at: new Date().toISOString(),
+          agent_job_id: input.job.id,
+        })
+        .select("id")
+        .single(),
+      "saveProposal"
+    )
+    return { proposalId: String((data as { id: string }).id) }
+  }
+
+  async loadDraftContext(job: HarnessJob): Promise<DraftContextRows> {
+    const document = check(
+      await this.client.from("content_documents").select("id,organization_id,project_id,platform,title,body,revision").eq("id", job.targetId ?? "").eq("organization_id", job.organizationId).single(),
+      "document"
+    ) as DraftContextRows["document"]
+    const project = check(
+      await this.client.from("content_projects").select("id,title,brief,content_kind,target_seconds,aspect_ratio,selection_id").eq("id", document.project_id).eq("organization_id", job.organizationId).maybeSingle(),
+      "project"
+    ) as DraftContextRows["project"]
+    const selection = project?.selection_id
+      ? (check(await this.client.from("selections").select("id,signal_id,name,core_thesis,negative_prompts").eq("id", project.selection_id).eq("organization_id", job.organizationId).maybeSingle(), "selection") as DraftContextRows["selection"])
+      : null
+    const signal = selection?.signal_id
+      ? (check(await this.client.from("signals").select("id,name,site_url,summary,description,created_at").eq("id", selection.signal_id).eq("organization_id", job.organizationId).maybeSingle(), "signal") as DraftContextRows["signal"])
+      : null
+    const memories = check(
+      await this.client
+        .from("decision_memories")
+        .select("id,kind,summary,human_quote,platform,content_kind,active,expires_at,created_at")
+        .eq("organization_id", job.organizationId)
+        .eq("active", true)
+        .or(`expires_at.is.null,expires_at.gt.${new Date().toISOString()}`)
+        .order("created_at", { ascending: false })
+        .limit(100),
+      "memories"
+    ) as DraftContextRows["memories"]
+    const knowledge = check(
+      await this.client.from("knowledge_entries").select("slug,title,category,tags,content,trust_level").eq("organization_id", job.organizationId).neq("trust_level", "archived").order("updated_at", { ascending: false }).limit(200),
+      "knowledge"
+    ) as DraftContextRows["knowledge"]
+    return { document, project, selection, signal, memories: memories ?? [], knowledge: knowledge ?? [] }
+  }
+}

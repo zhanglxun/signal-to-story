@@ -7,6 +7,8 @@ import { AssetDetailPage } from "@/pages/asset-detail-page"
 import { AssetsPage } from "@/pages/assets-page"
 import { CanvasPage } from "@/pages/canvas-page"
 import { CharactersPage } from "@/pages/characters-page"
+import { ChatAssistantPage } from "@/pages/chat-assistant-page"
+import { CliAgentsPage } from "@/pages/cli-agents-page"
 import { ContentOverviewPage } from "@/pages/content-overview-page"
 import { ContentProjectsPage } from "@/pages/content-projects-page"
 import { ContentProjectDetailPage } from "@/pages/content-project-detail-page"
@@ -16,6 +18,7 @@ import { ForgotPasswordPage } from "@/pages/forgot-password-page"
 import { IntegrationsPage } from "@/pages/integrations-page"
 import { IntakePage } from "@/pages/intake-page"
 import { LoginPage } from "@/pages/login-page"
+import { ModelsIntegrationPage } from "@/pages/models-integration-page"
 import { NotFoundPage } from "@/pages/not-found-page"
 import { PromptExamplesPage } from "@/pages/prompt-examples-page"
 import { OrganizationAccountsPage } from "@/pages/organization-accounts-page"
@@ -39,10 +42,12 @@ export default function App() {
       <Route path="/forgot-password" element={<ForgotPasswordPage />} />
       <Route path="/update-password" element={<UpdatePasswordPage />} />
       <Route path="/forbidden" element={<ForbiddenPage />} />
+      <Route path="/h5/chat" element={<ChatAssistantPage standaloneH5 />} />
       <Route element={<RequireAuth />}>
         <Route element={<AppShell />}>
           <Route index element={<Navigate to="/dashboard" replace />} />
           <Route path="/dashboard" element={<ContentOverviewPage />} />
+          <Route path="/chat" element={<ChatAssistantPage />} />
           <Route path="/content/projects" element={<ContentProjectsPage />} />
           <Route path="/content/projects/:projectId" element={<ContentProjectDetailPage />} />
           <Route path="/content/reviews" element={<ContentOverviewPage mode="reviews" />} />
@@ -68,6 +73,8 @@ export default function App() {
           <Route path="/system/accounts" element={<OrganizationAccountsPage />} />
           <Route path="/system/roles" element={<RolesPage />} />
           <Route path="/account" element={<AccountPage />} />
+          <Route path="/system/models" element={<ModelsIntegrationPage />} />
+          <Route path="/system/cli-agents" element={<CliAgentsPage />} />
           <Route path="/system/integrations" element={<IntegrationsPage />} />
           <Route path="/settings" element={<SettingsPage />} />
         </Route>

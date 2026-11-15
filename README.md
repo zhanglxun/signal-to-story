@@ -43,8 +43,9 @@ signal-to-story/
 │   ├── src/
 │   ├── supabase/
 │   ├── docs/
-│   └── workers/             # 出现真实长任务后再创建
+│   └── workers/             # 建设中：agent/（Node，P1.5）、video/（Python，P5）；目录尚未创建
 ├── sense-site/              # 读者内容站（规划阶段，待确认后建设）
+├── knowledge-base/          # 默认知识库种子（导入 knowledge_entries；运行时权威是 Postgres）
 ├── docs-site/
 │   ├── design/
 │   ├── plan/
@@ -52,7 +53,7 @@ signal-to-story/
 └── README.md
 ```
 
-当前不创建 `packages/` 或 Worker。只有 Web、Worker、本机同步器确实需要共享契约时，才将 `sense-console/src/contracts/` 提升为共享 package。
+2026-11-15 决策：生成 ↔ 评估多轮循环超出 Edge Function 单请求时限，已出现真实长任务，因此获批在 `sense-console/workers/` 建立 Agent worker（建设中，尚未上线；视频 worker 待 P5）。当前仍不创建 `packages/` 或 monorepo。只有 Web、Worker、本机同步器确实需要共享契约时，才将 `sense-console/src/contracts/` 提升为共享 package。Mandate/发布门禁由数据库强制，前端检查只是 UX。
 
 ## 最终目标与任务路线
 
@@ -78,6 +79,10 @@ signal-to-story/
 - 视频生成单独建设；现有视频页面仍为演示，内容项目提供脚本与素材交接包。
 
 具体范围见 [云端内容 MVP](docs-site/plan/cloud-content-mvp.md)，数据字典与接口见 [Cloud Content API](sense-console/docs/cloud-content-api.md)。
+
+## V2 路线（建设中）
+
+V2 在现有基础上推进 Harness 内核服务端落地（P1.5：任务表队列、`workers/agent/`、决定记忆与知识库表、数据库 Mandate 门禁），随后依次为 Web 速记入口、Decision Memory 回灌、IM 通道、视频工坊、多平台发布排期、读者站。执行顺序与阶段定义见 [V2.0 实施总计划](docs-site/plan/v2-master-execution-plan.md) 与 [统一架构规划](docs-site/plan/v2-unified-architecture-plan.md)。以上均为规划或建设中，不代表已上线。根目录 `knowledge-base/` 是默认种子，运行时权威是 Postgres。
 
 ## 读者内容站（规划）
 

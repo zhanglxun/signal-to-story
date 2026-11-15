@@ -16,6 +16,12 @@
               "label": "创作总览",
               "path": "/dashboard",
               "icon": "LayoutDashboard"
+            },
+            {
+              "id": "chat-assistant",
+              "label": "智能对话与速记",
+              "path": "/chat",
+              "icon": "Sparkles"
             }
           ]
         }
@@ -233,10 +239,22 @@
               "icon": "SlidersHorizontal"
             },
             {
+              "id": "models-integration",
+              "label": "大模型接入",
+              "path": "/system/models",
+              "icon": "Sparkles"
+            },
+            {
+              "id": "cli-agents",
+              "label": "本地 CLI 接入",
+              "path": "/system/cli-agents",
+              "icon": "Workflow"
+            },
+            {
               "id": "integrations",
               "label": "外部接入",
               "path": "/system/integrations",
-              "icon": "Workflow"
+              "icon": "Inbox"
             }
           ]
         }
@@ -247,6 +265,10 @@
     {
       "path": "/account",
       "moduleId": "system"
+    },
+    {
+      "path": "/h5/chat",
+      "moduleId": "workspace"
     }
   ]
 }

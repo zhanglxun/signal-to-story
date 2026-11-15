@@ -74,7 +74,20 @@ export function IntegrationsPage() {
       <PageHeader
         title="外部接入"
         eyebrow="Connections"
-        description="从 Dot 或其他助手收录灵感，自动保存信源并形成待评估选题。此入口不执行审核、发布或自动创作。"
+        description="统一管理飞书机器人、企业微信机器人、Dot 助手、iOS 快捷指令等外部个人助手入口，自动保存信源并形成待评估选题。"
+        actions={
+          <div className="flex flex-wrap gap-2">
+            <Button nativeButton={false} variant="outline" render={<Link to="/system/models" />}>
+              国内大模型接入
+            </Button>
+            <Button nativeButton={false} variant="outline" render={<Link to="/system/cli-agents" />}>
+              本地 CLI 接入
+            </Button>
+            <Button nativeButton={false} render={<Link to="/chat" />}>
+              智能对话与速记台
+            </Button>
+          </div>
+        }
       />
       {error && (
         <p role="alert" className="text-destructive">
@@ -82,6 +95,42 @@ export function IntegrationsPage() {
         </p>
       )}
       {workspace.isLoading && <p>正在读取接入权限…</p>}
+      <div className="grid gap-4 md:grid-cols-3">
+        <Card>
+          <CardHeader>
+            <CardTitle className="text-sm">TOP 0 · 网页与 H5 极简速记台</CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-2 text-xs text-muted-foreground">
+            <p>零外部资质依赖，直接在后台或手机 H5 打开即可对话、测试模型/CLI 并一键速记收录。</p>
+            <div className="flex gap-2 pt-1">
+              <Link className="font-medium text-primary underline" to="/chat">
+                打开后台对话台
+              </Link>
+              <Link className="font-medium text-primary underline" to="/h5/chat" target="_blank">
+                打开独立 H5 版
+              </Link>
+            </div>
+          </CardContent>
+        </Card>
+        <Card>
+          <CardHeader>
+            <CardTitle className="text-sm">TOP 1 · 飞书自建应用机器人 (推荐)</CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-2 text-xs text-muted-foreground">
+            <p>个人免费创建企业即可开通，支持长连接收消息与交互式审核卡片回传，复用下方统一收录凭证。</p>
+            <p className="font-mono text-foreground">adapter: &quot;generic&quot; (Feishu Bot)</p>
+          </CardContent>
+        </Card>
+        <Card>
+          <CardHeader>
+            <CardTitle className="text-sm">TOP 2 · 企业微信机器人 / iOS 快捷指令</CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-2 text-xs text-muted-foreground">
+            <p>支持企微智能机器人回调或手机系统分享菜单直调下方 HTTPS 收录网关，自动幂等防重。</p>
+            <p className="font-mono text-foreground">POST /functions/v1/intake-gateway</p>
+          </CardContent>
+        </Card>
+      </div>
       <Card>
         <CardHeader>
           <CardTitle>统一收录入口</CardTitle>
