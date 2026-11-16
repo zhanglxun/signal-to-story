@@ -30,6 +30,7 @@ export default defineConfig([
     files: [
       'src/components/chart-area-interactive.tsx',
       'src/hooks/use-mobile.ts',
+      'src/hooks/use-story-scope.ts',
     ],
     rules: {
       'react-refresh/only-export-components': 'off',

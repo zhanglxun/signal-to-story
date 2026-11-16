@@ -138,6 +138,12 @@ const chartConfig = {
   },
 } satisfies ChartConfig
 
+const timeRangeLabels: Record<string, string> = {
+  "90d": "最近三个月",
+  "30d": "最近 30 天",
+  "7d": "最近 7 天",
+}
+
 export function ChartAreaInteractive() {
   const isMobile = useIsMobile()
   const [timeRange, setTimeRange] = React.useState("90d")
@@ -187,6 +193,7 @@ export function ChartAreaInteractive() {
             <ToggleGroupItem value="7d">最近 7 天</ToggleGroupItem>
           </ToggleGroup>
           <Select
+            items={timeRangeLabels}
             value={timeRange}
             onValueChange={(value) => {
               if (value !== null) {

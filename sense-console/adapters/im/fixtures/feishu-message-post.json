@@ -1,0 +1,11 @@
+{
+  "schema": "2.0",
+  "header": { "event_id": "ev_post_1", "event_type": "im.message.receive_v1", "create_time": "1608725989000", "token": "vt_test_token", "app_id": "cli_a1b2c3", "tenant_key": "tenant_x" },
+  "event": {
+    "sender": { "sender_id": { "open_id": "ou_sender" }, "sender_type": "user" },
+    "message": {
+      "message_id": "om_post_1", "chat_id": "oc_p2p", "chat_type": "p2p", "message_type": "post",
+      "content": "{\"title\":\"值得看\",\"content\":[[{\"tag\":\"text\",\"text\":\"这篇讲 Agent 评估：\"},{\"tag\":\"a\",\"text\":\"原文\",\"href\":\"https://example.com/post\"}],[{\"tag\":\"img\",\"image_key\":\"img_x\"}]]}"
+    }
+  }
+}

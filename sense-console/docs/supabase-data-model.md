@@ -1,6 +1,6 @@
 # Supabase 数据模型设计入口
 
-状态：账号与组织基座、V1 资产元数据账本已落地；其余内容生产领域模型仍待独立设计与评审。
+状态：账号与组织基座、V1 资产元数据账本、知识库内容（分类/待处理信息/选题）和提示词与图例库已落地；其余内容生产领域模型仍待独立设计与评审。
 
 ## 已落地：组织与账号基座
 
@@ -39,14 +39,56 @@
 
 权限采用 RLS 与显式 GRANT 双层控制：Viewer 及以上可读取，Member 及以上可登记和更新，不向浏览器授予 DELETE。停用资产使用 `is_active=false`；后续需要版本和物理清理时，再通过 `asset_versions` 与受控 Worker 流程处理。
 
-## 拟覆盖的核心对象
+## 已落地：知识库内容（分类 / 待处理信息 / 选题）
 
-- `profiles`：账号展示资料与状态；可信角色关系存放在 `organization_members`，不使用可由用户修改的 `user_metadata` 做授权。
-- `topics`：选题、信号来源、评分、状态与判断结论。
-- `agent_tasks`：异步任务、执行者、输入引用、进度、错误与输出引用。
-- `stories` / `story_nodes`：故事与章节、场景、分镜等结构关系。
-- `assets` / `asset_versions`：图片、音频、人物、场景与视频的元数据、外部存储地址和版本。
-- 关系表：选题、任务、故事节点和资产之间的可追踪关联。
+`source_categories`、`signals`、`selections` 对应早期 `c_category`/`c_signal`/`c_selection` 草案，字段调整如下：
+
+| 表 | 原草案 | 当前字段 | 调整原因 |
+| --- | --- | --- | --- |
+| c_category → `source_categories` | 无组织字段 | `organization_id uuid` | 与 `assets` 一致：RLS 必须绑定真实 workspace，不能只写 `TO authenticated` |
+| | `sort_id Int`（字段说明写"用户的ID"，疑似笔误） | `sort_order smallint` | 结合实际用途（树形展示顺序）改名 |
+| | `status int 1/0` | `is_active boolean` | 与 `assets.is_active` 同一习惯 |
+| c_signal → `signals` | 无组织字段 | `organization_id uuid` | 同上 |
+| | `status int 1未整理/0已整理` | `is_organized boolean` | 二态工作流标记 |
+| | `category_id` | `... references source_categories(id) on delete restrict` | 分类仍被引用时拒绝删除，而不是级联 |
+| c_selection → `selections` | 无组织字段 | `organization_id uuid` | 同上 |
+| | `signal_id` | `... references signals(id) on delete restrict` | 防止孤儿选题 |
+| | `priority int 1/2/3`、`status int 1未完成/0已完成` | `priority smallint check in (1,2,3)`、`is_completed boolean` | 去掉魔法数字歧义 |
+| | `outline_template JSON` | `outline_template jsonb`，`[{"title": "..."}]`，`check (jsonb_typeof=array)` | 落地为章节标题的有序列表 |
+
+`source_categories` 用 `parent_id` 自关联两层结构，`private.enforce_source_category_depth()` 触发器阻止出现第三层。三张表都通过 `private.set_audit_fields()` 通用触发器维护 `created_by/created_at/updated_by/updated_at`，权限沿用已有的 `content.view`/`content.manage`。
+
+分类父子关系、信息所属分类和选题所属信息都使用 `(organization_id, 关联 ID)` 复合外键，数据库层会拒绝跨组织误关联，避免只依赖 RLS 维持租户边界。
+
+和 `assets` 不同的是，这三张表**都对浏览器开放了 DELETE**（`content.manage` 权限 + RLS）：`signals` 是收件箱性质的队列，`selections` 是本轮明确要支持删除的对象，`source_categories` 的删除风险已经由外键 `on delete restrict` 挡住（分类下还有子分类，或已被 `signals` 引用时，数据库直接拒绝，由 service 层捕获 `23503` 转成友好提示）。
+
+## 已落地：提示词与图例库
+
+`prompt_examples` 管理网络收集与自主创作的提示词，并可保存外部图例地址、私有 Storage 图例对象，或可选关联一条现有图片资产。它不把提示词伪装成图片资产类型：提示词是可复用的创作参考，图片仍由 `assets` 账本管理。
+
+表内保留 `source_url`、`source_author`、`origin_type`、`tags`、`status` 和 `notes`，满足轻量收集与整理；`visibility` 只保存 `private/shared` 意图，当前没有匿名读取策略或公开发布页面。`example_asset_id` 与 `organization_id` 一起引用 `assets`，防止把其他组织的图例错误关联进来。
+
+上传图例使用私有 `prompt-examples` bucket：对象路径第一段为 `organization_id`，Storage RLS 使用同一套 `content.view` / `content.manage` 权限。表中只保存 `example_storage_path`；读取列表时由前端按已登录会话申请一小时有效的签名预览 URL，避免公开图片链接。
+
+## 对象存储接入约定
+
+Supabase Storage 当前只是默认的图例存储，并不是长期媒体归档的唯一选项。系统设置维护候选提供商（Supabase、阿里云 OSS、腾讯云 COS、七牛 Kodo、Cloudflare R2）的非敏感配置说明与连接状态。任何长期 Access Key、Secret Key 或 Token 都不得写入浏览器、`VITE_*` 环境变量或业务表。
+
+外部对象存储接入时，由 Edge Function 持有服务端 Secret，并根据组织的已验证默认提供商签发临时上传 / 下载 URL。资产元数据随后应统一记录 `storage_provider`、`storage_bucket`、`object_key`、`public_or_signed_url` 和内容哈希；切换默认提供商仅影响新写入，不迁移或破坏已有对象。
+
+提示词图例当前使用 `example_storage_path` 保存托管对象的完整定位标识：Supabase 保存其私有对象 key，七牛保存 `qiniu://{bucket}/{object_key}`。`example_image_url` 只保存用户填写的外部图例链接，不能用于保存短时签名 URL；签名 URL 会过期，应在读取时按权限动态生成。七牛提示词图例的新对象键为 `signal-story/prompts/{uuid}.{ext}`。
+
+### 公共上传规范
+
+所有新增上传应复用 `src/services/object-storage-service.ts` 的 `uploadManagedImage()`，不得在页面或业务 service 内自行读取 provider 密钥、拼接任意对象路径或直接调用某一家云厂商 SDK。调用方只提供组织、受白名单限制的业务用途和文件；服务根据当前默认提供商路由上传，返回稳定 `path` 与可选 `publicUrl`。外部 provider 的临时凭证统一由 `storage-upload-token` Edge Function 签发，服务端将用途映射到固定目录，例如 `prompt_example → signal-story/prompts/{uuid}.{ext}`。
+
+访问规则与知识库内容一致：`content.view` 可读取，`content.manage` 可新建、编辑和删除；审计触发器维护创建与更新时间及操作人。
+
+## 后续扩展与关联数据文档
+
+- 云端内容项目、不可变版本、审核事件与发布排期明细见 [Cloud Content API 字典](cloud-content-api.md)。
+- P1.5 任务队列（`agent_jobs` / `agent_job_steps`）、决定记忆（`decision_memories`）、知识库（`knowledge_entries`）与数据库 Mandate 门禁（`approval_requests`）见 [Agent Harness 内核文档](agent-harness.md)。
+- 后续待设计扩展：故事与分镜结构表（`video_plans` / `video_shots`，P5）及 `asset_versions`。
 
 ## 安全与访问约束
 
@@ -55,6 +97,18 @@
 3. 浏览器只使用 Publishable Key；`service_role` 只能存在于受控服务端或 Edge Function。
 4. 普通 CRUD 由 `supabase-js` 直接访问；密钥调用、Webhook、复杂校验才使用 Edge Function。
 5. 原始大文件不进数据库。数据库保存存储 provider、bucket/path、版本、哈希和关系。
+
+## Supabase 安全验收清单
+
+每次新增表、View、RPC、Storage bucket 或 Edge Function 时逐项核对：
+
+- [ ] **RLS 覆盖**：所有 `public` 业务表均已 `ENABLE ROW LEVEL SECURITY`，并按组织成员与角色权限编写最小 `SELECT`/`INSERT`/`UPDATE`/`DELETE` policy。
+- [ ] **显式 GRANT**：`authenticated`（及公开只读场景的 `anon`）具备所需的 schema/table/sequence/function `GRANT`，未依赖默认全开权限。
+- [ ] **禁止信任 `user_metadata`**：鉴权与角色判断一律基于服务端表（如 `organization_members` / `organization_roles`）与 `auth.uid()`，绝不从用户可改写的 `user_metadata` 读取权限。
+- [ ] **View / 函数安全性**：View 使用 `security_invoker = true`；`SECURITY DEFINER` 函数显式固定 `SET search_path = public, pg_temp` 并在函数体内校验调用者权限或原子令牌。
+- [ ] **私有 Bucket 与签名 URL**：非公开素材（图例、草稿分镜、工作流资产）使用私有 Storage bucket，仅在读取时生成短时签名 URL；公开成片/封面才放入受发布状态约束的公开路径。
+- [ ] **密钥隔离**：浏览器与 `VITE_*` 环境变量中不包含 `service_role`、数据库密码、对象存储长期密钥或 IM/LLM 密钥；Webhook 类 Edge Function 在 `supabase/config.toml` 配置 `verify_jwt = false` 并在入口完成平台签名/令牌校验。
+- [ ] **迁移与 RLS 测试**：新增迁移均附带 PGlite / 数据库测试（`src/test/db/*.test.ts`）验证跨组织隔离、权限边界与幂等性。
 
 ## 下一步设计输出
 

@@ -1,0 +1,5 @@
+{
+  "schema": "2.0",
+  "header": { "event_id": "ev_unknown_1", "event_type": "contact.user.created_v3", "create_time": "1608725989000", "token": "vt_test_token", "app_id": "cli_a1b2c3", "tenant_key": "tenant_x" },
+  "event": { "object": {} }
+}

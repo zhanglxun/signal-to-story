@@ -1,0 +1,136 @@
+import type { HarnessJob, HarnessProgress, HarnessStepRecord, HarnessTerminalStatus, SaveProposalInput } from "../../../src/harness/job-store"
+import { type AgentQueueBackend, type ClaimedJobRow, type DraftContextRows, rowToStep, stepToRow } from "../backend"
+
+/** Minimal executor: PGlite, a PGlite Transaction or node-postgres all fit. */
+export interface SqlExecutor {
+  query<T = Record<string, unknown>>(sql: string, params?: unknown[]): Promise<{ rows: T[] }>
+}
+
+/**
+ * Backend over raw SQL. `run` must execute the callback with service_role privileges
+ * (the PGlite harness passes `db.asServiceRole`). Used by tests and `npm run demo:harness`.
+ */
+export class SqlBackend implements AgentQueueBackend {
+  private readonly run: <T>(fn: (sql: SqlExecutor) => Promise<T>) => Promise<T>
+  constructor(run: <T>(fn: (sql: SqlExecutor) => Promise<T>) => Promise<T>) {
+    this.run = run
+  }
+
+  async rpc(fn: string, args: Record<string, unknown>) {
+    const ident = /^[a-z_][a-z0-9_]*$/
+    if (!ident.test(fn)) return { data: null, error: { message: "invalid function name" } }
+    const keys = Object.keys(args).filter((k) => ident.test(k))
+    try {
+      return await this.run(async (sql) => {
+        const r = await sql.query<{ r: unknown }>(`select public.${fn}(${keys.map((k, i) => `${k} => $${i + 1}`).join(", ")}) as r`, keys.map((k) => args[k]))
+        return { data: (r.rows[0]?.r ?? null) as unknown, error: null }
+      })
+    } catch (error) {
+      return { data: null, error: { message: error instanceof Error ? error.message : String(error) } }
+    }
+  }
+
+  async claim(workerId: string, jobTypes: string[], leaseSeconds: number) {
+    return this.run(async (sql) => {
+      const r = await sql.query<ClaimedJobRow>("select * from public.claim_agent_job($1, $2, $3)", [workerId, jobTypes, leaseSeconds])
+      return r.rows[0] ?? null
+    })
+  }
+
+  async heartbeat(jobId: string, workerId: string, leaseSeconds: number) {
+    return this.run(async (sql) => {
+      const r = await sql.query<{ beat: { ok: boolean; cancel_requested: boolean } }>("select public.heartbeat_agent_job($1, $2, $3) as beat", [jobId, workerId, leaseSeconds])
+      const beat = r.rows[0].beat
+      return { ok: beat.ok, cancelRequested: beat.cancel_requested }
+    })
+  }
+
+  async complete(jobId: string, workerId: string, status: HarnessTerminalStatus, result: Record<string, unknown>, error: string | null, errorCode: string | null) {
+    await this.run((sql) => sql.query("select public.complete_agent_job($1, $2, $3, $4, $5, $6)", [jobId, workerId, status, result, error, errorCode]))
+  }
+
+  async fail(jobId: string, workerId: string, error: string, retryable: boolean, retryDelaySeconds: number, errorCode: string | null) {
+    await this.run((sql) => sql.query("select public.fail_agent_job($1, $2, $3, $4, $5, $6)", [jobId, workerId, error.slice(0, 4000), retryable, retryDelaySeconds, errorCode]))
+  }
+
+  async listSteps(jobId: string): Promise<HarnessStepRecord[]> {
+    return this.run(async (sql) => {
+      const r = await sql.query("select * from public.agent_job_steps where job_id = $1 order by round, created_at", [jobId])
+      return r.rows.map(rowToStep)
+    })
+  }
+
+  async insertStep(step: HarnessStepRecord) {
+    const row = stepToRow(step)
+    await this.run((sql) =>
+      sql.query(
+        `insert into public.agent_job_steps(organization_id, job_id, round, step_kind, status, driver, model, input_digest, input_summary, output, evaluation, usage, cost_cents, duration_ms, error)
+         values ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15)
+         on conflict (job_id, round, step_kind) do nothing`,
+        [row.organization_id, row.job_id, row.round, row.step_kind, row.status, row.driver, row.model, row.input_digest, row.input_summary,
+          row.output === null ? null : JSON.stringify(row.output), row.evaluation === null ? null : JSON.stringify(row.evaluation), row.usage, row.cost_cents, row.duration_ms, row.error]
+      )
+    )
+  }
+
+  async updateProgress(jobId: string, p: HarnessProgress) {
+    await this.run((sql) =>
+      sql.query(
+        "update public.agent_jobs set rounds=$2, hops_used=$3, cost_cents=$4, tokens_used=$5, driver=coalesce($6, driver), model=coalesce($7, model) where id=$1 and status='running'",
+        [jobId, p.rounds, p.hopsUsed, p.costCents, p.tokensUsed, p.driver ?? null, p.model ?? null]
+      )
+    )
+  }
+
+  async saveProposal(input: SaveProposalInput) {
+    return this.run(async (sql) => {
+      const existing = await sql.query<{ id: string }>("select id from public.content_ai_proposals where agent_job_id = $1", [input.job.id])
+      if (existing.rows[0]) return { proposalId: existing.rows[0].id }
+      const r = await sql.query<{ id: string }>(
+        `insert into public.content_ai_proposals(organization_id, document_id, input_revision, model, prompt_version, instruction, input_brief, status, body, usage, created_by, finished_at, agent_job_id)
+         values ($1,$2,$3,$4,$5,$6,$7,'succeeded',$8,$9,$10,now(),$11) returning id`,
+        [input.job.organizationId, input.documentId, input.inputRevision, input.model, input.promptVersion, input.instruction, input.inputBrief,
+          input.body, { input_tokens: input.usage.inputTokens, output_tokens: input.usage.outputTokens, total_tokens: input.usage.inputTokens + input.usage.outputTokens }, input.job.createdBy, input.job.id]
+      )
+      return { proposalId: r.rows[0].id }
+    })
+  }
+
+  async loadDraftContext(job: HarnessJob): Promise<DraftContextRows> {
+    return this.run(async (sql) => {
+      const doc = await sql.query<DraftContextRows["document"]>(
+        "select id, organization_id, project_id, platform, title, body, revision from public.content_documents where id::text = $1 and organization_id = $2",
+        [job.targetId, job.organizationId]
+      )
+      const document = doc.rows[0]
+      if (!document) throw new Error("稿件不存在或不属于该组织")
+      const project = (await sql.query<NonNullable<DraftContextRows["project"]>>(
+        "select id, title, brief, content_kind, target_seconds, aspect_ratio, selection_id from public.content_projects where id = $1 and organization_id = $2",
+        [document.project_id, job.organizationId]
+      )).rows[0] ?? null
+      const selection = project?.selection_id
+        ? (await sql.query<NonNullable<DraftContextRows["selection"]>>(
+            "select id, name, core_thesis, negative_prompts, signal_id from public.selections where id = $1 and organization_id = $2",
+            [project.selection_id, job.organizationId]
+          )).rows[0] ?? null
+        : null
+      const signalId = selection?.signal_id
+      const signal = signalId
+        ? (await sql.query<NonNullable<DraftContextRows["signal"]>>(
+            "select id, name, site_url, summary, description, created_at from public.signals where id = $1 and organization_id = $2",
+            [signalId, job.organizationId]
+          )).rows[0] ?? null
+        : null
+      const memories = (await sql.query<DraftContextRows["memories"][number]>(
+        `select id, kind, summary, human_quote, platform, content_kind, active, expires_at, created_at from public.decision_memories
+         where organization_id = $1 and active and (expires_at is null or expires_at > now()) order by created_at desc limit 100`,
+        [job.organizationId]
+      )).rows
+      const knowledge = (await sql.query<DraftContextRows["knowledge"][number]>(
+        "select slug, title, category, tags, content, trust_level from public.knowledge_entries where organization_id = $1 and trust_level <> 'archived' order by updated_at desc limit 200",
+        [job.organizationId]
+      )).rows
+      return { document, project, selection, signal, memories, knowledge }
+    })
+  }
+}

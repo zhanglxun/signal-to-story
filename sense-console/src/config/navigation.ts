@@ -1,11 +1,14 @@
 import type { LucideIcon } from "lucide-react"
 import {
+  BookOpenIcon,
+  BrainIcon,
   Building2Icon,
   ClapperboardIcon,
   CircleIcon,
   FileTextIcon,
   FilmIcon,
   GaugeIcon,
+  ImagePlusIcon,
   InboxIcon,
   LayoutDashboardIcon,
   LibraryIcon,
@@ -58,11 +61,14 @@ type NavigationConfig = {
 }
 
 const iconMap: Record<string, LucideIcon> = {
+  BookOpen: BookOpenIcon,
+  Brain: BrainIcon,
   Building2: Building2Icon,
   Clapperboard: ClapperboardIcon,
   FileText: FileTextIcon,
   Film: FilmIcon,
   Gauge: GaugeIcon,
+  ImagePlus: ImagePlusIcon,
   Inbox: InboxIcon,
   LayoutDashboard: LayoutDashboardIcon,
   Library: LibraryIcon,

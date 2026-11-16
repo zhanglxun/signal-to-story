@@ -27,15 +27,25 @@ export type OrganizationAccount = {
   createdAt: string
 }
 
-export type OrganizationAccountsResult = {
-  organization: OrganizationSummary | null
-  accounts: OrganizationAccount[]
-  roles: OrganizationRoleDefinition[]
-}
-
 export type OrganizationRolesResult = {
   organization: OrganizationSummary | null
   roles: OrganizationRoleDefinition[]
+}
+
+export type OrganizationAccountsWorkspace = {
+  organization: OrganizationSummary | null
+  roles: OrganizationRoleDefinition[]
+  currentAccount: OrganizationAccount | null
+}
+
+export type ListPageParams = {
+  page?: number
+  pageSize?: number
+}
+
+export type OrganizationAccountsPage = {
+  accounts: OrganizationAccount[]
+  totalCount: number
 }
 
 export type CreateOrganizationAccountInput = {

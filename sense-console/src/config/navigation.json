@@ -1,14 +1,41 @@
 {
   "modules": [
     {
-      "id": "intake",
-      "label": "信息收集",
-      "icon": "Inbox",
-      "defaultPath": "/intake",
+      "id": "workspace",
+      "label": "工作台",
+      "icon": "Gauge",
+      "defaultPath": "/dashboard",
       "groups": [
         {
-          "id": "intake-entry",
-          "label": "信息进入",
+          "id": "workspace-pages",
+          "label": "工作台",
+          "icon": "Gauge",
+          "items": [
+            {
+              "id": "overview",
+              "label": "创作总览",
+              "path": "/dashboard",
+              "icon": "LayoutDashboard"
+            },
+            {
+              "id": "chat-assistant",
+              "label": "智能对话与速记",
+              "path": "/chat",
+              "icon": "Sparkles"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "content",
+      "label": "内容中心",
+      "icon": "FileText",
+      "defaultPath": "/content/projects",
+      "groups": [
+        {
+          "id": "content-intake",
+          "label": "收集与选题",
           "icon": "Inbox",
           "items": [
             {
@@ -16,14 +43,13 @@
               "label": "待处理信息",
               "path": "/intake",
               "icon": "Inbox"
-            }
-          ]
-        },
-        {
-          "id": "source-taxonomy",
-          "label": "信源分类",
-          "icon": "Tags",
-          "items": [
+            },
+            {
+              "id": "topics",
+              "label": "选题",
+              "path": "/topics",
+              "icon": "Sparkles"
+            },
             {
               "id": "source-categories",
               "label": "分类管理",
@@ -33,15 +59,77 @@
           ]
         },
         {
-          "id": "topic-evaluation",
-          "label": "选题评估",
-          "icon": "Sparkles",
+          "id": "content-pages",
+          "label": "创作与审核",
+          "icon": "FileText",
           "items": [
             {
-              "id": "topics",
-              "label": "选题",
-              "path": "/topics",
-              "icon": "Sparkles"
+              "id": "content-projects",
+              "label": "内容项目",
+              "path": "/content/projects",
+              "icon": "FileText"
+            },
+            {
+              "id": "content-reviews",
+              "label": "审核中心",
+              "path": "/content/reviews",
+              "icon": "ShieldCheck"
+            },
+            {
+              "id": "production-flow",
+              "label": "内容生产流程",
+              "path": "/production/flow",
+              "icon": "Workflow"
+            }
+          ]
+        },
+        {
+          "id": "resources-pages",
+          "label": "素材与模板",
+          "icon": "Library",
+          "items": [
+            {
+              "id": "assets",
+              "label": "素材资产",
+              "path": "/assets",
+              "icon": "Library"
+            },
+            {
+              "id": "prompt-examples",
+              "label": "提示词与图例",
+              "path": "/intake/prompts",
+              "icon": "ImagePlus"
+            },
+            {
+              "id": "knowledge-base",
+              "label": "知识库",
+              "path": "/content/knowledge",
+              "icon": "BookOpen"
+            },
+            {
+              "id": "decision-memories",
+              "label": "决定记忆",
+              "path": "/content/memories",
+              "icon": "Brain"
+            }
+          ]
+        },
+        {
+          "id": "publishing-pages",
+          "label": "发布运营",
+          "icon": "ListTodo",
+          "items": [
+            {
+              "id": "publishing-plans",
+              "label": "发布计划与记录",
+              "path": "/publishing/plans",
+              "icon": "ListTodo"
+            },
+            {
+              "id": "publishing-channels",
+              "label": "渠道与账号",
+              "path": "/publishing/channels",
+              "icon": "Users"
             }
           ]
         }
@@ -49,26 +137,13 @@
     },
     {
       "id": "video-production",
-      "label": "视频创作",
+      "label": "视频工坊",
       "icon": "Clapperboard",
-      "defaultPath": "/dashboard",
+      "defaultPath": "/video/scripts",
       "groups": [
         {
-          "id": "overview",
-          "label": "概览",
-          "icon": "Gauge",
-          "items": [
-            {
-              "id": "overview",
-              "label": "概览",
-              "path": "/dashboard",
-              "icon": "LayoutDashboard"
-            }
-          ]
-        },
-        {
           "id": "content-creation",
-          "label": "内容创作",
+          "label": "视频制作",
           "icon": "Clapperboard",
           "items": [
             {
@@ -100,12 +175,6 @@
               "label": "画布创作",
               "path": "/video/canvas",
               "icon": "Palette"
-            },
-            {
-              "id": "assets",
-              "label": "素材资产",
-              "path": "/assets",
-              "icon": "Library"
             }
           ]
         },
@@ -119,6 +188,27 @@
               "label": "任务中心",
               "path": "/tasks",
               "icon": "ListTodo"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "analytics",
+      "label": "数据复盘",
+      "icon": "Gauge",
+      "defaultPath": "/analytics",
+      "groups": [
+        {
+          "id": "analytics-pages",
+          "label": "数据复盘",
+          "icon": "Gauge",
+          "items": [
+            {
+              "id": "content-analytics",
+              "label": "数据与复盘",
+              "path": "/analytics",
+              "icon": "Gauge"
             }
           ]
         }
@@ -159,6 +249,24 @@
               "label": "系统设置",
               "path": "/settings",
               "icon": "SlidersHorizontal"
+            },
+            {
+              "id": "models-integration",
+              "label": "大模型接入",
+              "path": "/system/models",
+              "icon": "Sparkles"
+            },
+            {
+              "id": "cli-agents",
+              "label": "本地 CLI 接入",
+              "path": "/system/cli-agents",
+              "icon": "Workflow"
+            },
+            {
+              "id": "integrations",
+              "label": "外部接入",
+              "path": "/system/integrations",
+              "icon": "Inbox"
             }
           ]
         }
@@ -169,6 +277,10 @@
     {
       "path": "/account",
       "moduleId": "system"
+    },
+    {
+      "path": "/h5/chat",
+      "moduleId": "workspace"
     }
   ]
 }

@@ -1,4 +1,6 @@
-export const assetTypes = ["character", "scene", "prop", "sound", "style"] as const
+export const assetTypes = ["character", "scene", "prop", "sound", "style", "video_studio"] as const
+/** Types a person may pick when registering an asset by hand; video_studio is written only by the video worker. */
+export const manualAssetTypes = assetTypes.filter((t) => t !== "video_studio")
 export const mediaTypes = ["image", "audio", "video", "model", "document", "other"] as const
 
 export type AssetType = (typeof assetTypes)[number]
@@ -26,6 +28,13 @@ export type AssetFilters = {
   assetType?: AssetType
   query?: string
   active?: boolean
+  page?: number
+  pageSize?: number
+}
+
+export type AssetPage = {
+  assets: Asset[]
+  totalCount: number
 }
 
 export type CreateAssetInput = {
@@ -45,20 +54,13 @@ export type UpdateAssetInput = CreateAssetInput & {
   id: number
 }
 
-export type AssetWorkspace = {
-  organization: {
-    id: string
-    name: string
-  } | null
-  canManage: boolean
-}
-
 export const assetTypeLabels: Record<AssetType, string> = {
   character: "角色",
   scene: "场景",
   prop: "道具",
   sound: "音效",
   style: "风格",
+  video_studio: "视频工坊",
 }
 
 export const mediaTypeLabels: Record<AssetMediaType, string> = {

@@ -5,8 +5,9 @@ Read @README.md before making architectural changes.
 Also follow:
 
 - @docs-site/spec/Signal-to-Story总体架构-SPEC.md
-- @docs-site/spec/内容系统分层与Obsidian单向同步-SPEC.md
-- @docs-site/plan/frame-work.md
+- @docs-site/plan/v2-unified-architecture-plan.md
+- @docs-site/plan/v2-master-execution-plan.md
+- @sense-console/docs/agent-harness.md
 
 ## Non-negotiable boundaries
 
@@ -17,7 +18,10 @@ Also follow:
 - Never put `service_role`, database passwords, or provider secrets in browser code.
 - Agents produce proposals and drafts; humans retain approval and publishing authority.
 - Media binaries belong in object storage; Postgres stores metadata and relationships.
-- Do not introduce a Worker, monorepo, or shared packages before a real requirement exists.
+- The Agent worker is approved for real long-running tasks and lives under `sense-console/workers/` (`agent/`, later `video/`); it is a separate process, not part of the Web bundle. Monorepo and shared packages remain forbidden until a real requirement exists.
+- Mandate and publishing gates must be enforced by the database (triggers/RPC); frontend checks are UX only, not gates.
+- `sense-site/` is the approved sibling reader-site project; it must not share code via packages.
 - Navigation has at most two levels, and the project uses one shadcn/ui Base UI component system.
+- Once a shared UI component exists for a given interaction, reuse it instead of hand-rolling a parallel implementation — e.g. every category-hierarchy dropdown uses `sense-console/src/components/source-categories/category-select.tsx`; see `sense-console/docs/frontend-conventions.md` for the running list.
 
 Before handing off code, run typecheck, lint, tests, and build.

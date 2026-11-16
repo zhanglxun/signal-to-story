@@ -1,0 +1,448 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Signal to Story video render job contract",
+  "schema_version": 1,
+  "$defs": {
+    "job": {
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": "string",
+          "format": "uuid",
+          "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+        },
+        "organization_id": {
+          "type": "string",
+          "format": "uuid",
+          "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+        },
+        "job_type": {
+          "type": "string",
+          "enum": [
+            "video_tts_preview",
+            "video_shot_render",
+            "video_compose"
+          ]
+        },
+        "target_type": {
+          "type": "string",
+          "const": "video_plan"
+        },
+        "target_id": {
+          "type": "string",
+          "format": "uuid",
+          "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+        },
+        "target_revision": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 9007199254740991
+        },
+        "approval_request_id": {
+          "anyOf": [
+            {
+              "type": "string",
+              "format": "uuid",
+              "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "created_by": {
+          "anyOf": [
+            {
+              "type": "string",
+              "format": "uuid",
+              "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "payload": {
+          "type": "object",
+          "properties": {
+            "schema_version": {
+              "type": "number",
+              "const": 1
+            },
+            "plan_id": {
+              "type": "string",
+              "format": "uuid",
+              "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+            },
+            "plan_revision": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 9007199254740991
+            },
+            "shot_id": {
+              "anyOf": [
+                {
+                  "type": "string",
+                  "format": "uuid",
+                  "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "server_estimate": {
+              "type": "object",
+              "properties": {
+                "cost_cents": {
+                  "type": "number",
+                  "minimum": 0
+                },
+                "uses_cloud_video": {
+                  "type": "boolean"
+                },
+                "requires_approval": {
+                  "type": "boolean"
+                }
+              },
+              "required": [
+                "cost_cents",
+                "uses_cloud_video",
+                "requires_approval"
+              ]
+            }
+          },
+          "required": [
+            "schema_version",
+            "plan_id",
+            "plan_revision",
+            "shot_id"
+          ]
+        }
+      },
+      "required": [
+        "id",
+        "organization_id",
+        "job_type",
+        "target_type",
+        "target_id",
+        "target_revision",
+        "approval_request_id",
+        "created_by",
+        "payload"
+      ]
+    },
+    "result": {
+      "type": "object",
+      "properties": {
+        "schema_version": {
+          "type": "number",
+          "const": 1
+        },
+        "job_type": {
+          "type": "string",
+          "enum": [
+            "video_tts_preview",
+            "video_shot_render",
+            "video_compose"
+          ]
+        },
+        "engine": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 64
+        },
+        "dry_run": {
+          "type": "boolean"
+        },
+        "plan_id": {
+          "type": "string",
+          "format": "uuid",
+          "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+        },
+        "plan_revision": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 9007199254740991
+        },
+        "assets": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "category": {
+                "type": "string",
+                "enum": [
+                  "keyframe",
+                  "voiceover",
+                  "shot_clip",
+                  "final_video"
+                ]
+              },
+              "asset_id": {
+                "type": "integer",
+                "exclusiveMinimum": 0,
+                "maximum": 9007199254740991
+              },
+              "shot_id": {
+                "anyOf": [
+                  {
+                    "type": "string",
+                    "format": "uuid",
+                    "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              },
+              "storage_path": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 1024
+              },
+              "mime_type": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 100
+              },
+              "duration_ms": {
+                "anyOf": [
+                  {
+                    "type": "integer",
+                    "minimum": 0,
+                    "maximum": 9007199254740991
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              },
+              "placeholder": {
+                "type": "boolean"
+              }
+            },
+            "required": [
+              "category",
+              "asset_id",
+              "shot_id",
+              "storage_path",
+              "mime_type",
+              "duration_ms",
+              "placeholder"
+            ],
+            "additionalProperties": false
+          }
+        },
+        "cost_cents": {
+          "type": "number",
+          "minimum": 0
+        },
+        "shots": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "shot_id": {
+                "type": "string",
+                "format": "uuid",
+                "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+              },
+              "render_ms": {
+                "type": "integer",
+                "minimum": 0,
+                "maximum": 9007199254740991
+              },
+              "narration_ms": {
+                "anyOf": [
+                  {
+                    "type": "integer",
+                    "minimum": 0,
+                    "maximum": 9007199254740991
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              },
+              "status": {
+                "type": "string",
+                "enum": [
+                  "pending",
+                  "queued",
+                  "rendering",
+                  "rendered",
+                  "failed"
+                ]
+              }
+            },
+            "required": [
+              "shot_id",
+              "render_ms",
+              "narration_ms",
+              "status"
+            ],
+            "additionalProperties": false
+          }
+        },
+        "final_duration_ms": {
+          "anyOf": [
+            {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 9007199254740991
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "warnings": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        }
+      },
+      "required": [
+        "schema_version",
+        "job_type",
+        "engine",
+        "dry_run",
+        "plan_id",
+        "plan_revision",
+        "assets",
+        "cost_cents",
+        "shots",
+        "final_duration_ms",
+        "warnings"
+      ],
+      "additionalProperties": false
+    },
+    "plan_draft": {
+      "type": "object",
+      "properties": {
+        "schema_version": {
+          "type": "number",
+          "const": 1
+        },
+        "title": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 160
+        },
+        "aspect_ratio": {
+          "type": "string",
+          "enum": [
+            "9:16",
+            "16:9",
+            "1:1"
+          ]
+        },
+        "target_seconds": {
+          "type": "integer",
+          "minimum": 3,
+          "maximum": 600
+        },
+        "style": {
+          "default": "",
+          "type": "string",
+          "maxLength": 1000
+        },
+        "default_voice": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 80
+        },
+        "shots": {
+          "minItems": 1,
+          "maxItems": 60,
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "shot_size": {
+                "type": "string",
+                "enum": [
+                  "extreme_wide",
+                  "wide",
+                  "full",
+                  "medium",
+                  "close_up",
+                  "extreme_close_up"
+                ]
+              },
+              "camera_motion": {
+                "type": "string",
+                "enum": [
+                  "zoom_in",
+                  "zoom_out",
+                  "pan_left",
+                  "pan_right",
+                  "pan_up",
+                  "static"
+                ]
+              },
+              "motion_mode": {
+                "type": "string",
+                "enum": [
+                  "local_ken_burns",
+                  "cloud_video_model"
+                ]
+              },
+              "visual_prompt": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 2000
+              },
+              "narration": {
+                "type": "string",
+                "maxLength": 1000
+              },
+              "voice": {
+                "anyOf": [
+                  {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 80
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              },
+              "sfx_description": {
+                "default": "",
+                "type": "string",
+                "maxLength": 500
+              },
+              "target_duration_ms": {
+                "type": "integer",
+                "minimum": 500,
+                "maximum": 60000
+              }
+            },
+            "required": [
+              "shot_size",
+              "camera_motion",
+              "motion_mode",
+              "visual_prompt",
+              "narration",
+              "target_duration_ms"
+            ],
+            "additionalProperties": false
+          }
+        }
+      },
+      "required": [
+        "schema_version",
+        "title",
+        "aspect_ratio",
+        "target_seconds",
+        "default_voice",
+        "shots"
+      ],
+      "additionalProperties": false
+    }
+  }
+}

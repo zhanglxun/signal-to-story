@@ -1,7 +1,7 @@
 import type {
   Asset,
   AssetFilters,
-  AssetWorkspace,
+  AssetPage,
   CreateAssetInput,
   UpdateAssetInput,
 } from "@/contracts/asset"
@@ -51,54 +51,21 @@ function mapAsset(row: AssetRow): Asset {
   }
 }
 
-export async function getAssetWorkspace(): Promise<AssetWorkspace> {
+const DEFAULT_ASSET_PAGE_SIZE = 12
+
+export async function getAssets(filters: AssetFilters): Promise<AssetPage> {
   const supabase = requireSupabase()
-  const { data: organizations, error: organizationError } = await supabase
-    .from("organizations")
-    .select("id, name")
-    .order("created_at", { ascending: true })
-    .limit(1)
+  const pageSize = filters.pageSize ?? DEFAULT_ASSET_PAGE_SIZE
+  const page = Math.max(1, filters.page ?? 1)
+  const from = (page - 1) * pageSize
+  const to = from + pageSize - 1
 
-  if (organizationError) throw new Error("暂时无法读取资产所属组织。")
-  const organization = organizations?.[0] ?? null
-  if (!organization) return { organization: null, canManage: false }
-
-  const { data: userData, error: userError } = await supabase.auth.getUser()
-  if (userError || !userData.user) throw new Error("登录会话已失效，请重新登录。")
-
-  const { data: membership, error: membershipError } = await supabase
-    .from("organization_members")
-    .select("role")
-    .eq("organization_id", organization.id)
-    .eq("user_id", userData.user.id)
-    .maybeSingle()
-
-  if (membershipError) throw new Error("暂时无法读取资产管理权限。")
-  if (!membership) return { organization, canManage: false }
-
-  const { data: roleDefinition, error: roleError } = await supabase
-    .from("organization_roles")
-    .select("permissions")
-    .eq("organization_id", organization.id)
-    .eq("role_key", membership.role)
-    .maybeSingle()
-
-  if (roleError) throw new Error("暂时无法读取资产管理权限。")
-
-  return {
-    organization,
-    canManage: Boolean(roleDefinition?.permissions?.includes("content.manage")),
-  }
-}
-
-export async function getAssets(filters: AssetFilters): Promise<Asset[]> {
-  const supabase = requireSupabase()
   let request = supabase
     .from("assets")
-    .select(assetColumns)
+    .select(assetColumns, { count: "exact" })
     .eq("organization_id", filters.organizationId)
     .order("updated_at", { ascending: false })
-    .limit(100)
+    .range(from, to)
 
   if (filters.assetType) request = request.eq("asset_type", filters.assetType)
   if (typeof filters.active === "boolean") request = request.eq("is_active", filters.active)
@@ -109,9 +76,12 @@ export async function getAssets(filters: AssetFilters): Promise<Asset[]> {
     request = request.ilike("search_text", `%${pattern}%`)
   }
 
-  const { data, error } = await request
+  const { data, error, count } = await request
   if (error) throw new Error("暂时无法读取资产列表。")
-  return ((data ?? []) as unknown as AssetRow[]).map(mapAsset)
+  return {
+    assets: ((data ?? []) as unknown as AssetRow[]).map(mapAsset),
+    totalCount: count ?? 0,
+  }
 }
 
 export async function getAsset(assetId: number): Promise<Asset | null> {
@@ -124,6 +94,21 @@ export async function getAsset(assetId: number): Promise<Asset | null> {
 
   if (error) throw new Error("暂时无法读取资产详情。")
   return data ? mapAsset(data as unknown as AssetRow) : null
+}
+
+export async function getImageAssetOptions(organizationId: string): Promise<{ id: number; name: string }[]> {
+  const supabase = requireSupabase()
+  const { data, error } = await supabase
+    .from("assets")
+    .select("id, name")
+    .eq("organization_id", organizationId)
+    .eq("media_type", "image")
+    .eq("is_active", true)
+    .order("updated_at", { ascending: false })
+    .limit(200)
+
+  if (error) throw new Error("暂时无法读取图片资产。")
+  return (data ?? []) as { id: number; name: string }[]
 }
 
 export async function createAsset(input: CreateAssetInput): Promise<Asset> {

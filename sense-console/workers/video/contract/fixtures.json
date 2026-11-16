@@ -1,0 +1,92 @@
+{
+  "_comment": "Shared TS (vitest: src/test/video-studio.test.ts) <-> Python (workers/video/tests) contract fixtures. Edit both sides' code if you change these.",
+  "valid_jobs": [
+    {
+      "name": "shot render (cloud, approved)",
+      "job": {
+        "id": "7b1e6f0e-2a55-4b8a-9b8e-0b6f1f6b0a01",
+        "organization_id": "1f0c2d3e-4a5b-4c6d-8e7f-9a0b1c2d3e4f",
+        "job_type": "video_shot_render",
+        "target_type": "video_plan",
+        "target_id": "2a1b3c4d-5e6f-4a7b-8c9d-0e1f2a3b4c5d",
+        "target_revision": 3,
+        "approval_request_id": "3c2b1a0f-9e8d-4c7b-8a69-5f4e3d2c1b0a",
+        "created_by": "4d3c2b1a-0f9e-4d8c-8b7a-695f4e3d2c1b",
+        "payload": {
+          "schema_version": 1,
+          "plan_id": "2a1b3c4d-5e6f-4a7b-8c9d-0e1f2a3b4c5d",
+          "plan_revision": 3,
+          "shot_id": "5e4d3c2b-1a0f-4e9d-8c7b-6a5f4e3d2c1b",
+          "server_estimate": { "cost_cents": 35, "uses_cloud_video": true, "requires_approval": true }
+        }
+      }
+    },
+    {
+      "name": "compose (free)",
+      "job": {
+        "id": "7b1e6f0e-2a55-4b8a-9b8e-0b6f1f6b0a02",
+        "organization_id": "1f0c2d3e-4a5b-4c6d-8e7f-9a0b1c2d3e4f",
+        "job_type": "video_compose",
+        "target_type": "video_plan",
+        "target_id": "2a1b3c4d-5e6f-4a7b-8c9d-0e1f2a3b4c5d",
+        "target_revision": 1,
+        "approval_request_id": null,
+        "created_by": null,
+        "payload": { "schema_version": 1, "plan_id": "2a1b3c4d-5e6f-4a7b-8c9d-0e1f2a3b4c5d", "plan_revision": 1, "shot_id": null }
+      }
+    }
+  ],
+  "invalid_jobs": [
+    {
+      "name": "unknown job type",
+      "job": { "id": "7b1e6f0e-2a55-4b8a-9b8e-0b6f1f6b0a03", "organization_id": "1f0c2d3e-4a5b-4c6d-8e7f-9a0b1c2d3e4f", "job_type": "video_render_everything", "target_type": "video_plan", "target_id": "2a1b3c4d-5e6f-4a7b-8c9d-0e1f2a3b4c5d", "target_revision": 1, "approval_request_id": null, "created_by": null, "payload": { "schema_version": 1, "plan_id": "2a1b3c4d-5e6f-4a7b-8c9d-0e1f2a3b4c5d", "plan_revision": 1, "shot_id": null } }
+    },
+    {
+      "name": "wrong schema version",
+      "job": { "id": "7b1e6f0e-2a55-4b8a-9b8e-0b6f1f6b0a04", "organization_id": "1f0c2d3e-4a5b-4c6d-8e7f-9a0b1c2d3e4f", "job_type": "video_compose", "target_type": "video_plan", "target_id": "2a1b3c4d-5e6f-4a7b-8c9d-0e1f2a3b4c5d", "target_revision": 1, "approval_request_id": null, "created_by": null, "payload": { "schema_version": 2, "plan_id": "2a1b3c4d-5e6f-4a7b-8c9d-0e1f2a3b4c5d", "plan_revision": 1, "shot_id": null } }
+    },
+    {
+      "name": "target is not a video plan",
+      "job": { "id": "7b1e6f0e-2a55-4b8a-9b8e-0b6f1f6b0a05", "organization_id": "1f0c2d3e-4a5b-4c6d-8e7f-9a0b1c2d3e4f", "job_type": "video_compose", "target_type": "content_document", "target_id": "2a1b3c4d-5e6f-4a7b-8c9d-0e1f2a3b4c5d", "target_revision": 1, "approval_request_id": null, "created_by": null, "payload": { "schema_version": 1, "plan_id": "2a1b3c4d-5e6f-4a7b-8c9d-0e1f2a3b4c5d", "plan_revision": 1, "shot_id": null } }
+    }
+  ],
+  "semantic_invalid_jobs": [
+    {
+      "name": "shot render without shot_id",
+      "job": { "id": "7b1e6f0e-2a55-4b8a-9b8e-0b6f1f6b0a06", "organization_id": "1f0c2d3e-4a5b-4c6d-8e7f-9a0b1c2d3e4f", "job_type": "video_shot_render", "target_type": "video_plan", "target_id": "2a1b3c4d-5e6f-4a7b-8c9d-0e1f2a3b4c5d", "target_revision": 1, "approval_request_id": null, "created_by": null, "payload": { "schema_version": 1, "plan_id": "2a1b3c4d-5e6f-4a7b-8c9d-0e1f2a3b4c5d", "plan_revision": 1, "shot_id": null } }
+    }
+  ],
+  "valid_results": [
+    {
+      "schema_version": 1,
+      "job_type": "video_shot_render",
+      "engine": "dry-run",
+      "dry_run": true,
+      "plan_id": "2a1b3c4d-5e6f-4a7b-8c9d-0e1f2a3b4c5d",
+      "plan_revision": 3,
+      "assets": [
+        { "category": "voiceover", "asset_id": 11, "shot_id": "5e4d3c2b-1a0f-4e9d-8c7b-6a5f4e3d2c1b", "storage_path": "1f0c2d3e-4a5b-4c6d-8e7f-9a0b1c2d3e4f/2a1b3c4d-5e6f-4a7b-8c9d-0e1f2a3b4c5d/shot_01.wav", "mime_type": "audio/wav", "duration_ms": 3200, "placeholder": true },
+        { "category": "shot_clip", "asset_id": 12, "shot_id": "5e4d3c2b-1a0f-4e9d-8c7b-6a5f4e3d2c1b", "storage_path": "1f0c2d3e-4a5b-4c6d-8e7f-9a0b1c2d3e4f/2a1b3c4d-5e6f-4a7b-8c9d-0e1f2a3b4c5d/shot_01.mp4", "mime_type": "video/mp4", "duration_ms": 3500, "placeholder": true }
+      ],
+      "cost_cents": 0,
+      "shots": [{ "shot_id": "5e4d3c2b-1a0f-4e9d-8c7b-6a5f4e3d2c1b", "render_ms": 3500, "narration_ms": 3200, "status": "rendered" }],
+      "final_duration_ms": null,
+      "warnings": ["dry-run: cloud video model was NOT called"]
+    }
+  ],
+  "alignment_vectors": [
+    { "input": { "narrationMs": 3200, "targetMs": 4000, "motionMode": "local_ken_burns" }, "expected": { "renderMs": 3500, "cloudClipSeconds": null, "holdMs": 0, "driftMs": -500, "source": "narration" } },
+    { "input": { "narrationMs": null, "targetMs": 4000, "motionMode": "local_ken_burns" }, "expected": { "renderMs": 4000, "cloudClipSeconds": null, "holdMs": 0, "driftMs": 0, "source": "target" } },
+    { "input": { "narrationMs": 4800, "targetMs": 4000, "motionMode": "cloud_video_model" }, "expected": { "renderMs": 5100, "cloudClipSeconds": 10, "holdMs": 0, "driftMs": 1100, "source": "narration" } },
+    { "input": { "narrationMs": 4500, "targetMs": 6000, "motionMode": "cloud_video_model" }, "expected": { "renderMs": 4800, "cloudClipSeconds": 5, "holdMs": 0, "driftMs": -1200, "source": "narration" } },
+    { "input": { "narrationMs": 11000, "targetMs": 6000, "motionMode": "cloud_video_model" }, "expected": { "renderMs": 11300, "cloudClipSeconds": 10, "holdMs": 1300, "driftMs": 5300, "source": "narration" } },
+    { "input": { "narrationMs": 200, "targetMs": 4000, "motionMode": "local_ken_burns" }, "expected": { "renderMs": 1000, "cloudClipSeconds": null, "holdMs": 0, "driftMs": -3000, "source": "narration" } }
+  ],
+  "cost_vectors": [
+    { "shot": { "motionMode": "local_ken_burns", "targetDurationMs": 4000, "actualDurationMs": null, "narration": "一句旁白" }, "ttsProvider": "edge_tts", "expected": 0 },
+    { "shot": { "motionMode": "cloud_video_model", "targetDurationMs": 4000, "actualDurationMs": null, "narration": "一句旁白" }, "ttsProvider": "edge_tts", "expected": 35 },
+    { "shot": { "motionMode": "cloud_video_model", "targetDurationMs": 4000, "actualDurationMs": 4900, "narration": "一句旁白" }, "ttsProvider": "edge_tts", "expected": 70 },
+    { "shot": { "motionMode": "local_ken_burns", "targetDurationMs": 4000, "actualDurationMs": null, "narration": "长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长长" }, "ttsProvider": "cloud_tts", "expected": 4 },
+    { "shot": { "motionMode": "cloud_video_model", "targetDurationMs": 8000, "actualDurationMs": null, "narration": "" }, "ttsProvider": "cloud_tts", "expected": 70 }
+  ]
+}
