@@ -2,7 +2,7 @@
 
 星火工厂 · Signal to Story 面向读者的内容站（工程目录名 `sense-site`，用户可见品牌见 `src/config/brand.ts`）。
 
-- 产品范围：[PRD](../docs-site/design/sense-site-PRD.md) · 架构与权限：[SPEC](../docs-site/spec/sense-site-SPEC.md) · 计划：[建设计划](../docs-site/plan/sense-site-plan.md)
+- 产品范围、权限与 0.5 方向：[docs/modules/site.md](../docs/modules/site.md)
 - 部署与 SPA 回退：[docs/deployment.md](docs/deployment.md)
 
 ## 运行

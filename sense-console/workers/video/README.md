@@ -12,7 +12,7 @@
 
 ## 规则
 
-- **批准**：付费判定在数据库（见 `docs/agent-harness.md` §2.2）。worker 不判断、不能批准；付费任务未批准时根本无法入队/认领。
+- **批准**：付费判定在数据库（见 `docs/modules/harness.md` §4 与 `docs/modules/video.md`）。worker 不判断、不能批准；付费任务未批准时根本无法入队/认领。
 - **付费失败不自动重试**：`EngineError(billable=True)` → `fail_agent_job(retryable=false)`。edge-tts / 网络 / 数据库错误可重试。
 - **版本**：任务绑定计划 revision；认领后与锁定后各校验一次，不一致 → `failed/stale_target`。渲染中分镜被数据库锁定，不能改稿。
 - **心跳**：后台线程每 `lease/3` 秒续租；`cancel_requested` 在步骤边界停止（`cancelled`）；租约丢失则不再写入。SIGINT/SIGTERM 停止认领。

@@ -2,7 +2,7 @@
 
 ## Before changing the project
 
-- Read `README.md` and the relevant files under `docs-site/spec/`, `docs-site/design/`, and `docs-site/plan/`.
+- Read `README.md`, `docs/architecture.md`, and the relevant files under `docs/` (index: `docs/README.md`).
 - Put application code under `sense-console/` unless a specification explicitly says otherwise.
 - The user-facing product name is `Signal to Story`; `sense-console` is only the engineering directory name.
 

@@ -4,10 +4,8 @@ Read @README.md before making architectural changes.
 
 Also follow:
 
-- @docs-site/spec/Signal-to-Story总体架构-SPEC.md
-- @docs-site/plan/v2-unified-architecture-plan.md
-- @docs-site/plan/v2-master-execution-plan.md
-- @sense-console/docs/agent-harness.md
+- @docs/architecture.md (single architecture entry; layers, target layout, call rules, R0–R5 order)
+- @docs/README.md (doc index; module docs live in `docs/modules/`)
 
 ## Non-negotiable boundaries
 
@@ -22,6 +20,6 @@ Also follow:
 - Mandate and publishing gates must be enforced by the database (triggers/RPC); frontend checks are UX only, not gates.
 - `sense-site/` is the approved sibling reader-site project; it must not share code via packages.
 - Navigation has at most two levels, and the project uses one shadcn/ui Base UI component system.
-- Once a shared UI component exists for a given interaction, reuse it instead of hand-rolling a parallel implementation — e.g. every category-hierarchy dropdown uses `sense-console/src/components/source-categories/category-select.tsx`; see `sense-console/docs/frontend-conventions.md` for the running list.
+- Once a shared UI component exists for a given interaction, reuse it instead of hand-rolling a parallel implementation — e.g. every category-hierarchy dropdown uses `sense-console/src/components/source-categories/category-select.tsx`; see `docs/conventions/frontend.md` for the running list.
 
 Before handing off code, run typecheck, lint, tests, and build.

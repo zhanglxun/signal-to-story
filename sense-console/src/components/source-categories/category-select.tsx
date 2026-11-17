@@ -10,7 +10,7 @@ const ALL_VALUE = "__all__"
  * someone choose a `source_categories` row — a filter, a create/edit form
  * field, a future storyboard/asset category field, whatever — should render
  * this instead of hand-rolling another `NativeSelect`/`Select` over the
- * category list. See `docs/frontend-conventions.md` for the rule.
+ * category list. See `docs/conventions/frontend.md` for the rule.
  *
  * Renders each top-level category as a selectable item followed by its
  * children indented underneath, so the two-level hierarchy from

@@ -7,7 +7,7 @@ const admin = createClient(
 )
 // Custom scoped token authentication is performed atomically by the RPC.
 // capture -> accept_intake (unchanged); auto_draft -> quick_capture_for_connection, which acts as
-// the connection creator and enqueues content_draft jobs (see docs/quick-capture.md).
+// the connection creator and enqueues content_draft jobs (see docs/modules/intake.md).
 Deno.serve(
   createHandler(async (hash, input) =>
     input.intent === "auto_draft"

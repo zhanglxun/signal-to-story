@@ -1,6 +1,6 @@
 # Agent Harness Worker
 
-独立进程，消费 `public.agent_jobs`，执行「Context Pack → 生成 → 确定性预检 → 独立 LLM 评估 → 重写（≤ max_rounds）→ 提案 / 转人工」。设计与接口见 [docs/agent-harness.md](../../docs/agent-harness.md)。
+独立进程，消费 `public.agent_jobs`，执行「Context Pack → 生成 → 确定性预检 → 独立 LLM 评估 → 重写（≤ max_rounds）→ 提案 / 转人工」。设计与接口见 [docs/modules/harness.md](../../../docs/modules/harness.md)。
 
 - 只做 outbound 连接（Supabase HTTPS + 模型 API），没有监听端口。
 - 只使用 `service_role` 调受控 RPC 与少数表；不能批准、不能写知识库/决定记忆、不能改正式稿件、不能写发布记录（数据库拒绝）。

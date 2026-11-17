@@ -15,8 +15,7 @@ dist-ssr/
 output/
 test-results/
 playwright-report/
-docs-site/design/*.png
-docs-site/design/*.jpeg
+docs/assets/mockups/
 
 # Generated media for local video-factory demos.
 # Keep project plans, schemas, configuration, and source code in Git.

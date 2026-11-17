@@ -25,4 +25,4 @@
 
 - 要求有效用户 JWT 与目标组织的 `content.manage` 权限。
 - `mode: "sync"`（默认，或 `CONTENT_DRAFT_DEFAULT_MODE` 未设为 `queue`）：沿用单次模型调用写 `content_ai_proposals`，可计费请求不自动重试。
-- `mode: "queue"`：以调用者身份调用 `enqueue_agent_job` 写入幂等的 `agent_jobs`（`content_draft`），立即返回 `job_id`；由 `workers/agent` 执行生成—评估循环。详见 `docs/agent-harness.md`。
+- `mode: "queue"`：以调用者身份调用 `enqueue_agent_job` 写入幂等的 `agent_jobs`（`content_draft`），立即返回 `job_id`；由 `workers/agent` 执行生成—评估循环。详见仓库根目录 `docs/modules/harness.md`。

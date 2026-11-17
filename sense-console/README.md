@@ -9,7 +9,7 @@
 - 官方组件源码已完整拉取到 [`src/components/ui`](src/components/ui)，业务页面只组合这些组件和语义主题变量。
 - 外观设置仅使用 shadcn 官方主题色、明暗模式和圆角半径，不另建产品私有皮肤。
 
-具体约束、来源和更新命令见 [`docs/shadcn-foundation.md`](docs/shadcn-foundation.md)。
+具体约束、来源和更新命令见 [`docs/conventions/frontend.md`](../docs/conventions/frontend.md)。
 
 ## 本地运行
 
@@ -23,7 +23,7 @@ npm run dev
 
 ## Supabase
 
-在 `.env.local` 写入 `VITE_SUPABASE_URL` 和 `VITE_SUPABASE_PUBLISHABLE_KEY`。认证使用 Supabase Auth 邮箱密码模式。业务表通过 migrations 管理；云端内容首版的数据字典与 API 见 [cloud-content-api.md](docs/cloud-content-api.md)；详见 [docs/supabase-data-model.md](docs/supabase-data-model.md)。浏览器不得使用 `service_role` 密钥。
+在 `.env.local` 写入 `VITE_SUPABASE_URL` 和 `VITE_SUPABASE_PUBLISHABLE_KEY`。认证使用 Supabase Auth 邮箱密码模式。业务表通过 migrations 管理；云端内容首版的数据字典与 API 见 [docs/modules/content.md](../docs/modules/content.md)；详见 [docs/modules/data-model.md](../docs/modules/data-model.md)。浏览器不得使用 `service_role` 密钥。
 
 Supabase Dashboard 的 Auth 配置还需满足：
 
