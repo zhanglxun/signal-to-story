@@ -3,7 +3,7 @@
 ## Before changing the project
 
 - Read `README.md`, `docs/architecture.md`, and the relevant files under `docs/` (index: `docs/README.md`).
-- Put application code under `sense-console/` unless a specification explicitly says otherwise.
+- Put code where `docs/architecture.md` assigns it: Web console in `sense-console/`, reader site in `sense-site/`, database and Edge Functions in `supabase/`, long-running processes in `workers/`, shared test infrastructure in `testing/`.
 - The user-facing product name is `Signal to Story`; `sense-console` is only the engineering directory name.
 
 ## Architecture boundaries
@@ -13,7 +13,7 @@
 - Never expose `service_role`, database passwords, provider secrets, or other privileged keys to browser code.
 - Agents submit proposals or drafts; humans retain approval and publishing authority. They must not bypass Mandate database gates or directly approve, publish, delete, or overwrite approved/published documents.
 - Store media binaries in object storage and relational metadata in Postgres.
-- Long-running Agent/Media tasks run in independent `sense-console/workers/` processes (`agent/`, later `video/`), never in browser code; monorepo and `packages/` shared infrastructure remain forbidden until a real cross-runtime requirement exists.
+- Long-running Agent/Media tasks run in independent `workers/` processes (`agent/`, `video/`), never in browser code. No npm workspaces or published packages; shared code is plain source (see `docs/architecture.md`).
 
 ## Frontend conventions
 

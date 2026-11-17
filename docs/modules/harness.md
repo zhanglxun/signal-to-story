@@ -1,16 +1,16 @@
 # Agent 执行：任务队列、循环、Mandate 门禁
 
-> 由旧 `agent-harness.md` 和 `workers/agent/README.md` 精简而来。描述的是 `codex/0.3` 的现状；0.5 的调整方向见第 6 节。
+> 由旧 `agent-harness.md` 和 `workers/agent/README.md` 精简而来。描述的是 `codex/0.3` 的功能现状（路径已按 R1 更新）；0.5 的调整方向见第 6 节。
 
 ## 1. 组成（现状路径）
 
-| 部分 | 位置 | 0.5 位置 |
+| 部分 | 当前位置 | 目标位置 |
 | --- | --- | --- |
-| 契约 | `sense-console/src/contracts/agent-*.ts` | `core/contracts` |
-| 循环纯函数 | `sense-console/src/harness/*` | `core/harness`，并新增 `core/agent` |
-| worker | `sense-console/workers/agent/*` | `workers/agent` |
-| 数据库 | migrations `20261115100000/100100/100200` | `supabase/migrations` |
-| 入队入口 | Edge Function `content-draft`（`mode: "queue"`） | 不变 |
+| 契约 | `sense-console/src/contracts/agent-*.ts` | `core/contracts`（R2） |
+| 循环纯函数 | `sense-console/src/harness/*` | `core/harness`，并新增 `core/agent`（R2/R3） |
+| worker | `workers/agent/*` | 已就位 |
+| 数据库 | `supabase/migrations/20261115100000/100100/100200` | 已就位 |
+| 入队入口 | Edge Function `supabase/functions/content-draft`（`mode: "queue"`） | 不变 |
 
 ## 2. 表
 

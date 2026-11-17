@@ -1,5 +1,0 @@
-# Video worker: standard library only (urllib, threading, wave, zlib).
-# Optional:
-#   jsonschema>=4.20   full JSON Schema validation of the job contract (falls back to built-in checks)
-#   -r ../../video-factory/requirements.txt   only for the real engine (--engine video-factory: edge-tts, mutagen, requests, ...)
-jsonschema>=4.20.0

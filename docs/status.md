@@ -1,6 +1,6 @@
 # 实现状态与本地验证
 
-> 2026-11-17 · 基线是 `codex/0.3` 的代码（即 V2 的 P1～P7）。替代旧的 V2 实施总计划、验收清单和 README 中的状态段落。代码路径为 R1 搬家前的位置。
+> 2026-11-17 · 基线是 `codex/0.3` 的代码（即 V2 的 P1～P7），已按 R1 重排目录（功能与数据库未变）。替代旧的 V2 实施总计划、验收清单和 README 中的状态段落。
 
 ## 1. 总体状态
 
@@ -27,15 +27,21 @@ V2 的 P1～P7 都已**写完代码并在本地验证通过，但没有部署到
 不需要后端，也不产生费用（全部使用假模型）：
 
 ```bash
+# 仓库根目录：运行时一侧（workers、PGlite 全量迁移 + RLS 测试）
+npm install
+npm run typecheck && npm run lint && npm test
+npm run test:video-worker
+npm run demo:harness   # 出稿循环：先失败后通过 / 三轮不过转人工
+npm run demo:capture   # 一条链接 → 两份待审提案
+npm run demo:video     # 大纲 → 分镜 → 批准 → 占位成片
+
+# Web
 npm --prefix sense-console run typecheck && npm --prefix sense-console run lint
-npm --prefix sense-console run test           # 含 PGlite 全量迁移 + RLS 测试
-npm --prefix sense-console run build
-npm --prefix sense-console run test:video-worker
-npm --prefix sense-console run demo:harness   # 出稿循环：先失败后通过 / 三轮不过转人工
-npm --prefix sense-console run demo:capture   # 一条链接 → 两份待审提案
-npm --prefix sense-console run demo:video     # 大纲 → 分镜 → 批准 → 占位成片
+npm --prefix sense-console run test && npm --prefix sense-console run build
 npm --prefix sense-site run dev:demo          # 读者站演示数据
 ```
+
+2026-11-17 R1 后的结果：根目录 140 条、sense-console 152 条、sense-site 47 条、Python 18 条全部通过；三个 demo 均 PASS。
 
 ## 3. 已知断层
 
@@ -59,8 +65,8 @@ npm --prefix sense-site run dev:demo          # 读者站演示数据
 
 ## 4. 上线前的部署顺序（需要人批准后执行）
 
-1. 先在隔离库演练，再按文件名顺序把 migration 应用到线上（`supabase db push`），不手工建表。注意新增的私有存储桶和存储策略。
+1. 先在隔离库演练，再按文件名顺序把 migration 应用到线上（在仓库根目录 `supabase db push`），不手工建表。注意新增的私有存储桶和存储策略。
 2. 执行知识库种子 `supabase/seeds/knowledge_base.sql`。
 3. 部署 Edge Functions；`intake-gateway` 和 `im-webhook` 使用 `--no-verify-jwt`（由函数自己校验令牌或平台签名）。
-4. 按各 worker 的 `.env.example` 配置环境变量后启动 worker。
+4. 按各 worker 的 `.env.example` 配置环境变量后启动 worker（`docker-compose.yml` 或根目录 `npm run worker:agent`）。
 5. 分别构建并部署两个前端。

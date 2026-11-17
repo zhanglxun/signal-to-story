@@ -5,7 +5,7 @@ import { fileURLToPath } from "node:url"
 
 import { videoJobJsonSchema } from "../src/contracts/video-studio"
 
-export const VIDEO_CONTRACT_SCHEMA_PATH = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../workers/video/contract/video-job.schema.json")
+export const VIDEO_CONTRACT_SCHEMA_PATH = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../../workers/video/contract/video-job.schema.json")
 
 export function renderVideoContractSchema(): string {
   return `${JSON.stringify(videoJobJsonSchema(), null, 2)}\n`

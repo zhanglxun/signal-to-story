@@ -28,6 +28,6 @@
 
 ## 5. 0.5 调整方向
 
-- `sense-console/video-factory/src` 移到 `workers/video/engine`，去掉修改 `sys.path` 的导入方式；demo 项目素材移出仓库或放到 fixtures。
+- ~~`sense-console/video-factory` 移到 `workers/video/engine`~~（R1 已完成：Python 包 `engine`，worker 用 `from engine.composer import ...`，不再修改 `sys.path`；demo 项目在 `engine/projects/`，生成的媒体不进 git；含硬编码密钥的 `download_wanx_shots.py` 与两个 DashScope 测试脚本已删除）。
 - 视频事项挂到 `work_item_id`（R5 确认）。
 - mock 演示页标为演示或下线，不再和真实页面混在一起。

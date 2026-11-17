@@ -1,0 +1,20 @@
+# Root build context is used by workers/agent and workers/video images.
+**/node_modules
+**/dist
+**/.env
+**/.env.*
+!**/.env.example
+**/__pycache__
+**/*.pyc
+.git
+docs
+sense-site
+sense-console/e2e
+sense-console/public
+workers/video/engine/assets/bgm
+workers/video/engine/projects/*/audio
+workers/video/engine/projects/*/sfx
+workers/video/engine/projects/*/shots
+workers/video/engine/projects/*/keyframes
+workers/video/engine/projects/*/subtitles
+workers/video/engine/projects/*/output

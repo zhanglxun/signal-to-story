@@ -72,23 +72,26 @@ signal-to-story/
 │   │                              接口 LlmClient / SessionDriver / JobStore / ChannelSender
 │   └── harness/                   生成↔预检↔评估、Context Pack、注入检测、Mandate UX 判断
 │
-├── supabase/                      L2–L4 ← sense-console/supabase
-│   ├── migrations/ seeds/ tests/
+├── supabase/                      L2–L4 ← sense-console/supabase【R1 已完成】
+│   ├── migrations/ seeds/
+│   ├── tests/                     SQL 验收脚本；tests/db/ 为 vitest + PGlite 测试（← sense-console/src/test/db）
 │   └── functions/
-│       ├── _shared/im/            ← adapters/im，唯一一份（Supabase 官方约定的共享目录）
+│       ├── _shared/im/            ← adapters/im，唯一一份（Supabase 官方约定的共享目录），协议测试在旁边
 │       └── intake-gateway/ im-webhook/ content-draft/ admin-create-account/ *-upload-token/
 │
-├── workers/                       L5，独立进程 ← sense-console/workers
+├── workers/                       L5，独立进程 ← sense-console/workers【R1 已完成】
 │   ├── agent/                     本机节点，所有 CLI 调用只在这里
 │   │   ├── runner.ts main.ts      认领 / 心跳 / 分派
 │   │   ├── handlers/              content-draft、video-storyboard、fetch-source、chat-turn（新）
 │   │   ├── drivers/               LlmClient（cloud / cli）、SessionDriver（新）
 │   │   ├── backends/              JobStore 实现
-│   │   ├── delivery/              ← notify/，改成 outbox 投递器 + ChannelSender
-│   │   └── demo/                  ← 根目录散放的 demo-*、*-scenario
+│   │   ├── delivery/              ← notify/，改成 outbox 投递器 + ChannelSender（R3）
+│   │   ├── demo/                  ← 根目录散放的 demo-*、*-scenario【R1 已完成】
+│   │   └── Dockerfile             构建上下文为仓库根目录
 │   └── video/
 │       ├── video_worker/          队列消费
-│       └── engine/                ← video-factory/src（去掉 sys.path 注入）；demo 项目移到 fixtures 或仓库外
+│       ├── engine/                ← video-factory（Python 包 `engine`，去掉 sys.path 注入）【R1 已完成】
+│       └── Dockerfile             构建上下文为仓库根目录
 │
 ├── sense-console/                 L1 控制台前端，只在浏览器运行
 │   └── src/
@@ -104,12 +107,16 @@ signal-to-story/
 │       ├── components/ui/         只放 shadcn
 │       ├── components/shared/     跨域复用（category-select 等）
 │       └── lib/                   supabase client、safe-markdown、query-client
-│   （dev/ 只留开发期自检，CLI 调用逻辑改为引用 workers/agent/drivers；e2e/ scripts/ 保留）
+│   （dev/ 只留开发期自检，CLI 调用逻辑改为引用 workers/agent/drivers；e2e/ scripts/ 保留；
+│     e2e/support/intake-send.mjs ← adapters/intake/send.mjs，只剩 e2e 在用）
 │
 ├── sense-site/                    保留：L1 读者站，与 console 零共享代码
-└── testing/                       【新】← sense-console/src/test/db/pglite-harness 等测试基建，
-                                   console、workers、supabase 测试共用
-（删除：根目录的空 supabase/.temp、sense-console/adapters/、sense-console/video-factory/）
+├── testing/                       ← sense-console/src/test/db/{pglite-harness, supabase-shim.sql, video-studio-seed}【R1 已完成】
+│                                  workers 与 supabase 测试共用
+└── package.json · tsconfig.json · vitest.config.ts · eslint.config.js
+                                   运行时一侧（workers、testing、supabase 测试）的依赖与门禁；不是 npm workspace
+（已删除：sense-console/adapters/、sense-console/video-factory/、im-webhook/adapters 拷贝、
+  video-factory 的 3 个一次性脚本 download_wanx_shots.py / test_dashscope*.py）
 ```
 
 ## 4. 业务模块与调用关系
@@ -131,7 +138,8 @@ signal-to-story/
 **禁止的调用方向**（用 ESLint `no-restricted-imports` 和各自的 tsconfig 强制执行）：
 
 - `sense-console` 不能引用 `workers`，也不能 `spawn` 子进程。
-- `workers` 不能引用 `sense-console`。
+- `workers` 不能引用 `sense-console`。**过渡例外（R2 前）**：`workers/agent` 仍以相对路径引用 `sense-console/src/{harness,contracts}`；`supabase/tests/db` 引用 `sense-console/scripts/knowledge-seed`。
+- `workers` 可以引用 `supabase/functions/_shared`（纯 TS、Deno 兼容）：IM 协议在 Edge Function 收消息和 worker 发通知两处都要用，只能放在 Deno 能打包的位置。
 - `core` 不能引用任何其他目录。
 - `supabase/functions` 只能引用 `supabase/functions/_shared`。
 - `sense-site` 不能引用 `sense-console`，也不引用 `core`。
@@ -153,13 +161,14 @@ flowchart TB
 ## 5. 调整顺序
 
 1. **R0 文档**（2026-11-17 完成）：写 `docs/architecture.md`；旧文档按 0.5 方向精简后并入 `docs/`，不需要的直接删除，不保留 archive。纯文档改动，零风险。
-2. **R1 搬家**：
+2. **R1 搬家**（2026-11-17 完成）：
    - `sense-console/supabase` 移到根目录 `supabase/`，`sense-console/workers` 移到根目录 `workers/`；
    - IM 适配器只保留一份，放在 `supabase/functions/_shared/im`；
    - 删除根目录残留的 `supabase/.temp`；
    - `video-factory` 移到 `workers/video/engine`；
    - 抽出 `testing/`，把 worker 的 demo 归位；
-   - 同步修改 CLAUDE.md、README 与 docker-compose 中的路径和边界说明。
+   - 同步修改 CLAUDE.md、README 与 docker-compose 中的路径和边界说明；
+   - 实际做法：根目录新增 `package.json`（运行时一侧），Docker 镜像按进程拆开（`sense-console/Dockerfile` 只剩 Web，`workers/*/Dockerfile` 以仓库根为构建上下文），数据库与 migration 未改动。
 3. **R2 抽出 `core/`**：配好路径别名，再加上 import 规则检查。
 4. **R3 桥接统一并让 Chat 能在生产使用**：新建 `core/agent` 循环，加 `chat-turn` handler，删掉 Vite 里的 `spawn`。
 5. **R4 前端按模块重组**：和看板一起做，不单独大挪动。
@@ -245,4 +254,6 @@ flowchart LR
 ## 7. 下一步
 
 1. ~~R0 文档~~（已完成）。
-2. R1 搬家（同时修订 CLAUDE.md 的目录边界），跑完四道门禁后再进入 R2。
+2. ~~R1 搬家~~（已完成）。
+3. 下一轮：规划数据库设计（原 R5 提前讨论，只出方案，不动线上）。
+4. 之后 R2 抽出 `core/`：消除上面的过渡例外，并只保留一份 zod（目前根目录精确锁定 4.4.3 与 console 对齐，否则跨工程传递 schema 会类型不兼容）。

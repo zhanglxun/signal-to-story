@@ -38,5 +38,5 @@
 
 1. **统一入口层**：所有入口只做一件事，调用 `record_trigger` 写一条不可变的 `triggers` 记录（来源、来源内事件 id、来源内身份、内容、回复地址）。`signals / selections / intake_receipts / quick_captures` 合并或退役，表设计在 R5 确认。
 2. **起点授权**按来源允许名单判断，首版只有本人；名单之外的来源只产生「推断」类 trigger，进收件箱，不自动出稿。
-3. IM 适配器只保留一份，放在 `supabase/functions/_shared/im`；待审通知改走 outbox 投递，只在待审核、待答复、受阻三种情况推送。
+3. ~~IM 适配器只保留一份~~（R1 已完成：`supabase/functions/_shared/im`，`im-webhook` 与 `workers/agent/notify` 都引用它）。待审通知改走 outbox 投递，只在待审核、待答复、受阻三种情况推送。
 4. 定时发现选题先用影子模式：只记录建议，不立项。

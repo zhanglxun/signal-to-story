@@ -13,13 +13,8 @@
     "format": "prettier --write \"**/*.{ts,tsx}\"",
     "typecheck": "tsc -b",
     "preview": "vite preview",
-    "worker:agent": "tsx workers/agent/main.ts",
-    "demo:harness": "tsx workers/agent/demo-harness.ts",
-    "demo:capture": "tsx workers/agent/demo-capture.ts",
     "kb:seed": "tsx scripts/generate-knowledge-seed.ts",
-    "demo:video": "tsx workers/agent/demo-video-studio.ts",
-    "video:contract": "tsx scripts/generate-video-contract.ts",
-    "test:video-worker": "python3 -m unittest discover -s workers/video/tests -t workers/video"
+    "video:contract": "tsx scripts/generate-video-contract.ts"
   },
   "dependencies": {
     "@base-ui/react": "^1.7.0",
@@ -52,7 +47,6 @@
     "zod": "^4.4.3"
   },
   "devDependencies": {
-    "@electric-sql/pglite": "^0.5.16",
     "@eslint/js": "^9.36.0",
     "@playwright/test": "^1.55.1",
     "@testing-library/jest-dom": "^6.9.1",

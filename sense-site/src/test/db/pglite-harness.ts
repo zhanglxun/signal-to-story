@@ -1,6 +1,6 @@
 // Minimal in-process Postgres (PGlite) with a Supabase-like shim: the anon /
 // authenticated / service_role roles, auth.uid()/auth.jwt(), auth.users and a
-// tiny storage schema. Every migration in sense-console/supabase/migrations is
+// tiny storage schema. Every migration in supabase/migrations is
 // applied in filename order, so RLS and grants are exercised for real.
 //
 // This harness only lives inside sense-site tests and never connects to a
@@ -17,7 +17,7 @@ import { pgcrypto } from "@electric-sql/pglite/contrib/pgcrypto"
 const here = path.dirname(fileURLToPath(import.meta.url))
 export const migrationsDir = path.resolve(
   here,
-  "../../../../sense-console/supabase/migrations"
+  "../../../../supabase/migrations"
 )
 
 const supabaseShim = `

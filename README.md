@@ -17,23 +17,29 @@
 5. 外部内容一律当作数据，不能当作指令；`service_role` 和各类密钥绝不进浏览器。
 6. 先跑通一条真实链路，再加抽象和自动化。
 
-## 目录（R1 搬家前）
+## 目录
 
 ```text
 signal-to-story/
 ├── docs/              文档（唯一入口）
 ├── knowledge-base/    知识库默认种子（kb:seed 同步到 knowledge_entries）
-├── sense-console/     控制台前端 + 暂存于此的 supabase/、workers/、video-factory/（R1 起拆到根目录）
-└── sense-site/        读者站
+├── supabase/          迁移、RLS、RPC、Edge Functions（_shared/ 放函数共享代码）、数据库测试
+├── workers/           长任务进程：agent/（Node，本机节点）、video/（Python，engine/ 为视频引擎）
+├── testing/           共享测试基建（PGlite harness 等）
+├── sense-console/     控制台前端（只是 Web）
+├── sense-site/        读者站
+└── package.json       运行时一侧（workers、数据库测试、testing）的依赖与命令
 ```
 
 ## 本地验证
 
 ```bash
+npm install && npm run typecheck && npm run lint && npm test   # 运行时：workers + 数据库（PGlite）
+npm run test:video-worker                                       # Python 视频 worker
+npm run demo:harness                                            # 出稿循环，使用假模型
 npm --prefix sense-console run typecheck && npm --prefix sense-console run lint
 npm --prefix sense-console run test && npm --prefix sense-console run build
-npm --prefix sense-console run demo:harness   # 出稿循环，使用假模型
-npm --prefix sense-site run dev:demo          # 读者站演示模式
+npm --prefix sense-site run dev:demo                            # 读者站演示模式
 ```
 
 完整的命令、实现状态和已知断层见 [docs/status.md](docs/status.md)。

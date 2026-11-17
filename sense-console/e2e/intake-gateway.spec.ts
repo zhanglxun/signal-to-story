@@ -43,7 +43,7 @@ test("external assistant -> cloud gateway -> source and topic -> revoke", async 
     const messagePath = join(folder, "message.json")
     await writeFile(messagePath, JSON.stringify(payload))
     const result = await promisify(execFile)(process.execPath, [
-      "adapters/intake/send.mjs",
+      "e2e/support/intake-send.mjs",
       configPath,
       messagePath,
     ])

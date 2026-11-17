@@ -8,7 +8,6 @@ import { QuickCaptureForm } from "@/components/quick-capture/quick-capture-form"
 import type { AgentJob, ApprovalRequest } from "@/contracts/agent-job"
 import { isQuickCaptureShortcut, parseCaptureInput, type QuickCaptureRequest, type QuickCaptureResult } from "@/contracts/quick-capture"
 import { attentionCount, groupStepsByRound, groupTasks } from "@/lib/task-center"
-import { normalizeIntake } from "../../supabase/functions/intake-gateway/contract"
 
 function renderForm(submit: (input: QuickCaptureRequest) => Promise<QuickCaptureResult>) {
   const client = new QueryClient({ defaultOptions: { queries: { retry: false }, mutations: { retry: false } } })
@@ -85,20 +84,12 @@ describe("QuickCaptureForm", () => {
   })
 })
 
-describe("shortcut + gateway contract", () => {
+describe("shortcut", () => {
   it("Cmd/Ctrl+K opens the dialog", () => {
     expect(isQuickCaptureShortcut({ key: "k", metaKey: true, ctrlKey: false, altKey: false, shiftKey: false })).toBe(true)
     expect(isQuickCaptureShortcut({ key: "K", metaKey: false, ctrlKey: true, altKey: false, shiftKey: false })).toBe(true)
     expect(isQuickCaptureShortcut({ key: "k", metaKey: false, ctrlKey: false, altKey: false, shiftKey: false })).toBe(false)
     expect(isQuickCaptureShortcut({ key: "k", metaKey: true, ctrlKey: false, altKey: false, shiftKey: true })).toBe(false)
-  })
-
-  it("intake-gateway accepts auto_draft with platforms; capture payload shape is unchanged", () => {
-    const base = { version: 1, external_id: "m1", text: "t" }
-    expect(normalizeIntake({ ...base, intent: "capture" })).not.toHaveProperty("platforms")
-    expect(normalizeIntake({ ...base, intent: "auto_draft", platforms: ["x", "x"] })).toMatchObject({ intent: "auto_draft", platforms: ["x"] })
-    expect(() => normalizeIntake({ ...base, intent: "auto_draft", platforms: ["myspace"] })).toThrow()
-    expect(() => normalizeIntake({ ...base, intent: "capture", platforms: [] })).toThrow()
   })
 })
 

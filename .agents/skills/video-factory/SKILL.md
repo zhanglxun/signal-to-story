@@ -27,27 +27,27 @@ description: >-
 
 ## 2. 常用执行命令与接口
 
-工程根目录：`signal-to-story/sense-console/video-factory/`
+引擎目录：`signal-to-story/workers/video/engine/`（原 `sense-console/video-factory/`，现为 Python 包 `engine`）。以下命令在 `workers/video/` 下执行。
 
 ```bash
 # 激活环境
 export PATH="/opt/homebrew/bin:/usr/local/bin:$PATH"
-export PYTHONPATH=src
+cd workers/video
 
 # 1. 一键全流程跑通项目
-python3 src/pipeline.py --project <project_id>
+python3 -m engine.pipeline --project <project_id>
 
 # 2. 单独生成/更新配音与字幕
-python3 src/audio_engine.py --plan projects/<project_id>/video_plan.json
+python3 -m engine.audio_engine --plan engine/projects/<project_id>/video_plan.json
 
 # 3. 单独生成 SFX 音效
-python3 -c "from sfx_generator import generate_all_sfx_for_project; generate_all_sfx_for_project('projects/<project_id>')"
+python3 -c "from engine.sfx_generator import generate_all_sfx_for_project; generate_all_sfx_for_project('engine/projects/<project_id>')"
 
 # 4. 单独生成各个分镜视频片段 (本地运镜 / 万相 AI 视频)
-python3 src/video_engine.py --plan projects/<project_id>/video_plan.json
+python3 -m engine.video_engine --plan engine/projects/<project_id>/video_plan.json
 
 # 5. 多轨音视频剪辑合成 (包含 BGM Ducking 混音、SFX 与字幕)
-python3 src/composer.py --plan projects/<project_id>/video_plan.json --bgm assets/bgm/cheerful_fantasy.mp3
+python3 -m engine.composer --plan engine/projects/<project_id>/video_plan.json --bgm engine/assets/bgm/cheerful_fantasy.mp3
 ```
 
 ---

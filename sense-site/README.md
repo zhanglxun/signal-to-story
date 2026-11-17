@@ -33,9 +33,9 @@ src/
 └── test/              vitest；test/db 为 PGlite 权限隔离测试
 ```
 
-数据库迁移不在本目录：站点发布层位于 `sense-console/supabase/migrations/20261116100000_create_site_publishing.sql` 与 `20261116100100_site_publish_functions.sql`，SQL 验收脚本为 `sense-console/supabase/tests/site_publishing.sql`。
+数据库迁移不在本目录：站点发布层位于仓库根目录 `supabase/migrations/20261116100000_create_site_publishing.sql` 与 `20261116100100_site_publish_functions.sql`，SQL 验收脚本为 `supabase/tests/site_publishing.sql`。
 
-`src/test/db/` 使用 PGlite 在进程内应用 sense-console 的全部迁移，并以 anon / 注册读者 / 后台成员身份真实执行 RLS 与 GRANT；不连接任何远程数据库。
+`src/test/db/` 使用 PGlite 在进程内应用 `supabase/migrations` 的全部迁移，并以 anon / 注册读者 / 后台成员身份真实执行 RLS 与 GRANT；不连接任何远程数据库。
 
 ## 组件与主题基线
 

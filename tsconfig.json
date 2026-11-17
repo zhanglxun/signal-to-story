@@ -1,0 +1,32 @@
+{
+  // Runtime side: workers, shared test infra, Supabase tests and Edge Function shared code.
+  // sense-console / sense-site have their own tsconfig. Until R2 extracts core/, workers
+  // import sense-console/src/{harness,contracts} by relative path.
+  "compilerOptions": {
+    "target": "es2023",
+    "lib": ["ES2023", "DOM"],
+    "module": "esnext",
+    "types": ["node"],
+    "skipLibCheck": true,
+    "moduleResolution": "bundler",
+    "resolveJsonModule": true,
+    "allowImportingTsExtensions": true,
+    "verbatimModuleSyntax": true,
+    "moduleDetection": "force",
+    "noEmit": true,
+    "strict": true,
+    "noUnusedLocals": true,
+    "noUnusedParameters": true,
+    "erasableSyntaxOnly": true,
+    "noFallthroughCasesInSwitch": true
+  },
+  "include": [
+    "workers/agent",
+    "testing",
+    "supabase/tests/db",
+    "supabase/functions/_shared",
+    "supabase/functions/intake-gateway/*.test.ts",
+    "vitest.config.ts",
+    "eslint.config.js"
+  ]
+}

@@ -10,7 +10,7 @@ export const CONSOLE_ROOT = path.resolve(here, "..")
 export const REPO_ROOT = path.resolve(CONSOLE_ROOT, "..")
 export const KNOWLEDGE_DIR = path.join(REPO_ROOT, "knowledge-base")
 export const GENERATED_TS = path.join(CONSOLE_ROOT, "src/data/knowledge-base-defaults.generated.ts")
-export const GENERATED_SQL = path.join(CONSOLE_ROOT, "supabase/seeds/knowledge_base.sql")
+export const GENERATED_SQL = path.join(REPO_ROOT, "supabase/seeds/knowledge_base.sql")
 
 function walk(dir: string): string[] {
   return readdirSync(dir)

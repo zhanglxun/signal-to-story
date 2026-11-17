@@ -26,9 +26,8 @@ services:
 
   agent-worker:
     build:
-      context: ./sense-console
-      dockerfile: Dockerfile
-      target: agent-worker
+      context: .
+      dockerfile: workers/agent/Dockerfile
     environment:
       SUPABASE_URL: ${SUPABASE_URL:?SUPABASE_URL is required}
       SUPABASE_SERVICE_ROLE_KEY: ${SUPABASE_SERVICE_ROLE_KEY:?SUPABASE_SERVICE_ROLE_KEY is required}
@@ -54,9 +53,8 @@ services:
 
   video-worker:
     build:
-      context: ./sense-console
-      dockerfile: Dockerfile
-      target: video-worker
+      context: .
+      dockerfile: workers/video/Dockerfile
     environment:
       SUPABASE_URL: ${SUPABASE_URL:?SUPABASE_URL is required}
       SUPABASE_SERVICE_ROLE_KEY: ${SUPABASE_SERVICE_ROLE_KEY:?SUPABASE_SERVICE_ROLE_KEY is required}

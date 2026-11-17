@@ -17,15 +17,15 @@ test-results/
 playwright-report/
 docs/assets/mockups/
 
-# Generated media for local video-factory demos.
+# Generated media for local video engine demos.
 # Keep project plans, schemas, configuration, and source code in Git.
-sense-console/video-factory/assets/bgm/
-sense-console/video-factory/projects/demo_*/audio/
-sense-console/video-factory/projects/demo_*/sfx/
-sense-console/video-factory/projects/demo_*/shots/
-sense-console/video-factory/projects/demo_*/keyframes/
-sense-console/video-factory/projects/demo_*/subtitles/
-sense-console/video-factory/projects/demo_*/output/
+workers/video/engine/assets/bgm/
+workers/video/engine/projects/demo_*/audio/
+workers/video/engine/projects/demo_*/sfx/
+workers/video/engine/projects/demo_*/shots/
+workers/video/engine/projects/demo_*/keyframes/
+workers/video/engine/projects/demo_*/subtitles/
+workers/video/engine/projects/demo_*/output/
 
 # Automated daily run logs (state lives in Supabase; keep only real deliverables)
 

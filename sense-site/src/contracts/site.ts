@@ -1,5 +1,5 @@
 // Reader-facing contracts. These mirror the safe column sets exposed by
-// sense-console/supabase/migrations/20261116100000_create_site_publishing.sql.
+// supabase/migrations/20261116100000_create_site_publishing.sql.
 // Nothing here carries back-office identifiers (organization, source document).
 
 export const accessLevels = {
