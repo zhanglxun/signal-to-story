@@ -36,3 +36,6 @@ workers/video/engine/projects/demo_*/output/
 .idea/
 *.sw?
 
+
+# DB0 live exports (local only; rerun schema_snapshot.sql before go-live)
+supabase/snippets/*.json

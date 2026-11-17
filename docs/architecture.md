@@ -123,7 +123,7 @@ signal-to-story/
 
 | 模块 | 所在层 | 代码位置 | 可以调用 | 主要的表（下一步细化） |
 |---|---|---|---|---|
-| 资讯收集 | L1/L2 | `sense-console/src/modules/intake`、`supabase/functions/intake-gateway`、`im-webhook` | RPC `record_trigger` | triggers、source_categories |
+| 资讯收集 | L1/L2 | `sense-console/src/modules/intake`、`supabase/functions/intake-gateway`、`im-webhook` | RPC `record_intake_event` | intake_events、source_categories |
 | 看板 / 事项 | L1 | `sense-console/src/modules/board` | 视图 + RPC | work_items、work_item_board |
 | 内容生产 | L1 | `sense-console/src/modules/content` | RLS + RPC | content_documents / revisions / proposals |
 | Chat | L1 → L0 → L5 | 界面 `modules/chat`；循环 `core/agent`；执行 `workers/agent/handlers/chat-turn` | 只写消息，由节点执行 | chat_sessions / messages |
@@ -172,7 +172,7 @@ flowchart TB
 3. **R2 抽出 `core/`**：配好路径别名，再加上 import 规则检查。
 4. **R3 桥接统一并让 Chat 能在生产使用**：新建 `core/agent` 循环，加 `chat-turn` handler，删掉 Vite 里的 `spawn`。
 5. **R4 前端按模块重组**：和看板一起做，不单独大挪动。
-6. **R5 按模块确认表的归属**：每个模块拥有哪些表、读写哪些表，然后再动 Supabase 设计。`codex/0.4` 中 design/12 §4 的表清单作为候选，不当作基准。
+6. **R5 按模块确认表的归属**：已提前完成规划，见 [database.md](database.md)；实施按其中 DB0～DB7，与 R2～R4 交错推进。
 
 每一步都跑一遍 typecheck / lint / test / build 再进入下一步。
 
@@ -255,5 +255,5 @@ flowchart LR
 
 1. ~~R0 文档~~（已完成）。
 2. ~~R1 搬家~~（已完成）。
-3. 下一轮：规划数据库设计（原 R5 提前讨论，只出方案，不动线上）。
+3. ~~规划数据库设计~~（方案见 [database.md](database.md)，审计见第 9 节，决定见第 10 节）。
 4. 之后 R2 抽出 `core/`：消除上面的过渡例外，并只保留一份 zod（目前根目录精确锁定 4.4.3 与 console 对齐，否则跨工程传递 schema 会类型不兼容）。

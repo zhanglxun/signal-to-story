@@ -6,6 +6,7 @@
 | --- | --- | --- |
 | [architecture.md](architecture.md) | 分层、目录、模块调用关系、调整顺序 | 动任何结构之前 |
 | [product.md](product.md) | 产品定位、内容方法论、质量门禁 | 做内容相关功能、写 Agent 提示词或评估清单时 |
+| [database.md](database.md) | 数据库目标模型、表归属、迁移步骤 DB0～DB7 | 动表结构或迁移之前 |
 | [status.md](status.md) | 已实现什么、怎么本地验证、已知断层 | 判断某个能力能不能用时 |
 | [research.md](research.md) | 外部 Agent 工程研究的结论 | 设计 Agent 循环和门禁时 |
 | [modules/](modules/) | 每个模块一页：职责、现状、0.5 调整方向 | 改某个模块时 |
