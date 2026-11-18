@@ -9,7 +9,7 @@ const FRIENDLY: Array<[RegExp, string]> = [
 
 /**
  * Atomic quick capture via the `quick_capture` RPC (RLS + permission checks in the database).
- * Same idempotency key -> same result (duplicate=true), never duplicate projects or jobs.
+ * Same idempotency key -> same result (duplicate=true), never duplicate work items or jobs.
  */
 export async function submitQuickCapture(input: QuickCaptureRequest): Promise<QuickCaptureResult> {
   const client = getSupabaseClient()

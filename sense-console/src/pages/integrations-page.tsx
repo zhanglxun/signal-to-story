@@ -7,13 +7,15 @@ import { ImChannelGuide } from "@/components/intake/im-channel-guide"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
+import { Badge } from "@/components/ui/badge"
+import { intakeSourceLabels, titleFromInput } from "@/contracts/work-item"
 import { getContentWorkspace } from "@/services/content-workspace-service"
+import { listRecentExternalInputs } from "@/services/intake-service"
 import {
   createIntakeConnection,
   imWebhookEndpoint,
   intakeEndpoint,
   listIntakeConnections,
-  listIntakeReceipts,
   revokeIntakeConnection,
   type IntakeAdapter,
 } from "@/services/intake-gateway-service"
@@ -38,8 +40,8 @@ export function IntegrationsPage() {
     enabled: Boolean(org && workspace.data?.canManage),
   })
   const receipts = useQuery({
-    queryKey: ["intake-receipts", org],
-    queryFn: () => listIntakeReceipts(org!),
+    queryKey: ["intake-external", org],
+    queryFn: () => listRecentExternalInputs(org!),
     enabled: Boolean(org),
     refetchInterval: 10000,
   })
@@ -83,7 +85,7 @@ export function IntegrationsPage() {
       <PageHeader
         title="外部接入"
         eyebrow="Connections"
-        description="统一管理飞书机器人、企业微信机器人、Dot 助手、iOS 快捷指令等外部个人助手入口，自动保存信源并形成待评估选题。"
+        description="统一管理飞书机器人、企业微信机器人、Dot 助手、iOS 快捷指令等外部个人助手入口，收到的内容统一进入收件箱。"
         actions={
           <div className="flex flex-wrap gap-2">
             <Button nativeButton={false} variant="outline" render={<Link to="/system/models" />}>
@@ -126,8 +128,8 @@ export function IntegrationsPage() {
             <CardTitle className="text-sm">TOP 1 · 飞书自建应用机器人 (推荐)</CardTitle>
           </CardHeader>
           <CardContent className="space-y-2 text-xs text-muted-foreground">
-            <p>个人免费创建企业即可开通，支持长连接收消息与交互式审核卡片回传，复用下方统一收录凭证。</p>
-            <p className="font-mono text-foreground">adapter: &quot;generic&quot; (Feishu Bot)</p>
+            <p>个人免费创建企业即可开通。在下方创建适配器为飞书的连接，把 Webhook 地址填到飞书开放平台。</p>
+            <p className="font-mono text-foreground">adapter: &quot;feishu&quot;</p>
           </CardContent>
         </Card>
         <Card>
@@ -135,7 +137,7 @@ export function IntegrationsPage() {
             <CardTitle className="text-sm">TOP 2 · 企业微信机器人 / iOS 快捷指令</CardTitle>
           </CardHeader>
           <CardContent className="space-y-2 text-xs text-muted-foreground">
-            <p>支持企微智能机器人回调或手机系统分享菜单直调下方 HTTPS 收录网关，自动幂等防重。</p>
+            <p>企微智能机器人走 IM Webhook（在下方创建企业微信连接）；iOS 快捷指令直调下方 HTTPS 收录网关，自动幂等防重。</p>
             <p className="font-mono text-foreground">POST /functions/v1/intake-gateway</p>
           </CardContent>
         </Card>
@@ -148,9 +150,9 @@ export function IntegrationsPage() {
           <p className="break-all">{intakeEndpoint()}</p>
           <p>
             POST · 每个连接每小时最多 100 条 ·
-            同一消息重复投递不会重复创建选题。
+            同一消息重复投递不会重复收录。
           </p>
-          <p>来源原文保留，链接暂不自动抓取。收录成功不代表事实已经核实。</p>
+          <p>来源原文保留，进入收件箱等你处理。收录成功不代表事实已经核实。</p>
         </CardContent>
       </Card>
       {workspace.data?.canManage && (
@@ -181,7 +183,7 @@ export function IntegrationsPage() {
               </select>
             </label>
             <p className="text-sm text-muted-foreground">
-              凭证只允许向当前组织收录选题，30
+              凭证只允许向当前组织收录输入，30
               天到期，可随时撤销。每个助手应使用独立凭证。
             </p>
             <Button
@@ -239,7 +241,7 @@ export function IntegrationsPage() {
               <li>
                 Dot 云端安全授权尚未完成；下载本机配置不代表手机端已连接。
               </li>
-              <li>Dot 必须返回真实收录编号；在下方记录或选题列表核对结果。</li>
+              <li>Dot 必须返回真实收录编号；在下方记录或收件箱核对结果。</li>
             </ol>
           </CardContent>
         </Card>
@@ -306,16 +308,17 @@ export function IntegrationsPage() {
               <div key={r.id} className="space-y-2 rounded border p-3">
                 <Link
                   className="font-medium text-primary underline"
-                  to={`/topics/${r.selection_id}`}
+                  to={r.work_item_id ? `/work-items/${r.work_item_id}` : "/intake"}
                 >
-                  {r.payload.title}
+                  {titleFromInput(r)}
                 </Link>
-                <p className="text-sm break-words whitespace-pre-wrap">
-                  {r.payload.text}
+                <p className="line-clamp-4 text-sm break-words whitespace-pre-wrap">
+                  {r.text}
                 </p>
-                <p className="text-xs break-all text-muted-foreground">
-                  回执 {r.id} · 消息 {r.external_id} ·{" "}
-                  {new Date(r.created_at).toLocaleString()} · 待核实 / 待选定
+                <p className="flex flex-wrap items-center gap-2 text-xs break-all text-muted-foreground">
+                  <Badge variant="outline">{intakeSourceLabels[r.source]}</Badge>
+                  消息 {r.external_id} · {new Date(r.created_at).toLocaleString()} ·{" "}
+                  {r.work_item_id ? "已归入事项" : r.ignored_at ? "已忽略" : "在收件箱"}
                 </p>
               </div>
             ))

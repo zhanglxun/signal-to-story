@@ -649,14 +649,14 @@ export function ChatAssistantPage({
             <div className="flex flex-wrap items-center justify-between gap-2 border-t pt-3 text-xs text-muted-foreground">
               <span className="flex items-center gap-1.5">
                 <InboxIcon className="size-3.5" />
-                提示：所有通过「极简速记」与「外部接入」收录的内容统一汇总在内容中心。
+                提示：所有通过「极简速记」与「外部接入」收录的内容统一进入收件箱。
               </span>
               <div className="flex gap-3">
                 <Link to="/intake" className="text-primary hover:underline">
-                  查看待处理信息 →
+                  查看收件箱 →
                 </Link>
-                <Link to="/topics" className="text-primary hover:underline">
-                  查看候选选题池 →
+                <Link to="/work-items" className="text-primary hover:underline">
+                  查看事项 →
                 </Link>
               </div>
             </div>

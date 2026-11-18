@@ -35,7 +35,7 @@ export function QuickCaptureDialog() {
         <DialogContent className="sm:max-w-lg">
           <DialogHeader>
             <DialogTitle>速记</DialogTitle>
-            <DialogDescription>粘贴链接或写一句想法；可选择只收进选题池，或直接立项并让 Agent 出稿到待审。</DialogDescription>
+            <DialogDescription>粘贴链接或写一句想法；可以只收进收件箱，或直接建事项让 Agent 出稿到待审。</DialogDescription>
           </DialogHeader>
           {open && <QuickCaptureForm autoFocus onNavigate={() => setOpen(false)} />}
         </DialogContent>

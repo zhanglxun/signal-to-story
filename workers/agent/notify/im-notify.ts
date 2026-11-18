@@ -29,7 +29,7 @@ type Target = {
   status: ReviewNotice["status"] | string
   rounds: number
   max_rounds?: number
-  project_id?: string | null
+  work_item_id?: string | null
   document_id?: string | null
   platform?: string | null
   title?: string | null
@@ -63,7 +63,7 @@ export async function notifyJobNeedsHuman(deps: ImNotifyDeps, job: { id: string;
       maxRounds: t.max_rounds,
       summary: job.summary,
       taskUrl: consoleUrl(base, `/tasks/${job.id}`),
-      reviewUrl: consoleUrl(base, t.project_id ? `/content/projects/${t.project_id}` : `/tasks/${job.id}`),
+      reviewUrl: consoleUrl(base, t.work_item_id ? `/work-items/${t.work_item_id}` : `/tasks/${job.id}`),
     }
     const doFetch = deps.fetch ?? ((u, i) => fetch(u, i))
     if (t.channel === "feishu") {

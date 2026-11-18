@@ -18,15 +18,14 @@ export interface QuickCaptureRequest {
 }
 
 export interface QuickCaptureResult {
-  captureId: string
+  eventId: string
   intent: QuickCaptureIntent
   duplicate: boolean
-  signalId: number
-  selectionId: number
-  projectId: string | null
+  /** null for capture_only: the input waits in the inbox. */
+  workItemId: string | null
   documents: Array<{ platform: string; documentId: string; jobId: string }>
-  topicPath: string
-  projectPath: string | null
+  inboxPath: string
+  itemPath: string | null
 }
 
 const URL_PATTERN = /https?:\/\/[^\s<>"'，。！？、；：）】」]+/i
@@ -62,15 +61,13 @@ export function newCaptureIdempotencyKey(): string {
 export function mapQuickCaptureResult(row: Record<string, unknown>): QuickCaptureResult {
   const docs = Array.isArray(row.documents) ? (row.documents as Array<Record<string, unknown>>) : []
   return {
-    captureId: String(row.capture_id),
+    eventId: String(row.event_id),
     intent: row.intent as QuickCaptureIntent,
     duplicate: Boolean(row.duplicate),
-    signalId: Number(row.signal_id),
-    selectionId: Number(row.selection_id),
-    projectId: row.project_id == null ? null : String(row.project_id),
+    workItemId: row.work_item_id == null ? null : String(row.work_item_id),
     documents: docs.map((d) => ({ platform: String(d.platform), documentId: String(d.document_id), jobId: String(d.job_id) })),
-    topicPath: String(row.topic_path),
-    projectPath: row.project_path == null ? null : String(row.project_path),
+    inboxPath: typeof row.inbox_path === "string" ? row.inbox_path : "/intake",
+    itemPath: row.item_path == null ? null : String(row.item_path),
   }
 }
 

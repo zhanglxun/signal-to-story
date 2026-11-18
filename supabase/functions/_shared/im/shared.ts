@@ -1,7 +1,7 @@
 /* eslint-disable no-control-regex */
 // Pure, runtime-neutral IM helpers (no Deno / browser APIs). Shared by the im-webhook Edge Function,
 // the worker notifier and vitest. Message text is ALWAYS untrusted data: it is only ever stored as a
-// signal/note and never interpreted as an instruction to approve, publish or delete anything.
+// note and never interpreted as an instruction to approve, publish or delete anything.
 import { Buffer } from "node:buffer"
 import { createHash, timingSafeEqual } from "node:crypto"
 
@@ -128,16 +128,16 @@ export function safeEqual(a: string, b: string): boolean {
   return x.length === y.length && timingSafeEqual(x, y)
 }
 
+/** Result of public.im_quick_capture / quick_capture_for_connection (supabase/migrations/20261117100000_capture.sql). */
 export type CaptureResult = {
-  capture_id?: string
+  event_id?: string
   receipt_id?: string
   intent?: string
   duplicate?: boolean
-  selection_id?: number
-  project_id?: string | null
+  work_item_id?: string | null
   documents?: Array<{ platform: string; document_id: string; job_id: string }>
-  topic_path?: string
-  project_path?: string | null
+  inbox_path?: string
+  item_path?: string | null
 }
 
 export function consoleUrl(base: string, path: string): string {
@@ -146,14 +146,14 @@ export function consoleUrl(base: string, path: string): string {
 
 /** Plain-text receipt: what was captured, whether auto-drafting started, and where to look. */
 export function buildReceiptText(result: CaptureResult, consoleBase: string): string {
-  const topic = consoleUrl(consoleBase, result.topic_path ?? `/topics/${result.selection_id ?? ""}`)
+  const inbox = consoleUrl(consoleBase, result.inbox_path ?? "/intake")
   const docs = result.documents ?? []
   if (docs.length > 0) {
     const labels = docs.map((d) => PLATFORM_LABELS[d.platform] ?? d.platform).join("、")
-    const project = result.project_path ? consoleUrl(consoleBase, result.project_path) : topic
-    return `已收录并开始自动出稿（${labels}，共 ${docs.length} 篇，生成后将进入待审核，不会自动发布）。\n项目：${project}\n任务：${consoleUrl(consoleBase, "/tasks")}`
+    const item = result.item_path ? consoleUrl(consoleBase, result.item_path) : inbox
+    return `已收录并开始自动出稿（${labels}，共 ${docs.length} 篇，生成后将进入待审核，不会自动发布）。\n事项：${item}\n任务：${consoleUrl(consoleBase, "/tasks")}`
   }
-  return `已收录到选题库（仅收录，未自动出稿）。如需出稿，请发送「出稿 + 链接/想法」，或在控制台操作。\n选题：${topic}`
+  return `已收录到收件箱（仅收录，未自动出稿）。如需出稿，请发送「出稿 + 链接/想法」，或在控制台操作。\n收件箱：${inbox}`
 }
 
 export const HINT_FOLLOWUP = "暂不支持在 IM 中补充或修改任务，请在控制台任务页追加一轮。"

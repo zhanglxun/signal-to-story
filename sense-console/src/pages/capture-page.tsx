@@ -23,7 +23,7 @@ export function CapturePage() {
         </header>
         <div>
           <h1 className="text-xl font-semibold">速记</h1>
-          <p className="mt-1 text-sm text-muted-foreground">随手收进选题池，或直接立项让 Agent 出稿到待审。</p>
+          <p className="mt-1 text-sm text-muted-foreground">随手收进收件箱，或直接建事项让 Agent 出稿到待审。</p>
         </div>
         <QuickCaptureForm autoFocus initialRaw={captureRawFromParams(params)} />
         <Collapsible className="rounded-lg border">

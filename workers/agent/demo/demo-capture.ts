@@ -23,10 +23,10 @@ async function main() {
     key: "demo-capture-0001",
   }
   const capture = await quickCapture(db, ws.ownerId, input)
-  console.log(`\nquick_capture(auto_draft) -> signal=${capture.signal_id} selection=${capture.selection_id} project=${capture.project_id}`)
+  console.log(`\nquick_capture(auto_draft) -> input=${capture.event_id} work_item=${capture.work_item_id}`)
   for (const d of capture.documents) console.log(`  document ${d.platform.padEnd(16)} ${d.document_id}  job ${d.job_id}`)
   const dup = await quickCapture(db, ws.ownerId, input)
-  console.log(`retry with same key -> duplicate=${dup.duplicate}, same project=${dup.project_id === capture.project_id}`)
+  console.log(`retry with same key -> duplicate=${dup.duplicate}, same work item=${dup.work_item_id === capture.work_item_id}`)
 
   console.log("\nworker (fake fetcher + fake generator + fake evaluator):")
   const results = await drainQueue(db, {
@@ -50,7 +50,7 @@ async function main() {
 
   const final = await db.asUser(ws.viewerId, async (tx) => {
     const jobs = await tx.query<{ id: string; status: string; rounds: number; hops_used: number; cost_cents: string }>(
-      "select id, status, rounds, hops_used, cost_cents from public.agent_jobs where payload->>'quick_capture_id'=$1", [capture.capture_id])
+      "select id, status, rounds, hops_used, cost_cents from public.agent_jobs where payload->>'intake_event_id'=$1", [capture.event_id])
     const proposals = await tx.query<{ id: string; agent_job_id: string }>("select id, agent_job_id from public.content_ai_proposals where agent_job_id = any($1)", [jobs.rows.map((j) => j.id)])
     return { jobs: jobs.rows, proposals: proposals.rows }
   })

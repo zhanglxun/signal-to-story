@@ -21,7 +21,7 @@ function renderForm(submit: (input: QuickCaptureRequest) => Promise<QuickCapture
 }
 
 const okResult = (over: Partial<QuickCaptureResult> = {}): QuickCaptureResult => ({
-  captureId: "c1", intent: "capture_only", duplicate: false, signalId: 1, selectionId: 7, projectId: null, documents: [], topicPath: "/topics/7", projectPath: null, ...over,
+  eventId: "e1", intent: "capture_only", duplicate: false, workItemId: null, documents: [], inboxPath: "/intake", itemPath: null, ...over,
 })
 
 describe("parseCaptureInput", () => {
@@ -45,7 +45,7 @@ describe("QuickCaptureForm", () => {
     await user.click(screen.getByRole("button", { name: "收录" }))
     await waitFor(() => expect(submit).toHaveBeenCalledTimes(1))
     expect(submit.mock.calls[0][0]).toMatchObject({ intent: "capture_only", url: "https://example.com/a", note: "角度", platforms: [] })
-    expect(await screen.findByText("已收进选题池")).toBeInTheDocument()
+    expect(await screen.findByText("已收进收件箱")).toBeInTheDocument()
 
     await user.type(screen.getByLabelText("链接或一句话想法"), "一个想法")
     await user.click(screen.getByRole("button", { name: /自动出稿到待审/ }))

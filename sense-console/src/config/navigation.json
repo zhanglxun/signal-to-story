@@ -31,7 +31,7 @@
       "id": "content",
       "label": "内容中心",
       "icon": "FileText",
-      "defaultPath": "/content/projects",
+      "defaultPath": "/work-items",
       "groups": [
         {
           "id": "content-intake",
@@ -39,16 +39,10 @@
           "icon": "Inbox",
           "items": [
             {
-              "id": "pending-signals",
-              "label": "待处理信息",
+              "id": "inbox",
+              "label": "收件箱",
               "path": "/intake",
               "icon": "Inbox"
-            },
-            {
-              "id": "topics",
-              "label": "选题",
-              "path": "/topics",
-              "icon": "Sparkles"
             },
             {
               "id": "source-categories",
@@ -64,10 +58,10 @@
           "icon": "FileText",
           "items": [
             {
-              "id": "content-projects",
-              "label": "内容项目",
-              "path": "/content/projects",
-              "icon": "FileText"
+              "id": "work-items",
+              "label": "事项",
+              "path": "/work-items",
+              "icon": "SquareKanban"
             },
             {
               "id": "content-reviews",

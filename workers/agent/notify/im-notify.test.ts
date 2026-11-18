@@ -5,7 +5,7 @@ import { describe, expect, it, vi } from "vitest"
 import { notifyJobNeedsHuman } from "./im-notify.ts"
 
 describe("worker review notifier", () => {
-  const target = { channel: "feishu", reply_target: "oc_1", status: "pending_review", rounds: 2, max_rounds: 3, project_id: "p1", platform: "x", title: "T" }
+  const target = { channel: "feishu", reply_target: "oc_1", status: "pending_review", rounds: 2, max_rounds: 3, work_item_id: "w1", platform: "x", title: "T" }
   const env = { FEISHU_APP_ID: "a", FEISHU_APP_SECRET: "s", CONSOLE_BASE_URL: "https://story.test" }
   const okFetch = () =>
     vi.fn(async (u: string, _i: { method: string; headers: Record<string, string>; body: string }) => ({ ok: true, status: 200, json: async () => (u.includes("tenant_access") ? { code: 0, tenant_access_token: "t", expire: 7200 } : { code: 0 }) }))
@@ -23,7 +23,7 @@ describe("worker review notifier", () => {
     const r = await notifyJobNeedsHuman({ rpc: async () => ({ data: target, error: null }), env, fetch: f }, { id: "j1", status: "blocked_needs_human" })
     expect(r).toEqual({ sent: true })
     const sent = JSON.parse(JSON.parse(f.mock.calls[1][1].body).content)
-    expect(JSON.stringify(sent)).toContain("https://story.test/content/projects/p1")
+    expect(JSON.stringify(sent)).toContain("https://story.test/work-items/w1")
     const failing = await notifyJobNeedsHuman({ rpc: async () => ({ data: target, error: null }), env, fetch: vi.fn(async () => ({ ok: false, status: 500, json: async () => ({}) })) }, { id: "j1", status: "pending_review" })
     expect(failing).toEqual({ sent: false, reason: "delivery_failed" })
   })

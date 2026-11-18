@@ -159,7 +159,7 @@ describe("wecom adapter", () => {
     expect(reply.msgsignature).toBe(wecomSignature(WECOM.token, String(reply.timestamp), "n9", reply.encrypt))
     expect(JSON.parse(wecomDecrypt(reply.encrypt, WECOM_KEY).msg)).toEqual({ msgtype: "stream", stream: { id: "stream-1", finish: true, content: "已收录" } })
     const md = buildWecomReviewMarkdown(notice({ title: "<script>x</script>`a`" }))
-    expect(md).toContain("[查看并审核](https://story.test/content/projects/p1)")
+    expect(md).toContain("[查看并审核](https://story.test/work-items/w1)")
     expect(md).not.toMatch(/<script>|`/)
   })
 
@@ -203,16 +203,16 @@ describe("intent parsing and idempotency keys", () => {
   })
 
   it("receipt text states capture-only vs auto-draft", () => {
-    expect(buildReceiptText({ selection_id: 5, topic_path: "/topics/5", documents: [] }, "https://story.test/")).toContain("仅收录")
-    const t = buildReceiptText({ documents: [{ platform: "master", document_id: "d", job_id: "j" }, { platform: "x", document_id: "d2", job_id: "j2" }], project_path: "/content/projects/p" }, "https://story.test")
+    expect(buildReceiptText({ inbox_path: "/intake", documents: [] }, "https://story.test/")).toContain("仅收录")
+    const t = buildReceiptText({ documents: [{ platform: "master", document_id: "d", job_id: "j" }, { platform: "x", document_id: "d2", job_id: "j2" }], item_path: "/work-items/w" }, "https://story.test")
     expect(t).toContain("母稿、X")
-    expect(t).toContain("https://story.test/content/projects/p")
+    expect(t).toContain("https://story.test/work-items/w")
     expect(t).toContain("不会自动发布")
   })
 })
 
 function notice(over: Partial<ReviewNotice> = {}): ReviewNotice {
-  return { jobId: "j1", status: "pending_review", title: "示例稿件", platform: "xiaohongshu", rounds: 2, maxRounds: 3, taskUrl: "https://story.test/tasks/j1", reviewUrl: "https://story.test/content/projects/p1", ...over }
+  return { jobId: "j1", status: "pending_review", title: "示例稿件", platform: "xiaohongshu", rounds: 2, maxRounds: 3, taskUrl: "https://story.test/tasks/j1", reviewUrl: "https://story.test/work-items/w1", ...over }
 }
 
 describe("im-webhook handler (platform protocol + capture wiring)", () => {
@@ -234,7 +234,7 @@ describe("im-webhook handler (platform protocol + capture wiring)", () => {
   const post = (u: string, body: string, h: Record<string, string> = {}) => new Request(u, { method: "POST", headers: h, body })
   const reqFrom = (s: ReturnType<typeof signedFeishu>) =>
     post(url, s.body, { "X-Lark-Request-Timestamp": s.headers.get("X-Lark-Request-Timestamp")!, "X-Lark-Request-Nonce": "nonce1", "X-Lark-Signature": s.headers.get("X-Lark-Signature")! })
-  const ok: RpcResult = { data: { capture_id: "c1", duplicate: false, selection_id: 1, topic_path: "/topics/1", documents: [{ platform: "master", document_id: "d", job_id: "j" }], project_path: "/content/projects/p" }, error: null }
+  const ok: RpcResult = { data: { event_id: "c1", duplicate: false, inbox_path: "/intake", documents: [{ platform: "master", document_id: "d", job_id: "j" }], item_path: "/work-items/w" }, error: null }
 
   it("routes, ignores unknown paths, and 503s unconfigured channels", async () => {
     expect(parseRoute(new URL(url))).toEqual({ channel: "feishu", connectionId: CONN })

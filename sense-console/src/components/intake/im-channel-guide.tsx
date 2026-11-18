@@ -17,7 +17,7 @@ const CHANNELS: Channel[] = [
       "在飞书开放平台创建企业自建应用并启用机器人能力，授予接收消息与发送消息权限。",
       "在「事件与回调」订阅 im.message.receive_v1，请求地址填下方 Webhook 地址，并记录 Verification Token（建议同时设置 Encrypt Key）。",
       "在服务端 Secret 中配置下列变量后重新部署 im-webhook，再保存请求地址以完成 challenge 握手。",
-      "把机器人加入群或与其私聊，发送链接即收录；以「出稿」开头可自动出稿到待审核。",
+      "把机器人加入群或与其私聊，发送链接或想法即收进收件箱；以「出稿」开头会建事项并自动出稿到待审核。",
     ],
     secrets: ["FEISHU_VERIFICATION_TOKEN", "FEISHU_ENCRYPT_KEY（可选）", "FEISHU_APP_ID", "FEISHU_APP_SECRET"],
   },
@@ -28,7 +28,7 @@ const CHANNELS: Channel[] = [
       "在企业微信管理后台创建智能机器人并选择 API 模式，记录 Token 与 EncodingAESKey。",
       "回调 URL 填下方 Webhook 地址；保存时企业微信会发起 URL 验证（GET），需先配置 Secret 并部署。",
       "待审通知使用群机器人 Webhook：在目标群添加群机器人，把完整 Webhook 地址配置为 worker 的 Secret。",
-      "私聊机器人，或在群里 @机器人 后发送链接即收录。",
+      "私聊机器人，或在群里 @机器人 后发送链接即收进收件箱。",
     ],
     secrets: ["WECOM_BOT_TOKEN", "WECOM_ENCODING_AES_KEY", "WECOM_NOTIFY_WEBHOOK_URL（worker 使用）"],
   },
@@ -43,7 +43,7 @@ export function ImChannelGuide() {
           <CardHeader>
             <CardTitle>{c.title}</CardTitle>
             <CardDescription>
-              先在「外部接入」创建适配器为 {c.key} 的连接，并在 im_channels 登记；Webhook 路径中的 connection_id 即该连接。
+              在上方创建适配器为{c.title}的连接即可，不需要单独登记；Webhook 路径中的 connection_id 就是这个连接。
             </CardDescription>
           </CardHeader>
           <CardContent className="space-y-3 text-sm">

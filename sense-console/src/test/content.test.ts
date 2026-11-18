@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { canTransition, optionalCount, projectInputSchema, urlSchema } from '@/contracts/content'
+import { canTransition, optionalCount, urlSchema } from '@/contracts/content'
 
 describe('content workflow boundaries', () => {
   it('preserves missing metrics separately from genuine zero observations', () => {
@@ -16,12 +16,8 @@ describe('content workflow boundaries', () => {
     expect(canTransition('changes_requested', 'in_review', true, false)).toBe(true)
     expect(canTransition('approved', 'in_review', true, true)).toBe(false)
   })
-  it('rejects unsafe publication links and malformed project targets', () => {
+  it('rejects unsafe publication links', () => {
     expect(urlSchema.safeParse('javascript:alert(1)').success).toBe(false)
     expect(urlSchema.safeParse('https://example.com/post').success).toBe(true)
-    const input = { title: 'AI 知识', brief: '', content_kind: 'knowledge', target_seconds: 300, aspect_ratio: '9:16' }
-    expect(projectInputSchema.safeParse(input).success).toBe(true)
-    expect(projectInputSchema.safeParse({ ...input, title: ' ' }).success).toBe(false)
-    expect(projectInputSchema.safeParse({ ...input, target_seconds: 0 }).success).toBe(false)
   })
 })

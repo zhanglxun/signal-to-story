@@ -99,26 +99,21 @@ export class SqlBackend implements AgentQueueBackend {
   async loadDraftContext(job: HarnessJob): Promise<DraftContextRows> {
     return this.run(async (sql) => {
       const doc = await sql.query<DraftContextRows["document"]>(
-        "select id, organization_id, project_id, platform, title, body, revision from public.content_documents where id::text = $1 and organization_id = $2",
+        "select id, organization_id, work_item_id, platform, title, body, revision from public.content_documents where id::text = $1 and organization_id = $2",
         [job.targetId, job.organizationId]
       )
       const document = doc.rows[0]
       if (!document) throw new Error("稿件不存在或不属于该组织")
-      const project = (await sql.query<NonNullable<DraftContextRows["project"]>>(
-        "select id, title, brief, content_kind, target_seconds, aspect_ratio, selection_id from public.content_projects where id = $1 and organization_id = $2",
-        [document.project_id, job.organizationId]
-      )).rows[0] ?? null
-      const selection = project?.selection_id
-        ? (await sql.query<NonNullable<DraftContextRows["selection"]>>(
-            "select id, name, core_thesis, negative_prompts, signal_id from public.selections where id = $1 and organization_id = $2",
-            [project.selection_id, job.organizationId]
+      const workItem = document.work_item_id
+        ? (await sql.query<NonNullable<DraftContextRows["workItem"]>>(
+            "select id, kind, title, brief from public.work_items where id = $1 and organization_id = $2",
+            [document.work_item_id, job.organizationId]
           )).rows[0] ?? null
         : null
-      const signalId = selection?.signal_id
-      const signal = signalId
-        ? (await sql.query<NonNullable<DraftContextRows["signal"]>>(
-            "select id, name, site_url, summary, description, created_at from public.signals where id = $1 and organization_id = $2",
-            [signalId, job.organizationId]
+      const source = workItem
+        ? (await sql.query<NonNullable<DraftContextRows["source"]>>(
+            "select id, text, url, created_at from public.intake_events where work_item_id = $1 and organization_id = $2 order by created_at, id limit 1",
+            [workItem.id, job.organizationId]
           )).rows[0] ?? null
         : null
       const memories = (await sql.query<DraftContextRows["memories"][number]>(
@@ -130,7 +125,7 @@ export class SqlBackend implements AgentQueueBackend {
         "select slug, title, category, tags, content, trust_level from public.knowledge_entries where organization_id = $1 and trust_level <> 'archived' order by updated_at desc limit 200",
         [job.organizationId]
       )).rows
-      return { document, project, selection, signal, memories, knowledge }
+      return { document, workItem, source, memories, knowledge }
     })
   }
 }

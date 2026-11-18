@@ -9,14 +9,13 @@ import type { SourceFetcher } from "../fetch-source"
 import { processNextJob, type ProcessResult, type WorkerLogger, type WorkerOptions } from "../runner"
 
 export interface CaptureResultRow {
-  capture_id: string
+  event_id: string
+  intent: string
   duplicate: boolean
-  signal_id: number
-  selection_id: number
-  project_id: string | null
+  work_item_id: string | null
   documents: Array<{ platform: string; document_id: string; job_id: string }>
-  topic_path: string
-  project_path: string | null
+  inbox_path: string
+  item_path: string | null
 }
 
 export async function seedCaptureWorkspace(db: SupabaseTestDb) {

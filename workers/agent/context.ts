@@ -30,7 +30,8 @@ export function assembleDraftContext(job: HarnessJob, rows: DraftContextRows, fe
     throw new StaleTargetError(`稿件已从 v${job.targetRevision} 变为 v${rows.document.revision}，请重新发起生成`)
   }
   const platform = rows.document.platform
-  const contentKind = rows.project?.content_kind ?? null
+  const brief = rows.workItem?.brief ?? {}
+  const contentKind = typeof brief.content_kind === "string" ? brief.content_kind : null
 
   const memories: DecisionMemoryItem[] = rows.memories.map((m) => ({
     id: m.id,
@@ -51,14 +52,11 @@ export function assembleDraftContext(job: HarnessJob, rows: DraftContextRows, fe
     .slice(0, MAX_REFERENCE_KNOWLEDGE)
 
   const sources: HarnessDraftContext["sources"] = []
-  if (rows.signal) {
-    sources.push({
-      sourceId: `signal:${rows.signal.id}`,
-      content: [rows.signal.name, rows.signal.site_url, rows.signal.summary, rows.signal.description].filter(Boolean).join("\n"),
-    })
+  if (rows.source) {
+    sources.push({ sourceId: `intake:${rows.source.id}`, content: [rows.source.text, rows.source.url].filter(Boolean).join("\n") })
   }
-  if (fetched && rows.signal) {
-    sources.push({ sourceId: `web:${rows.signal.id}`, content: [fetched.title, fetched.url, fetched.text].filter(Boolean).join("\n") })
+  if (fetched && rows.source) {
+    sources.push({ sourceId: `web:${rows.source.id}`, content: [fetched.title, fetched.url, fetched.text].filter(Boolean).join("\n") })
   }
 
   const forbiddenPhrases = [
@@ -67,11 +65,10 @@ export function assembleDraftContext(job: HarnessJob, rows: DraftContextRows, fe
     ...memories.filter((m) => m.kind === "taboo_topic" && m.summary.length <= 30).map((m) => m.summary),
   ]
 
-  const brief = JSON.stringify(
-    rows.project
-      ? { title: rows.project.title, brief: rows.project.brief, content_kind: rows.project.content_kind, target_seconds: rows.project.target_seconds, aspect_ratio: rows.project.aspect_ratio, thesis: rows.selection?.core_thesis ?? null }
-      : {}
-  )
+  // Brief fields are free-form jsonb (database.md §4.2); legacy pointers are bookkeeping, not prompt material.
+  const { legacy: _legacy, ...briefFields } = brief
+  void _legacy
+  const briefJson = JSON.stringify(rows.workItem ? { title: rows.workItem.title, kind: rows.workItem.kind, ...briefFields } : {})
 
   const contextPack = buildSafeContextPack({
     organizationId: job.organizationId,
@@ -84,7 +81,7 @@ export function assembleDraftContext(job: HarnessJob, rows: DraftContextRows, fe
       ...trusted.map((k) => ({ slug: k.slug, title: k.title, content: k.content, trustLevel: "trusted" as KnowledgeTrustLevel })),
       ...reference.map((k) => ({ slug: k.slug, title: k.title, content: k.content, trustLevel: "unreviewed" as KnowledgeTrustLevel })),
     ],
-    untrustedSources: sources.map((s) => ({ sourceId: s.sourceId, channel: s.sourceId.startsWith("web:") ? "web_fetch" : "signal", url: rows.signal?.site_url ?? null, rawText: s.content, capturedAt: rows.signal ? new Date(rows.signal.created_at).toISOString() : new Date().toISOString() })),
+    untrustedSources: sources.map((s) => ({ sourceId: s.sourceId, channel: s.sourceId.startsWith("web:") ? "web_fetch" : "signal", url: rows.source?.url ?? null, rawText: s.content, capturedAt: rows.source ? new Date(rows.source.created_at).toISOString() : new Date().toISOString() })),
   })
 
   return {
@@ -94,7 +91,7 @@ export function assembleDraftContext(job: HarnessJob, rows: DraftContextRows, fe
     title: rows.document.title,
     body: rows.document.body,
     instruction,
-    brief,
+    brief: briefJson,
     contextPack,
     sources,
     forbiddenPhrases,

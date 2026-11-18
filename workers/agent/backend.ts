@@ -2,10 +2,11 @@ import type { HarnessJob, HarnessProgress, HarnessStepRecord, HarnessTerminalSta
 
 /** Raw rows the worker reads to build a Context Pack (snake_case, as stored). */
 export interface DraftContextRows {
-  document: { id: string; organization_id: string; project_id: string; platform: string; title: string; body: string; revision: number }
-  project: { id: string; title: string; brief: string; content_kind: string; target_seconds: number; aspect_ratio: string; selection_id: number | null } | null
-  signal: { id: number; name: string; site_url: string | null; summary: string | null; description: string | null; created_at: string } | null
-  selection: { id: number; signal_id: number; name: string; core_thesis: string | null; negative_prompts: string | null } | null
+  document: { id: string; organization_id: string; work_item_id: string | null; platform: string; title: string; body: string; revision: number }
+  /** The board card the document belongs to (null only for V1 documents not yet backfilled). */
+  workItem: { id: string; kind: string; title: string; brief: Record<string, unknown> } | null
+  /** The card's first input (intake_events), i.e. the raw material the human captured. */
+  source: { id: string; text: string; url: string | null; created_at: string } | null
   memories: Array<{ id: string; kind: string; summary: string; human_quote: string; platform: string | null; content_kind: string | null; active: boolean; expires_at: string | null; created_at: string }>
   knowledge: Array<{ slug: string; title: string; category: string; tags: string[]; content: string; trust_level: string }>
 }

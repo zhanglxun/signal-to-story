@@ -13,8 +13,6 @@ import { CliAgentsPage } from "@/pages/cli-agents-page"
 import { ContentOverviewPage } from "@/pages/content-overview-page"
 import { DecisionMemoriesPage } from "@/pages/decision-memories-page"
 import { KnowledgeBasePage } from "@/pages/knowledge-base-page"
-import { ContentProjectsPage } from "@/pages/content-projects-page"
-import { ContentProjectDetailPage } from "@/pages/content-project-detail-page"
 import { PublishingPage } from "@/pages/publishing-page"
 import { ForbiddenPage } from "@/pages/forbidden-page"
 import { ForgotPasswordPage } from "@/pages/forgot-password-page"
@@ -34,9 +32,9 @@ import { SourceCategoriesPage } from "@/pages/source-categories-page"
 import { StoryboardsPage } from "@/pages/storyboards-page"
 import { TaskDetailPage } from "@/pages/task-detail-page"
 import { TasksPage } from "@/pages/tasks-page"
-import { TopicDetailPage } from "@/pages/topic-detail-page"
-import { TopicsPage } from "@/pages/topics-page"
 import { UpdatePasswordPage } from "@/pages/update-password-page"
+import { WorkItemDetailPage } from "@/pages/work-item-detail-page"
+import { WorkItemsPage } from "@/pages/work-items-page"
 
 export default function App() {
   return (
@@ -52,8 +50,13 @@ export default function App() {
           <Route index element={<Navigate to="/dashboard" replace />} />
           <Route path="/dashboard" element={<ContentOverviewPage />} />
           <Route path="/chat" element={<ChatAssistantPage />} />
-          <Route path="/content/projects" element={<ContentProjectsPage />} />
-          <Route path="/content/projects/:projectId" element={<ContentProjectDetailPage />} />
+          <Route path="/work-items" element={<WorkItemsPage />} />
+          <Route path="/work-items/:workItemId" element={<WorkItemDetailPage />} />
+          {/* V1 routes: topics and content projects became work items. */}
+          <Route path="/content/projects" element={<Navigate to="/work-items" replace />} />
+          <Route path="/content/projects/:projectId" element={<Navigate to="/work-items" replace />} />
+          <Route path="/topics" element={<Navigate to="/work-items" replace />} />
+          <Route path="/topics/:topicId" element={<Navigate to="/work-items" replace />} />
           <Route path="/content/reviews" element={<ContentOverviewPage mode="reviews" />} />
           <Route path="/production/flow" element={<ContentOverviewPage mode="pipeline" />} />
           <Route path="/publishing/channels" element={<PublishingPage mode="channels" />} />
@@ -62,8 +65,6 @@ export default function App() {
           <Route path="/intake" element={<IntakePage />} />
           <Route path="/intake/prompts" element={<PromptExamplesPage />} />
           <Route path="/sources/categories" element={<SourceCategoriesPage />} />
-          <Route path="/topics" element={<TopicsPage />} />
-          <Route path="/topics/:topicId" element={<TopicDetailPage />} />
           <Route path="/tasks" element={<TasksPage />} />
           <Route path="/tasks/:taskId" element={<TaskDetailPage />} />
           <Route path="/video/scripts" element={<ScriptsPage />} />

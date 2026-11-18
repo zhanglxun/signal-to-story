@@ -35,7 +35,7 @@ describe("quick capture -> auto draft -> pending_review (PGlite + fake LLM)", ()
 
     const seen = await db.asUser(ws.viewerId, async (tx) => {
       const jobs = await tx.query<{ id: string; status: string; rounds: number; target_id: string }>(
-        "select id, status, rounds, target_id from public.agent_jobs where payload->>'quick_capture_id'=$1", [capture.capture_id])
+        "select id, status, rounds, target_id from public.agent_jobs where payload->>'intake_event_id'=$1", [capture.event_id])
       const steps = await tx.query<{ job_id: string; round: number; step_kind: string; status: string; evaluation: { criteria?: unknown[] } | null }>(
         "select job_id, round, step_kind, status, evaluation from public.agent_job_steps where job_id = any($1) order by job_id, round, created_at", [jobs.rows.map((j) => j.id)])
       const proposals = await tx.query<{ agent_job_id: string; document_id: string; status: string }>(

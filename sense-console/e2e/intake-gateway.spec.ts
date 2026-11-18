@@ -7,7 +7,7 @@ import { expect, test } from "@playwright/test"
 const fixturePath = process.env.INTAKE_E2E_FIXTURE
 // Downloads contain scoped secrets. Never record credential creation in traces.
 test.use({ trace: "off", video: "off", screenshot: "off" })
-test("external assistant -> cloud gateway -> source and topic -> revoke", async ({
+test("external assistant -> cloud gateway -> inbox -> revoke", async ({
   page,
   request,
 }) => {
@@ -60,7 +60,7 @@ test("external assistant -> cloud gateway -> source and topic -> revoke", async 
     for (const r of replies) {
       expect(r.status()).toBe(200)
       const body = await r.json()
-      expect(body.selection_id).toBe(receipt.selection_id)
+      expect(body.event_id).toBe(receipt.event_id)
       expect(body.duplicate).toBe(true)
     }
     const concurrent = await Promise.all(
@@ -81,7 +81,7 @@ test("external assistant -> cloud gateway -> source and topic -> revoke", async 
         return r.json()
       })
     )
-    expect(new Set(bodies.map((b) => b.selection_id)).size).toBe(1)
+    expect(new Set(bodies.map((b) => b.event_id)).size).toBe(1)
     expect(bodies.filter((b) => !b.duplicate)).toHaveLength(1)
     expect(
       (
@@ -102,11 +102,10 @@ test("external assistant -> cloud gateway -> source and topic -> revoke", async 
         })
       ).status()
     ).toBe(400)
-    await page.reload()
-    await page.getByRole("link", { name: payload.title, exact: true }).click()
-    await expect(page).toHaveURL(new RegExp(`/topics/${receipt.selection_id}$`))
+    // Gateway captures land in the inbox (intake_events), not in a topic.
+    await page.goto("/intake")
     await expect(
-      page.getByText(payload.title, { exact: true }).first()
+      page.getByText(payload.title).first()
     ).toBeVisible()
     await page.goto("/system/integrations")
     const row = page

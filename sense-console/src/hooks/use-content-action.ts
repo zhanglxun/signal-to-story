@@ -12,7 +12,8 @@ export function useContentAction() {
       await action()
       await Promise.all([
         client.invalidateQueries({ queryKey: ['cloud-content'] }),
-        client.invalidateQueries({ queryKey: ['content-project'] }),
+        client.invalidateQueries({ queryKey: ['work-item'] }),
+        client.invalidateQueries({ queryKey: ['intake-inbox'] }),
         client.invalidateQueries({ queryKey: ['document-history'] }),
       ])
       toast.success(message)

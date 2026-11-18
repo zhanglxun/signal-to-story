@@ -17,7 +17,7 @@ describe("console navigation", () => {
 
   it("inherits the parent menu for detail routes", () => {
     expect(resolveNavigation("/assets/42").activeItem?.id).toBe("assets")
-    expect(resolveNavigation("/topics/topic-1").activeItem?.id).toBe("topics")
+    expect(resolveNavigation("/work-items/item-1").activeItem?.id).toBe("work-items")
     expect(resolveNavigation("/tasks/task-1").activeItem?.id).toBe("tasks")
     expect(resolveNavigation("/video/scripts/story-du-kou").activeItem?.id).toBe("scripts")
     expect(resolveNavigation("/intake/prompts").activeItem?.id).toBe("prompt-examples")

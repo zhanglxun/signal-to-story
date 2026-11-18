@@ -23,7 +23,7 @@ export async function sendIntake(config, input, fetcher = fetch) {
     throw new Error(
       `收录失败 HTTP ${response.status}: ${body.error ?? "unknown"}。修改请求前保留原 external_id；超时可使用同一原始请求重试。`
     )
-  if (body.status !== "captured" || !body.receipt_id || !body.selection_id)
+  if (body.status !== "captured" || !body.receipt_id || !body.event_id)
     throw new Error("服务未返回有效收录回执，不能报告成功")
   return body
 }

@@ -1,19 +1,19 @@
 import { getSupabaseClient } from '@/lib/supabase'
-import { projectInputSchema, urlSchema, type ContentDocument, type ContentProject, type DocumentStatus, type Metric, type Platform, type ProjectInput, type Publication, type PublishingChannel, type ReviewEvent, type Revision } from '@/contracts/content'
+import { urlSchema, type ContentDocument, type DocumentStatus, type Metric, type Platform, type Publication, type PublishingChannel, type ReviewEvent, type Revision } from '@/contracts/content'
 
-function db() {
+export function db() {
   const client = getSupabaseClient()
   if (!client) throw new Error('请先配置云端连接。')
   return client
 }
-function fail(error: { message: string; code?: string } | null) {
+export function fail(error: { message: string; code?: string } | null) {
   if (!error) return
   if (error.code === '23505') throw new Error('该记录已存在，请刷新后查看。')
   if (error.code === '42501') throw new Error('当前账号没有执行此操作的权限。')
   if (error.code === 'P0001') throw new Error(error.message)
   throw new Error('云端操作未完成，请检查网络与数据库迁移。')
 }
-async function allRows<T>(table: string, organizationId: string, order: string, columns = '*') {
+export async function allRows<T>(table: string, organizationId: string, order: string, columns = '*') {
   const result: T[] = []
   // PostgREST caps individual responses. Fetch every page without silently truncating dashboards.
   for (let from = 0; ; from += 500) {
@@ -23,7 +23,6 @@ async function allRows<T>(table: string, organizationId: string, order: string, 
     if (!data || data.length < 500) return result
   }
 }
-export const listProjects = (org: string) => allRows<ContentProject>('content_projects', org, 'updated_at')
 export const listDocuments = (org: string) => allRows<ContentDocument>('content_documents', org, 'updated_at')
 export const listChannels = (org: string) => allRows<PublishingChannel>('publishing_channels', org, 'created_at')
 export async function listPublications(org: string): Promise<Publication[]> {
@@ -31,27 +30,6 @@ export async function listPublications(org: string): Promise<Publication[]> {
   return rows.map(row => ({ ...row, title_snapshot: row.content_revisions.title }))
 }
 export const listMetrics = (org: string) => allRows<Metric>('publication_metrics', org, 'observed_at')
-export async function createProject(org: string, input: ProjectInput, selectionId?: number) {
-  const { data, error } = await db().from('content_projects').insert({ ...projectInputSchema.parse(input), organization_id: org, selection_id: selectionId ?? null }).select().single()
-  fail(error); return data as ContentProject
-}
-export async function updateProject(project: ContentProject, input: ProjectInput) {
-  const { data, error } = await db().from('content_projects').update(projectInputSchema.parse(input)).eq('id', project.id).eq('updated_at', project.updated_at).select().maybeSingle()
-  fail(error); if (!data) throw new Error('项目已被其他成员修改，请刷新后重试。')
-  return data as ContentProject
-}
-export async function getProject(id: string) {
-  const { data, error } = await db().from('content_projects').select().eq('id', id).single()
-  fail(error); return data as ContentProject
-}
-export async function getProjectDocuments(id: string) {
-  const { data, error } = await db().from('content_documents').select().eq('project_id', id).order('created_at')
-  fail(error); return (data ?? []) as ContentDocument[]
-}
-export async function createDocument(project: ContentProject, platform: Platform | 'master', source?: ContentDocument) {
-  const { data, error } = await db().from('content_documents').insert({ organization_id: project.organization_id, project_id: project.id, platform, title: source?.title ?? project.title, body: source?.body ?? '' }).select().single()
-  fail(error); return data as ContentDocument
-}
 export async function saveDocument(document: ContentDocument, title: string, body: string) {
   if (!title.trim() || title.trim().length > 200 || body.length > 100000) throw new Error('标题需为 1–200 字，正文不超过 100000 字。')
   const { data, error } = await db().from('content_documents').update({ title: title.trim(), body }).eq('id', document.id).eq('revision', document.revision).eq('status', document.status).select().maybeSingle()
@@ -92,15 +70,6 @@ export async function cancelPublication(id: string) {
 }
 export async function saveMetric(publication: Publication, metric: Omit<Metric, 'id' | 'publication_id'>) {
   const { error } = await db().from('publication_metrics').insert({ ...metric, organization_id: publication.organization_id, publication_id: publication.id })
-  fail(error)
-}
-export async function linkedAssets(projectId: string) {
-  const { data, error } = await db().from('content_project_assets').select('asset_id, assets(id,name,media_type,cloud_url)').eq('project_id', projectId)
-  fail(error)
-  return (data ?? []) as unknown as { asset_id: number; assets: { id: number; name: string; media_type: string; cloud_url: string | null } }[]
-}
-export async function linkAsset(project: ContentProject, assetId: number) {
-  const { error } = await db().from('content_project_assets').insert({ organization_id: project.organization_id, project_id: project.id, asset_id: assetId })
   fail(error)
 }
 export async function publicationSnapshot(publication: Publication) {

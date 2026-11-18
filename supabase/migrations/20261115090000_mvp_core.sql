@@ -151,6 +151,27 @@ end; $$;
 revoke all on function public.record_intake_event(uuid, text, text, text, text, jsonb, uuid) from public, anon;
 grant execute on function public.record_intake_event(uuid, text, text, text, text, jsonb, uuid) to authenticated, service_role;
 
+-- Inbox → new card in one transaction (no empty card if filing the input fails). Runs as the caller,
+-- so RLS and the column grants decide who may do it.
+create function public.promote_intake_event(p_event_id uuid, p_title text) returns public.work_items
+language plpgsql security invoker set search_path = '' as $$
+declare e public.intake_events; w public.work_items;
+begin
+  select * into e from public.intake_events where id = p_event_id for update;
+  if not found then raise exception '输入不存在或无权访问' using errcode = '42501'; end if;
+  if e.work_item_id is not null or e.ignored_at is not null then
+    raise exception '这条输入已被处理，请刷新后查看' using errcode = 'P0001';
+  end if;
+  insert into public.work_items (organization_id, kind, title, brief)
+  values (e.organization_id, 'article', p_title,
+          jsonb_strip_nulls(jsonb_build_object('text', nullif(btrim(e.text), ''), 'url', e.url, 'intake_event_id', e.id)))
+  returning * into w;
+  update public.intake_events set work_item_id = w.id where id = e.id;
+  return w;
+end; $$;
+revoke all on function public.promote_intake_event(uuid, text) from public, anon;
+grant execute on function public.promote_intake_event(uuid, text) to authenticated;
+
 -- ── content_documents → work_items ──────────────────────────────────────────
 -- Nullable until the retire migration backfills it, makes it NOT NULL and drops project_id.
 alter table public.content_documents add column work_item_id uuid;
@@ -159,6 +180,61 @@ alter table public.content_documents
   references public.work_items(organization_id, id);
 create unique index content_documents_work_item_platform_key on public.content_documents (work_item_id, platform)
   where work_item_id is not null;
+-- New documents hang off a card only; V1 documents keep project_id until the retire migration.
+alter table public.content_documents alter column project_id drop not null;
+alter table public.content_documents add constraint content_documents_owner_present
+  check (work_item_id is not null or project_id is not null);
+
+-- Same rules as 20261006111044, with ownership compared null-safely (project_id may now be null)
+-- and work_item_id immutable like project_id.
+create or replace function private.guard_cloud_content() returns trigger language plpgsql set search_path='' as $$
+begin
+ if auth.uid() is null then raise exception '需要登录' using errcode='42501'; end if;
+ if tg_op='INSERT' then
+  new.created_by:=auth.uid(); new.created_at:=now();
+ else
+  if new.organization_id is distinct from old.organization_id or new.created_by is distinct from old.created_by or new.created_at is distinct from old.created_at then
+   raise exception '不能修改所属组织或创建记录';
+  end if;
+ end if;
+ if tg_table_name in ('content_projects','content_documents','content_publications') then new.updated_at:=now(); end if;
+ if tg_table_name='content_documents' then
+  if tg_op='INSERT' then
+   if new.status<>'draft' then raise exception '新稿件必须为草稿'; end if;
+   new.revision:=1;
+  else
+   if new.project_id is distinct from old.project_id or new.work_item_id is distinct from old.work_item_id
+      or new.platform<>old.platform or new.revision<>old.revision then raise exception '不能修改稿件归属或版本号'; end if;
+   if new.title is distinct from old.title or new.body is distinct from old.body then
+    if not private.has_organization_permission(new.organization_id,'content.manage') then raise exception '没有编辑权限' using errcode='42501'; end if;
+    new.revision:=old.revision+1; new.status:='draft'; new.review_note:='';
+   elsif new.status<>old.status then
+    if new.status='in_review' then
+     if old.status not in ('draft','changes_requested') or btrim(new.body)='' or not private.has_organization_permission(new.organization_id,'content.manage') then raise exception '稿件不能提交审核'; end if;
+    elsif new.status in ('approved','changes_requested') then
+     if old.status<>'in_review' or not private.has_organization_permission(new.organization_id,'content.review') then raise exception '需要审核权限及待审核稿件' using errcode='42501'; end if;
+     if new.status='changes_requested' and btrim(new.review_note)='' then raise exception '请填写退回原因'; end if;
+    else raise exception '无效的审核状态变化'; end if;
+   elsif new.review_note is distinct from old.review_note then raise exception '审核意见必须随审核决定提交';
+   end if;
+  end if;
+ elsif tg_table_name='content_publications' then
+  if tg_op='UPDATE' then
+   if new.document_id<>old.document_id or new.revision<>old.revision or new.channel_id<>old.channel_id then raise exception '请取消旧计划后重新安排版本'; end if;
+   if old.status<>'planned' then raise exception '已完成或取消的发布记录不可修改'; end if;
+  elsif new.status<>'planned' then raise exception '请先创建发布计划'; end if;
+  if new.status<>'cancelled' and not exists(
+    select 1 from public.content_documents d join public.publishing_channels c on c.id=new.channel_id
+    where d.id=new.document_id and d.organization_id=new.organization_id and c.organization_id=new.organization_id
+    and d.platform=c.platform and d.status='approved' and d.revision=new.revision
+  ) then raise exception '仅可发布已审核的最新版本，且账号平台必须匹配'; end if;
+  if new.status='published' and new.published_at>now()+interval '5 minutes' then raise exception '实际发布时间不能晚于现在'; end if;
+ elsif tg_table_name='publication_metrics' then
+  if not exists(select 1 from public.content_publications p where p.id=new.publication_id and p.status='published' and new.observed_at>=p.published_at) then raise exception '只能回填已发布内容，观察时间不能早于发布时间'; end if;
+  if new.observed_at>now()+interval '5 minutes' then raise exception '观察时间不能晚于现在'; end if;
+ end if;
+ return new;
+end; $$;
 
 -- ── V1 → 0.5 backfill (called by the retire migration; idempotent) ────────────
 -- Every legacy row is reachable from its new row through payload.legacy / brief.legacy.

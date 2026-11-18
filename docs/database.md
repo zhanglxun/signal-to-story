@@ -229,7 +229,7 @@ erDiagram
 | **DB0 对账**（2026-11-17 完成） | 只读导出线上 schema 和迁移历史（不含数据），与仓库前 13 个迁移逐对象比对 | 结论见 1.2 | 只读 |
 | **DB1 基线整理**（2026-11-17 完成） | 迁移历史对齐线上（A4）；在未上线迁移里原地修正 B1、B5。`quick_captures`、本地 `site_*` 这类要被替换的部分，等 DB2/DB4 的替代物就位后再删，保证每一步门禁都是绿的 | 根目录全部测试 + 三个 demo 通过 | 否 |
 | **DB2a 核心表**（2026-11-18 完成） | 迁移 `20261115090000_mvp_core`：`work_items`、`intake_events` + `record_intake_event`、`content_documents.work_item_id`、回填函数 `private.backfill_v1()`（V1 → 0.5，可重复执行）；旧表暂不删 | `mvp-core-db.test.ts`：幂等、权限、原始输入不可改、回填可追溯且第二次执行为 0 | 否 |
-| **DB2b 入口与调用方** | `accept_intake`、速记改写 `intake_events`；控制台、worker、Edge Function 改用 `work_items` / `intake_events`；稿件改挂 `work_item_id`、AI 写草稿 RPC | 全部门禁 | 否 |
+| **DB2b 入口与调用方**（2026-11-18 完成） | 速记、外部收录、IM 共用 `private.capture_core`：只收录 → 收件箱；自动出稿 → 同一事务建事项 + 稿件 + 任务；`accept_intake` 保留 V1 输入契约；`im_channels` 删除，回复地址进 `payload.reply_to`；`promote_intake_event` 一步把输入转成事项；稿件 `project_id` 改可空、新稿件只挂 `work_item_id`；worker、Edge Function、控制台（收件箱 + 事项页）全部改用新表。AI 写草稿 RPC 并入 DB2c | 全部门禁 | 否 |
 | **DB2c 执行精简** | `agent_jobs` / `agent_job_steps` 按 4.4 精简；`runner_nodes`；`notified_at` 通知；同步改 worker | 状态同步、串行、epoch 测试 | 否 |
 | **退役迁移**（DB2 收尾，代码不再引用旧表后） | 调用 `private.backfill_v1()`，校验行数守恒，删除旧表；`content_documents.work_item_id` 改必填、删 `project_id` | 行数守恒断言 | 否 |
 | **DB3 Chat** | `chat_sessions` `chat_messages` + chat 回合 | 浏览器无法伪造 assistant 消息 | 否 |
@@ -249,6 +249,8 @@ erDiagram
 DB1～DB5 都只在仓库和 PGlite 上进行，可以和 R2（抽出 core）、R3（Chat）交错推进。建议顺序：DB1 → DB2 → R2 → DB3 + R3 → R4 看板（依赖 DB2 的视图）→ DB4 → DB5。
 
 ## 8.1 上线脚本形态（为「一把执行」准备）
+
+> 2026-11-18 起按 DB-D14 分批执行：第 1 批（DB2a + DB2b）是 `supabase/release/0.5.0-step1.sql`。每批的形态都按本节，旧表的删除和行数守恒断言放在最后的退役批次。
 
 目标：定版后生成**一个**上线脚本，交给 Codex 在线上执行一次。约束如下：
 
@@ -343,3 +345,4 @@ DB1～DB5 都只在仓库和 PGlite 上进行，可以和 R2（抽出 core）、
 | DB-D11 | 2026-11-18 | **MVP 精简定版**：第 2～7 节为准，0.5 共 21 张表、0 个视图；读者站读 `content_documents` 的 `published_*` 列（6 列已确认） |
 | DB-D12 | 2026-11-18 | 第 2 轮确认：`publishing_channels` 一起退役；`prompt_examples` 保留，不再投入；资产关联暂不做；补充 1～4 全部同意；`im_channels` 移除 |
 | DB-D13 | 2026-11-18 | 字段级：`agent_jobs`、`agent_job_steps`、`video_shots`、`approval_requests` 中标「MVP 删除」的列全部删除，标「计划新增」的列按第 4 节加入 |
+| DB-D14 | 2026-11-18 | **线上库就是唯一环境**（开发、测试、正式共用，目前只有你在用）。迁移改为**分批推送**：每批由 `testing/db/release.ts` 从迁移生成一个单事务脚本，先在模拟线上状态的 PGlite 上演练，再由 Codex 执行（手册见 `supabase/release/README.md`）。推上线的迁移从此只能追加；取代 DB-D6、DB-D7 里「只上线一次」的部分，第 8.1 节的脚本形态不变 |

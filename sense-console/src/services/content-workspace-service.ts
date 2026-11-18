@@ -10,7 +10,7 @@ function requireSupabase() {
 /**
  * Resolves the caller's primary organization and whether they hold the
  * `content.manage` permission there. Shared by every content-production
- * feature (assets, source categories, signals, selections, ...) so the
+ * feature (assets, source categories, inbox, work items, ...) so the
  * "find my org → find my membership → find my role's permissions" lookup
  * isn't duplicated per feature.
  */

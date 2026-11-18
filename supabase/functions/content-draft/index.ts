@@ -34,7 +34,11 @@ Deno.serve(async req => {
     if (enqueueError || !job) return reply({ error: enqueueError?.code === '42501' ? '没有调度 Agent 任务的权限' : '排队失败，稿件可能已被修改，请刷新后重试' }, enqueueError?.code === '42501' ? 403 : 409)
     return reply({ job_id: job.id, status: job.status, duplicate: Boolean(existing) }, existing ? 200 : 202)
   }
-  const { data: project } = await client.from('content_projects').select('brief,content_kind,target_seconds,aspect_ratio').eq('id', doc.project_id).single()
+  // The card's brief is the project data the model sees (content_projects retired in 0.5, database.md §4.2).
+  const { data: workItem } = doc.work_item_id
+    ? await client.from('work_items').select('title,kind,brief').eq('id', doc.work_item_id).single()
+    : { data: null }
+  const project = workItem ? { title: workItem.title, kind: workItem.kind, ...Object.fromEntries(Object.entries(workItem.brief ?? {}).filter(([k]) => k !== 'legacy')) } : null
   const key = Deno.env.get('CONTENT_AI_API_KEY')
   const baseUrl = Deno.env.get('CONTENT_AI_BASE_URL')
   const model = Deno.env.get('CONTENT_AI_MODEL')

@@ -127,10 +127,9 @@ export function QuickCaptureForm({ organizationId: orgOverride, submit = submitQ
       {result && (
         <Alert>
           <CheckCircle2Icon />
-          <AlertTitle>{result.duplicate ? "已收录过（返回原结果）" : result.intent === "auto_draft" ? `已立项，${result.documents.length} 篇稿件进入出稿队列` : "已收进选题池"}</AlertTitle>
+          <AlertTitle>{result.duplicate ? "已收录过（返回原结果）" : result.intent === "auto_draft" ? `已建事项，${result.documents.length} 篇稿件进入出稿队列` : "已收进收件箱"}</AlertTitle>
           <AlertDescription className="flex flex-wrap gap-3">
-            <Link to={result.topicPath} onClick={onNavigate}>查看选题</Link>
-            {result.projectPath && <Link to={result.projectPath} onClick={onNavigate}>打开内容项目</Link>}
+            {result.itemPath ? <Link to={result.itemPath} onClick={onNavigate}>打开事项</Link> : <Link to={result.inboxPath} onClick={onNavigate}>查看收件箱</Link>}
             {result.documents.length > 0 && <Link to="/tasks" onClick={onNavigate}>查看任务进度</Link>}
           </AlertDescription>
         </Alert>

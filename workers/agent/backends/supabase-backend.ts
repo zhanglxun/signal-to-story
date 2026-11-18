@@ -93,18 +93,28 @@ export class SupabaseBackend implements AgentQueueBackend {
 
   async loadDraftContext(job: HarnessJob): Promise<DraftContextRows> {
     const document = check(
-      await this.client.from("content_documents").select("id,organization_id,project_id,platform,title,body,revision").eq("id", job.targetId ?? "").eq("organization_id", job.organizationId).single(),
+      await this.client.from("content_documents").select("id,organization_id,work_item_id,platform,title,body,revision").eq("id", job.targetId ?? "").eq("organization_id", job.organizationId).single(),
       "document"
     ) as DraftContextRows["document"]
-    const project = check(
-      await this.client.from("content_projects").select("id,title,brief,content_kind,target_seconds,aspect_ratio,selection_id").eq("id", document.project_id).eq("organization_id", job.organizationId).maybeSingle(),
-      "project"
-    ) as DraftContextRows["project"]
-    const selection = project?.selection_id
-      ? (check(await this.client.from("selections").select("id,signal_id,name,core_thesis,negative_prompts").eq("id", project.selection_id).eq("organization_id", job.organizationId).maybeSingle(), "selection") as DraftContextRows["selection"])
+    const workItem = document.work_item_id
+      ? (check(
+          await this.client.from("work_items").select("id,kind,title,brief").eq("id", document.work_item_id).eq("organization_id", job.organizationId).maybeSingle(),
+          "work item"
+        ) as DraftContextRows["workItem"])
       : null
-    const signal = selection?.signal_id
-      ? (check(await this.client.from("signals").select("id,name,site_url,summary,description,created_at").eq("id", selection.signal_id).eq("organization_id", job.organizationId).maybeSingle(), "signal") as DraftContextRows["signal"])
+    const source = workItem
+      ? (check(
+          await this.client
+            .from("intake_events")
+            .select("id,text,url,created_at")
+            .eq("work_item_id", workItem.id)
+            .eq("organization_id", job.organizationId)
+            .order("created_at", { ascending: true })
+            .order("id", { ascending: true })
+            .limit(1)
+            .maybeSingle(),
+          "source"
+        ) as DraftContextRows["source"])
       : null
     const memories = check(
       await this.client
@@ -121,6 +131,6 @@ export class SupabaseBackend implements AgentQueueBackend {
       await this.client.from("knowledge_entries").select("slug,title,category,tags,content,trust_level").eq("organization_id", job.organizationId).neq("trust_level", "archived").order("updated_at", { ascending: false }).limit(200),
       "knowledge"
     ) as DraftContextRows["knowledge"]
-    return { document, project, selection, signal, memories: memories ?? [], knowledge: knowledge ?? [] }
+    return { document, workItem, source, memories: memories ?? [], knowledge: knowledge ?? [] }
   }
 }

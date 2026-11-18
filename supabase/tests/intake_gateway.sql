@@ -21,30 +21,27 @@ begin
  reset role;
  -- Service path with no user JWT, like production Edge Function.
  perform set_config('request.jwt.claim.sub','',true);
+ perform set_config('request.jwt.claims','{"role":"service_role"}',true);
  set local role service_role;
  result:=public.accept_intake(repeat('a',64),payload);
  again:=public.accept_intake(repeat('a',64),payload);
- assert result->>'selection_id'=again->>'selection_id' and again->>'duplicate'='true','retry created duplicate';
- assert (select count(*)=1 from public.signals where organization_id=org),'signal duplicate';
- assert (select count(*)=1 from public.selections where organization_id=org),'selection missing';
+ assert result->>'event_id'=again->>'event_id' and again->>'duplicate'='true' and result->>'receipt_id'=result->>'event_id','retry created duplicate';
+ assert result->>'status'='captured' and result->>'topic_path'='/intake','receipt shape changed';
+ assert (select count(*)=1 from public.intake_events where organization_id=org and connection_id=conn and source='api'),'event duplicate';
+ assert (select count(*)=0 from public.work_items where organization_id=org),'capture created a work item';
+ assert (select count(*)=0 from public.agent_jobs where organization_id=org),'capture enqueued a job';
  denied:=false; begin perform public.accept_intake(repeat('a',64),payload||'{"text":"changed"}'::jsonb); exception when unique_violation then denied:=true; end;
  assert denied,'conflicting id accepted';
+ denied:=false; begin perform public.accept_intake(repeat('a',64),payload||'{"intent":"auto_draft","external_id":"x"}'::jsonb); exception when invalid_parameter_value then denied:=true; end;
+ assert denied,'accept_intake accepted auto_draft';
 
- -- Storage failure must roll back the preceding source/topic inserts.
  reset role;
- revoke insert on public.intake_receipts from service_role;
+ insert into public.intake_events(organization_id,source,connection_id,external_id,text)
+ select org,'api',conn,'rate-fixture-'||n,'x' from generate_series(1,99) n;
  set local role service_role;
- denied:=false; begin perform public.accept_intake(repeat('a',64),payload||'{"external_id":"storage-failure"}'::jsonb); exception when insufficient_privilege then denied:=true; end;
- assert denied,'fixture failed to simulate storage failure';
- assert (select count(*)=1 from public.signals where organization_id=org),'partial source survived rollback';
- assert (select count(*)=1 from public.selections where organization_id=org),'partial topic survived rollback';
- reset role;
- grant insert on public.intake_receipts to service_role;
- set local role service_role;
- insert into public.intake_receipts(organization_id,connection_id,external_id,payload,signal_id,selection_id)
- select org,conn,'rate-fixture-'||n,payload,(result->>'signal_id')::bigint,(result->>'selection_id')::bigint from generate_series(1,99) n;
  denied:=false; begin perform public.accept_intake(repeat('a',64),payload||'{"external_id":"over-limit"}'::jsonb); exception when raise_exception then denied:=true; end;
  assert denied,'rate limit ignored';
+ assert (select count(*)=0 from public.intake_events where organization_id=org and external_id='over-limit'),'rate-limited input was stored';
  again:=public.accept_intake(repeat('a',64),payload);
  assert again->>'duplicate'='true','rate limiting blocked an already committed retry';
  update public.intake_connections set revoked_at=now() where id=conn;
@@ -60,7 +57,7 @@ begin
  reset role;
  perform set_config('request.jwt.claim.sub',outsider::text,true);
  set local role authenticated;
- assert (select count(*)=0 from public.intake_receipts where organization_id=org),'receipt leaked';
+ assert (select count(*)=0 from public.intake_events where organization_id=org),'event leaked';
  assert (select count(*)=0 from public.intake_connections where organization_id=org),'connection leaked';
  reset role;
 end;

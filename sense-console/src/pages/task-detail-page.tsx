@@ -86,7 +86,7 @@ export function TaskDetailPage() {
           <>
             {j.status === "blocked_needs_human" && <Button disabled={resume.isPending} onClick={() => resume.mutate()}><RotateCcwIcon />追加一轮继续</Button>}
             {!isTerminalJob(j.status) && !j.cancelRequestedAt && <Button variant="outline" disabled={cancel.isPending} onClick={() => cancel.mutate()}><XIcon />取消</Button>}
-            {doc && <Button variant="outline" nativeButton={false} render={<Link to={`/content/projects/${doc.projectId}`} />}><FileTextIcon />{proposalId ? "查看稿件提案" : "打开稿件"}</Button>}
+            {doc?.workItemId && <Button variant="outline" nativeButton={false} render={<Link to={`/work-items/${doc.workItemId}`} />}><FileTextIcon />{proposalId ? "查看稿件提案" : "打开稿件"}</Button>}
           </>
         }
       />

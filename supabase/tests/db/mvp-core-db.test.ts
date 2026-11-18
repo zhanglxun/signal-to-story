@@ -84,6 +84,25 @@ describe("record_intake_event", () => {
   })
 })
 
+describe("promote_intake_event", () => {
+  it("turns an inbox input into a new card atomically, once, for content managers only", async () => {
+    const org = await seedOrganization(db, { members: [{ role: "owner" }, { role: "viewer" }] })
+    const { owner, viewer } = org.members
+    const ev = await db.asUser(owner, (tx) => tx.query<{ id: string }>(record, [org.organizationId, "web", "p-1", "一条想法", "https://example.com/p", "{}", null]))
+    const id = ev.rows[0].id
+    await expectDenied(db.asUser(viewer, (tx) => tx.query("select public.promote_intake_event($1, 'x')", [id])))
+    // A bad title fails the card insert, and the input stays in the inbox.
+    await expectDenied(db.asUser(owner, (tx) => tx.query("select public.promote_intake_event($1, '  ')", [id])))
+    const w = await db.asUser(owner, (tx) =>
+      tx.query<{ id: string; brief: Record<string, unknown>; created_by: string }>("select (w).id, (w).brief, (w).created_by from (select public.promote_intake_event($1, '想法') w) s", [id])
+    )
+    expect(w.rows[0]).toMatchObject({ created_by: owner, brief: { text: "一条想法", url: "https://example.com/p", intake_event_id: id } })
+    const filed = await db.asPostgres((tx) => tx.query<{ work_item_id: string }>("select work_item_id from public.intake_events where id = $1", [id]))
+    expect(filed.rows[0].work_item_id).toBe(w.rows[0].id)
+    await expectDenied(db.asUser(owner, (tx) => tx.query("select public.promote_intake_event($1, '再来')", [id])), /已被处理/)
+  })
+})
+
 describe("work_items", () => {
   it("is readable by viewers, writable by content managers, and pinned to its organization", async () => {
     const org = await seedOrganization(db, { members: [{ role: "owner" }, { role: "viewer" }] })

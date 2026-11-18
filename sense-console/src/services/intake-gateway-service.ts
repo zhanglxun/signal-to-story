@@ -8,15 +8,6 @@ export type IntakeConnection = {
   expires_at: string
   revoked_at: string | null
 }
-export type IntakeReceipt = {
-  id: string
-  connection_id: string
-  external_id: string
-  selection_id: number
-  signal_id: number
-  created_at: string
-  payload: { text: string; title: string; url: string }
-}
 const columns = "id,name,adapter,created_at,expires_at,revoked_at"
 function client() {
   const c = getSupabaseClient()
@@ -46,20 +37,6 @@ export async function listIntakeConnections(
   if (error) throw new Error("无法读取接入配置，请确认接入层迁移已部署。")
   return data ?? []
 }
-export async function listIntakeReceipts(
-  org: string
-): Promise<IntakeReceipt[]> {
-  const { data, error } = await client()
-    .from("intake_receipts")
-    .select(
-      "id,connection_id,external_id,selection_id,signal_id,created_at,payload"
-    )
-    .eq("organization_id", org)
-    .order("created_at", { ascending: false })
-    .limit(50)
-  if (error) throw new Error("无法读取收录记录。")
-  return (data ?? []) as IntakeReceipt[]
-}
 export async function createIntakeConnection(
   org: string,
   name: string,
@@ -78,15 +55,9 @@ export async function createIntakeConnection(
     .single()
   if (error) throw new Error("创建失败，请确认名称与内容管理权限。")
   const connection = data as IntakeConnection
+  // An IM bot is just a connection with adapter feishu/wecom: the platform signs each request, and the
+  // webhook path carries the connection id. No separate channel registration.
   if (adapter === "feishu" || adapter === "wecom") {
-    const { error: imError } = await client().from("im_channels").insert({
-      connection_id: connection.id,
-      organization_id: org,
-      channel: adapter,
-    })
-    if (imError) {
-      throw new Error("已创建连接，但绑定 IM 渠道失败，请确认 IM 渠道迁移已部署。")
-    }
     const webhookUrl = imWebhookEndpoint(adapter, connection.id)
     return {
       connection,

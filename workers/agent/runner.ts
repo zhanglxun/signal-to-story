@@ -100,7 +100,7 @@ export async function processNextJob(options: WorkerOptions): Promise<ProcessRes
       return { processed: true, jobId: job.id, error: "unsupported_job_type" }
     }
     const rows = await backend.loadDraftContext(job)
-    const fetched = await loadFetchedSource(options, job, rows.signal?.site_url ?? null)
+    const fetched = await loadFetchedSource(options, job, rows.source?.url ?? null)
     const context = assembleDraftContext(job, rows, fetched)
     const outcome = await runHarnessJob({
       job,
