@@ -9,7 +9,7 @@ describe("schema audit page data", () => {
     expect(data.missing).toEqual([])
     const tables = data.categories.flatMap((c) => c.tables)
     expect(tables.find((t) => t.name === "approval_requests")?.columns.map((c) => c.name)).toContain("question")
-    expect(tables.filter((t) => t.draft).map((t) => t.name)).toContain("work_items")
+    expect(tables.filter((t) => t.draft).map((t) => t.name)).toContain("runner_nodes")
   })
 
   it("turns common single-column checks into short Chinese notes", () => {

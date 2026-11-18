@@ -216,7 +216,6 @@ export const PLANNED_COLUMNS: Record<string, PlannedColumn[]> = {
     { name: "notified_at", type: "timestamptz", keys: "部分索引 where pending 且 notified_at is null", note: "可空", meaning: "待办通知已发出的时间（取代 outbox）" },
   ],
   content_documents: [
-    { name: "work_item_id", type: "uuid", keys: "FK (organization_id, work_item_id) → work_items；UQ(work_item_id, platform)", note: "回填后必填", meaning: "稿件属于哪张事项卡（取代 project_id）" },
     { name: "published_revision", type: "integer", keys: "", note: "可空；只能由发布 RPC 写", meaning: "已发布的是哪个版本" },
     { name: "published_title", type: "text", keys: "", note: "同上；anon 可读", meaning: "发布时的标题快照（改稿不影响线上）" },
     { name: "published_body", type: "text", keys: "", note: "同上；anon 可读", meaning: "发布时的正文快照" },
@@ -234,44 +233,6 @@ const ID = { name: "id", type: "uuid", keys: "PK；UQ(organization_id, id)", not
 const CREATED = { name: "created_at", type: "timestamptz", keys: "", note: "not null default now()", meaning: COMMON.created_at }
 
 export const PLANNED_TABLES: PlannedTable[] = [
-  {
-    name: "intake_events",
-    kind: "table",
-    purpose: "一条外部输入一行，不可变：Web 速记、IM 消息、外部 API、Chat 里的「帮我做这个」都写这里",
-    fateNote: "DB2 新建（MVP 精简，database.md §4.1）；取代 signals、intake_receipts、quick_captures",
-    reply: "R11 采纳：18 列减到 11 列；strength / intent / disposition / actor / legacy / reply_to 都并入 payload，去向由 work_item_id 和 ignored_at 表达",
-    cols: [
-      ID, ORG,
-      { name: "source", type: "text", keys: "UQ 去重键之一", note: "web / im / api / chat", meaning: "从哪类入口来" },
-      { name: "connection_id", type: "uuid", keys: "FK (organization_id, connection_id) → intake_connections", note: "可空（Web、Chat 为空）", meaning: "经哪个连接进来（IM 机器人也是一种连接）" },
-      { name: "external_id", type: "text", keys: "UQ(organization_id, source, connection_id, external_id) nulls not distinct", note: "必填；Web 用客户端幂等键", meaning: "来源内的事件 id，重复推送只收一次" },
-      { name: "text", type: "text", keys: "", note: "不可更新", meaning: "原始文本" },
-      { name: "url", type: "text", keys: "", note: "可空，不可更新", meaning: "原始链接" },
-      { name: "payload", type: "jsonb", keys: "", note: "对象，不可更新", meaning: "其余全部：附件引用、发送者、reply_to 回复地址、intent、回填来源 legacy" },
-      { name: "work_item_id", type: "uuid", keys: "FK (organization_id, work_item_id) → work_items", note: "可空；为空 = 在收件箱", meaning: "归入哪个事项" },
-      { name: "ignored_at", type: "timestamptz", keys: "", note: "可空", meaning: "人忽略这条输入的时间" },
-      { name: "created_by", type: "uuid", keys: "FK → auth.users", note: "可空（外部来源为空）", meaning: COMMON.created_by },
-      CREATED,
-    ],
-  },
-  {
-    name: "work_items",
-    kind: "table",
-    purpose: "看板上的一张卡（选题 / 事项）；status 直接决定在哪一列",
-    fateNote: "DB2 新建（MVP 精简，database.md §4.2）；取代 selections、content_projects",
-    reply: "R1 采纳：看板视图不做，status 直接存列，由人拖卡和少数 RPC（入队、提问、写完草稿）写入",
-    cols: [
-      ID, ORG,
-      { name: "kind", type: "text", keys: "", note: "article / video", meaning: "产出形态" },
-      { name: "title", type: "text", keys: "", note: "1–200 字", meaning: "选题标题" },
-      { name: "brief", type: "jsonb", keys: "", note: "对象", meaning: "Brief：角度、平台、content_kind、target_seconds、aspect_ratio、旧 Brief 文本、回填来源 legacy" },
-      { name: "category_id", type: "bigint", keys: "FK (organization_id, category_id) → source_categories", note: "可空", meaning: "分类" },
-      { name: "status", type: "text", keys: "索引(organization_id, status, updated_at desc)", note: "todo / doing / waiting / review / done / dropped", meaning: "看板列：待办、AI 在做、等你回答或批准、待审核、完成、放弃" },
-      { name: "created_by", type: "uuid", keys: "FK → auth.users", note: "可空（自动建卡为空）", meaning: COMMON.created_by },
-      CREATED,
-      { name: "updated_at", type: "timestamptz", keys: "", note: "", meaning: COMMON.updated_at },
-    ],
-  },
   {
     name: "runner_nodes",
     kind: "table",
@@ -320,6 +281,40 @@ export const PLANNED_TABLES: PlannedTable[] = [
 ]
 
 export const TABLES: Record<string, TableNote> = {
+  intake_events: {
+    purpose: "一条外部输入一行，不可变：Web 速记、IM 消息、外部 API、Chat 里的「帮我做这个」都写这里",
+    fate: "新建",
+    fateNote: "DB2a 已建（20261115090000_mvp_core）；取代 signals、intake_receipts、quick_captures",
+    reply: "R11 采纳：18 列减到 11 列；strength / intent / disposition / actor / legacy / reply_to 都并入 payload，去向由 work_item_id 和 ignored_at 表达",
+    cols: {
+      id: "主键",
+      source: "从哪类入口来",
+      connection_id: "经哪个连接进来（IM 机器人也是一种连接）",
+      external_id: "来源内的事件 id，重复推送只收一次",
+      text: "原始文本",
+      url: "原始链接",
+      payload: "其余全部：附件引用、发送者、reply_to 回复地址、intent、回填来源 legacy",
+      work_item_id: "归入哪个事项",
+      ignored_at: "人忽略这条输入的时间",
+      created_by: COMMON.created_by,
+    },
+  },
+  work_items: {
+    purpose: "看板上的一张卡（选题 / 事项）；status 直接决定在哪一列",
+    fate: "新建",
+    fateNote: "DB2a 已建（20261115090000_mvp_core）；取代 selections、content_projects",
+    reply: "R1 采纳：看板视图不做，status 直接存列，由人拖卡和少数 RPC（入队、提问、写完草稿）写入",
+    cols: {
+      id: "主键",
+      kind: "产出形态",
+      title: "选题标题",
+      brief: "Brief：角度、平台、content_kind、target_seconds、aspect_ratio、旧 Brief 文本、回填来源 legacy",
+      category_id: "分类",
+      status: "看板列：待办、AI 在做、等你回答或批准、待审核、完成、放弃",
+      created_by: COMMON.created_by,
+      updated_at: COMMON.updated_at,
+    },
+  },
   // ── 基座 ─────────────────────────────────────────────
   organizations: {
     purpose: "组织（租户）。所有业务数据都挂在某个组织下",
@@ -523,6 +518,7 @@ export const TABLES: Record<string, TableNote> = {
     cols: {
       id: "主键",
       project_id: "所属内容项目",
+      work_item_id: "稿件属于哪张事项卡（取代 project_id；退役迁移回填后改为必填）",
       platform: "平台：master 母稿 / wechat_channels / wechat_official / xiaohongshu / douyin / x / youtube / reddit",
       title: "当前标题",
       body: "当前正文（Markdown，≤10 万字）",

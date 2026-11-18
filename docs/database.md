@@ -228,7 +228,10 @@ erDiagram
 | --- | --- | --- | --- |
 | **DB0 对账**（2026-11-17 完成） | 只读导出线上 schema 和迁移历史（不含数据），与仓库前 13 个迁移逐对象比对 | 结论见 1.2 | 只读 |
 | **DB1 基线整理**（2026-11-17 完成） | 迁移历史对齐线上（A4）；在未上线迁移里原地修正 B1、B5。`quick_captures`、本地 `site_*` 这类要被替换的部分，等 DB2/DB4 的替代物就位后再删，保证每一步门禁都是绿的 | 根目录全部测试 + 三个 demo 通过 | 否 |
-| **DB2 核心** | `intake_events` `work_items`；`content_documents` 改挂、发布列、`write_document_draft`；`agent_jobs` / `agent_job_steps` 精简；`runner_nodes`；`notified_at` 通知；删除未上线的 `quick_captures` `im_channels` 和知识两表的迁移 | 状态同步、串行、epoch、base_revision 测试；回填脚本在 PGlite 上行数守恒 | 否 |
+| **DB2a 核心表**（2026-11-18 完成） | 迁移 `20261115090000_mvp_core`：`work_items`、`intake_events` + `record_intake_event`、`content_documents.work_item_id`、回填函数 `private.backfill_v1()`（V1 → 0.5，可重复执行）；旧表暂不删 | `mvp-core-db.test.ts`：幂等、权限、原始输入不可改、回填可追溯且第二次执行为 0 | 否 |
+| **DB2b 入口与调用方** | `accept_intake`、速记改写 `intake_events`；控制台、worker、Edge Function 改用 `work_items` / `intake_events`；稿件改挂 `work_item_id`、AI 写草稿 RPC | 全部门禁 | 否 |
+| **DB2c 执行精简** | `agent_jobs` / `agent_job_steps` 按 4.4 精简；`runner_nodes`；`notified_at` 通知；同步改 worker | 状态同步、串行、epoch 测试 | 否 |
+| **退役迁移**（DB2 收尾，代码不再引用旧表后） | 调用 `private.backfill_v1()`，校验行数守恒，删除旧表；`content_documents.work_item_id` 改必填、删 `project_id` | 行数守恒断言 | 否 |
 | **DB3 Chat** | `chat_sessions` `chat_messages` + chat 回合 | 浏览器无法伪造 assistant 消息 | 否 |
 | **DB4 发布与读者站** | 发布 RPC 写 `published_*`；`anon` 列授权；sense-site 改读 `content_documents`；删除本地 `site_*` 迁移和外部发布三表的代码 | 未批准读不到；下线后读不到；改稿不影响已发布内容 | 否 |
 | **DB5 视频精简** | `video_plans` 改挂 `work_item_id`；删除分镜提案和成本账本；AI 直接写草稿分镜 | 现有视频测试改写后通过 | 否 |
