@@ -21,7 +21,7 @@
 import { Buffer } from "node:buffer"
 import { createCipheriv, createDecipheriv, createHash, randomBytes } from "node:crypto"
 
-import { type ReviewNotice, PLATFORM_LABELS, safeEqual, sanitizeForNotice, statusLabel } from "./shared.ts"
+import { type ReviewNotice, PLATFORM_LABELS, roundsLabel, safeEqual, sanitizeForNotice, statusLabel } from "./shared.ts"
 
 export type WecomConfig = {
   token: string
@@ -162,10 +162,10 @@ const neutralise = (s: string) => s.replace(/</g, "＜").replace(/>/g, "＞").re
 /** Markdown review notice. Contains only links to the console; WeCom cannot approve. */
 export function buildWecomReviewMarkdown(n: ReviewNotice): string {
   const platform = n.platform ? (PLATFORM_LABELS[n.platform] ?? n.platform) : "稿件"
-  const rounds = n.maxRounds ? `${n.rounds}/${n.maxRounds}` : String(n.rounds)
+  const rounds = roundsLabel(n)
   return [
     `**${statusLabel(n.status)}**：${neutralise(sanitizeForNotice(n.title, 40) || "未命名稿件")}`,
-    `平台：${platform}\u3000评估轮数：${rounds}`,
+    rounds ? `平台：${platform}\u3000评估轮数：${rounds}` : `平台：${platform}`,
     ...(n.summary ? [neutralise(sanitizeForNotice(n.summary, 300))] : []),
     `[查看并审核](${n.reviewUrl})\u3000[打开任务](${n.taskUrl})`,
     "审核与发布须在控制台由登录成员对具体版本操作，IM 内不会批准。",

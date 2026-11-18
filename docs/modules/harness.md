@@ -9,15 +9,15 @@
 | 契约 | `sense-console/src/contracts/agent-*.ts` | `core/contracts`（R2） |
 | 循环纯函数 | `sense-console/src/harness/*` | `core/harness`，并新增 `core/agent`（R2/R3） |
 | worker | `workers/agent/*` | 已就位 |
-| 数据库 | `supabase/migrations/20261115100000/100100/100200` | 已就位 |
+| 数据库 | `supabase/migrations/20261115100000/100100/100200`，DB2c-1 精简 `20261123100000` | 已就位 |
 | 入队入口 | Edge Function `supabase/functions/content-draft`（`mode: "queue"`） | 不变 |
 
 ## 2. 表
 
 | 表 | 作用 | 浏览器 | worker |
 | --- | --- | --- | --- |
-| `agent_jobs` | 任务队列：幂等键（组织内唯一）、租约、预算、轮次 / 跳数 | 只读；写只能经 RPC | 经 RPC 认领和完成 |
-| `agent_job_steps` | 每一步一行，`unique(job_id, round, step_kind)`，不可修改 | 只读 | 只能插入 |
+| `agent_jobs` | 任务队列：幂等键（组织内唯一）、租约（`lease_epoch`）、`work_item_id`；目标、批准、上限在 `payload.target / approval_request_id / limits` | 只读；写只能经 RPC | 只能经 RPC 认领、心跳、完成 |
+| `agent_job_steps` | 每一步一行，`unique(job_id, seq)`，只追加；轮次、评估在 `output`，模型、费用、耗时在 `usage` | 只读 | 只能经 `record_agent_job_step` |
 | `approval_requests` | 人工批准（`kind=approval`，绑定 `target_type / target_id / target_revision`）和 Agent 提问（`kind=question`） | 只读；写只能经 RPC | 只能经 RPC 创建 pending |
 | ~~`decision_memories`~~（MVP 不做，DB-D11） | 人工决定记忆；`platform` / `content_kind` 为空表示全局 | `content.manage` 可写 | 只读 |
 | ~~`knowledge_entries`~~（MVP 不做，worker 读 `knowledge-base/` 文件） | 知识原文 Markdown + `trust_level` | 可写；设为 `trusted` 需要 `content.review` | 只读 |
@@ -31,7 +31,7 @@ running → blocked_needs_human → (resume) → queued
 running → 租约过期 / 可重试失败 → queued
 ```
 
-终态不可再改；任务的身份字段和输入字段不可修改。
+终态不可再改（只允许记录 `notified_at`）；任务的身份、输入、目标和所属事项不可修改，只有 `resume_agent_job` 能调高 `payload.limits`。任务状态变化同步事项卡片：排队 / 运行 → `doing`，待审核 → `review`，等人 / 失败 → `waiting`；`done` / `dropped` 的卡和 Chat 回合不动。
 
 ## 3. RPC
 
@@ -39,11 +39,12 @@ running → 租约过期 / 可重试失败 → queued
 | --- | --- | --- |
 | `enqueue_agent_job` | 登录用户（`agent.dispatch`） | 幂等；`content_draft` 还会校验稿件版本 |
 | `cancel_agent_job` / `resume_agent_job` | 登录用户 | 运行中的任务只设置取消标志；恢复只适用于 blocked 状态 |
-| `claim_agent_job` | worker | 先回收过期租约，再用 `FOR UPDATE SKIP LOCKED` 取一条 |
-| `heartbeat_agent_job` / `complete_agent_job` / `fail_agent_job` | worker | 不是租约持有者时写入失败；只有标记为可重试且还有次数才重新排队 |
+| `claim_agent_job(kinds, lease)` | worker | 先回收过期租约，再按 `run_after, created_at` 用 `FOR UPDATE SKIP LOCKED` 取一条；同一事项已有运行中的非 Chat 任务时跳过；`lease_epoch + 1` 并返回 |
+| `heartbeat_agent_job` / `complete_agent_job` / `fail_agent_job` / `record_agent_job_step` | worker | 都要带认领时拿到的 `lease_epoch`，不等于当前值就拒绝（旧进程的迟到写入）；只有标记为可重试且还有次数才重新排队 |
+| `list_pending_notices` / `mark_notice_sent` | worker | 通知轮询：列出需要人处理且 `notified_at` 为空的任务、批准、提问；发送成功才标记 |
 | `create_approval_request` | 登录用户或 worker | 同一对象同一版本只保留一条 pending |
 | `decide_approval_request` | **只限登录的人** | worker（`service_role`）没有执行权限 |
-| `ask_question` | **只限 worker** | Agent 拿不准时提问：写一条 `kind=question` 的请求，任务转为 `blocked_needs_human` |
+| `ask_question(job, question, lease_epoch)` | **只限 worker** | Agent 拿不准时提问：写一条 `kind=question` 的请求，任务转为 `blocked_needs_human` |
 | `answer_question` | **只限登录的人**（`content.manage`） | 回答后，提问的任务自动重新排队 |
 
 ## 4. Mandate 门禁（数据库强制）
@@ -56,8 +57,8 @@ running → 租约过期 / 可重试失败 → queued
 
 每一轮：`generate`（1 跳）→ `precheck`（确定性检查，0 跳；不通过就直接重写）→ `evaluate`（独立 LLM，1 跳）。
 
-- 上限：`max_rounds`（默认 3）、`max_hops`、`budget_cents`、`token_budget`。超限进入 `blocked_needs_human`。
-- 进度由已落库的步骤推导，所以中断后恢复时，已经完成的计费调用不会重做。**已计费的失败不自动重试。**
+- 上限在 `payload.limits`：`max_rounds`（默认 3）、`max_hops`、`budget_cents`、`token_budget`，由 worker 的循环控制器检查（DB2c-1 起不再由数据库列检查，见 database.md §4.4）。超限进入 `blocked_needs_human`。
+- 进度（轮次、跳数、费用、Token、模型）由已落库的步骤推导，所以中断后恢复时，已经完成的计费调用不会重做。**已计费的失败不自动重试。**
 - 确定性预检：防注入泄漏、篇幅、禁用表述、平台格式。
 - LLM 评估：输出严格 JSON 清单并做 schema 校验；`fact_grounding` 判通过却没有引用任何有效 source_id 时，按不通过处理。
 - Context Pack：system 区只放规则、SOP、匹配的决定记忆（默认 20 条）和 `trusted` 知识；外部信源和未审核知识放进 `<untrusted_*>` 标签，标签字符在数据中转义。注入检测只用作审计信号，真正的防线是权限和 schema 校验。
@@ -67,6 +68,6 @@ running → 租约过期 / 可重试失败 → queued
 
 1. 循环拆成两层：`core/agent` 定义通用的会话、回合、停止条件和接口；harness 是其中一种「生成 → 预检 → 评估」形状的循环（architecture 6.3）。
 2. 执行模式分为 `harness / agent_session / chat / video`。`agent_session` 为每个事项开一个可写目录，凭证不进子进程。
-3. worker 改用受限的节点身份（`runner_nodes`），并加入 `lease_epoch`，拒绝旧进程的迟到写入。
+3. worker 改用受限的节点身份（`runner_nodes`，DB2c-2）；`lease_epoch` 已在 DB2c-1 加入，拒绝旧进程的迟到写入。
 4. 所有 CLI 调用都收进 `workers/agent/drivers`，删除 Vite 里的 spawn。
 5. 知识库种子：`knowledge-base/**/*.md` → `npm run kb:seed` 生成前端常量和 `supabase/seeds/knowledge_base.sql`，测试会校验两者同步。

@@ -1,6 +1,6 @@
 import type { SupabaseClient } from "@supabase/supabase-js"
 
-import type { HarnessJob, HarnessProgress, HarnessStepRecord, HarnessTerminalStatus, SaveProposalInput } from "../../../sense-console/src/harness/job-store"
+import type { HarnessJob, HarnessStepRecord, HarnessTerminalStatus, SaveProposalInput } from "../../../sense-console/src/harness/job-store"
 import { type AgentQueueBackend, type ClaimedJobRow, type DraftContextRows, rowToStep, stepToRow } from "../backend"
 
 function check<T>(result: { data: T; error: { message: string; code?: string } | null }, what: string): T {
@@ -25,42 +25,42 @@ export class SupabaseBackend implements AgentQueueBackend {
     return { data: data as unknown, error: error ? { message: error.message } : null }
   }
 
-  async claim(workerId: string, jobTypes: string[], leaseSeconds: number) {
-    const data = check(await this.client.rpc("claim_agent_job", { p_worker_id: workerId, p_job_types: jobTypes, p_lease_seconds: leaseSeconds }), "claim")
+  async claim(jobTypes: string[], leaseSeconds: number) {
+    const data = check(await this.client.rpc("claim_agent_job", { p_job_types: jobTypes, p_lease_seconds: leaseSeconds }), "claim")
     const rows = (Array.isArray(data) ? data : data ? [data] : []) as ClaimedJobRow[]
     return rows[0] ?? null
   }
 
-  async heartbeat(jobId: string, workerId: string, leaseSeconds: number) {
-    const data = check(await this.client.rpc("heartbeat_agent_job", { p_job_id: jobId, p_worker_id: workerId, p_lease_seconds: leaseSeconds }), "heartbeat") as { ok: boolean; cancel_requested: boolean }
+  async heartbeat(jobId: string, leaseEpoch: number, leaseSeconds: number) {
+    const data = check(await this.client.rpc("heartbeat_agent_job", { p_job_id: jobId, p_lease_epoch: leaseEpoch, p_lease_seconds: leaseSeconds }), "heartbeat") as { ok: boolean; cancel_requested: boolean }
     return { ok: Boolean(data?.ok), cancelRequested: Boolean(data?.cancel_requested) }
   }
 
-  async complete(jobId: string, workerId: string, status: HarnessTerminalStatus, result: Record<string, unknown>, error: string | null, errorCode: string | null) {
-    check(await this.client.rpc("complete_agent_job", { p_job_id: jobId, p_worker_id: workerId, p_status: status, p_result: result, p_error: error, p_error_code: errorCode }), "complete")
+  async complete(jobId: string, leaseEpoch: number, status: HarnessTerminalStatus, result: Record<string, unknown>, error: string | null, errorCode: string | null) {
+    check(await this.client.rpc("complete_agent_job", { p_job_id: jobId, p_lease_epoch: leaseEpoch, p_status: status, p_result: result, p_error: error, p_error_code: errorCode }), "complete")
   }
 
-  async fail(jobId: string, workerId: string, error: string, retryable: boolean, retryDelaySeconds: number, errorCode: string | null) {
+  async fail(jobId: string, leaseEpoch: number, error: string, retryable: boolean, retryDelaySeconds: number, errorCode: string | null) {
     check(
-      await this.client.rpc("fail_agent_job", { p_job_id: jobId, p_worker_id: workerId, p_error: error.slice(0, 4000), p_retryable: retryable, p_retry_delay_seconds: retryDelaySeconds, p_error_code: errorCode }),
+      await this.client.rpc("fail_agent_job", { p_job_id: jobId, p_lease_epoch: leaseEpoch, p_error: error.slice(0, 4000), p_retryable: retryable, p_retry_delay_seconds: retryDelaySeconds, p_error_code: errorCode }),
       "fail"
     )
   }
 
   async listSteps(jobId: string): Promise<HarnessStepRecord[]> {
-    const data = check(await this.client.from("agent_job_steps").select("*").eq("job_id", jobId).order("round").order("created_at"), "listSteps")
+    const data = check(await this.client.from("agent_job_steps").select("*").eq("job_id", jobId).order("seq"), "listSteps")
     return (data ?? []).map(rowToStep)
   }
 
-  async insertStep(step: HarnessStepRecord) {
-    check(await this.client.from("agent_job_steps").upsert(stepToRow(step), { onConflict: "job_id,round,step_kind", ignoreDuplicates: true }), "insertStep")
-  }
-
-  async updateProgress(jobId: string, p: HarnessProgress) {
-    const patch: Record<string, unknown> = { rounds: p.rounds, hops_used: p.hopsUsed, cost_cents: p.costCents, tokens_used: p.tokensUsed }
-    if (p.driver) patch.driver = p.driver
-    if (p.model) patch.model = p.model
-    check(await this.client.from("agent_jobs").update(patch).eq("id", jobId).eq("status", "running"), "updateProgress")
+  /** Idempotent per (round, stepKind): the lease holder is the only writer, so check-then-append is safe. */
+  async insertStep(step: HarnessStepRecord, leaseEpoch: number) {
+    const existing = await this.listSteps(step.jobId)
+    if (existing.some((s) => s.round === step.round && s.stepKind === step.stepKind)) return
+    const row = stepToRow(step)
+    check(
+      await this.client.rpc("record_agent_job_step", { p_job_id: step.jobId, p_lease_epoch: leaseEpoch, p_kind: row.kind, p_status: row.status, p_output: row.output, p_usage: row.usage, p_error: row.error }),
+      "insertStep"
+    )
   }
 
   async saveProposal(input: SaveProposalInput) {
@@ -93,7 +93,7 @@ export class SupabaseBackend implements AgentQueueBackend {
 
   async loadDraftContext(job: HarnessJob): Promise<DraftContextRows> {
     const document = check(
-      await this.client.from("content_documents").select("id,organization_id,work_item_id,platform,title,body,revision").eq("id", job.targetId ?? "").eq("organization_id", job.organizationId).single(),
+      await this.client.from("content_documents").select("id,organization_id,work_item_id,platform,title,body,revision").eq("id", job.target?.id ?? "").eq("organization_id", job.organizationId).single(),
       "document"
     ) as DraftContextRows["document"]
     const workItem = document.work_item_id

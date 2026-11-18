@@ -60,12 +60,13 @@ describe("quick_capture RPC", () => {
     expect(r.item_path).toBe(`/work-items/${r.work_item_id}`)
     expect(r.documents.map((d) => d.platform)).toEqual(["master", "x", "xiaohongshu"])
     const jobs = await db.asUser(org.members.viewer, (tx) =>
-      tx.query<{ id: string; status: string; target_id: string; idempotency_key: string; payload: { instruction: string; fetch_source: boolean; intake_event_id: string; source: string } }>(
-        "select id, status, target_id, idempotency_key, payload from public.agent_jobs where payload->>'intake_event_id'=$1 order by created_at", [r.event_id]))
+      tx.query<{ id: string; status: string; target_id: string; work_item_id: string; idempotency_key: string; payload: { instruction: string; fetch_source: boolean; intake_event_id: string; source: string } }>(
+        "select id, status, payload->'target'->>'id' as target_id, work_item_id, idempotency_key, payload from public.agent_jobs where payload->>'intake_event_id'=$1 order by created_at", [r.event_id]))
     expect(jobs.rows).toHaveLength(3)
     expect(jobs.rows.every((j) => j.status === "queued" && j.payload.source === "capture" && j.payload.fetch_source && j.payload.instruction.length > 0)).toBe(true)
     expect(new Set(jobs.rows.map((j) => j.idempotency_key))).toEqual(new Set(["master", "x", "xiaohongshu"].map((p) => `capture:${r.event_id}:${p}`)))
     expect(new Set(jobs.rows.map((j) => j.target_id))).toEqual(new Set(r.documents.map((d) => d.document_id)))
+    expect(jobs.rows.every((j) => j.work_item_id === r.work_item_id)).toBe(true)
     expect(new Set(jobs.rows.map((j) => j.id))).toEqual(new Set(r.documents.map((d) => d.job_id)))
     const item = await db.asPostgres((tx) => tx.query<{ status: string; title: string; brief: Record<string, unknown> }>("select status, title, brief from public.work_items where id=$1", [r.work_item_id]))
     expect(item.rows[0]).toMatchObject({ status: "doing", title: "example.com/b", brief: { url: "https://example.com/b", platforms: ["xiaohongshu", "x"], intake_event_id: r.event_id } })
@@ -87,7 +88,7 @@ describe("quick_capture RPC", () => {
     // content.manage without agent.dispatch: rejected before any write
     await expect(capture(org.members.editor, org.organizationId, { note: "想法", intent: "auto_draft", key: "web-auto-edit1" })).rejects.toThrow(/调度/)
     // Force a failure deep inside the pipeline (after the event/work item/document inserts) by breaking enqueue.
-    await db.asPostgres((tx) => tx.query("alter table public.agent_jobs add constraint qc_test_block check (job_type <> 'content_draft') not valid"))
+    await db.asPostgres((tx) => tx.query("alter table public.agent_jobs add constraint qc_test_block check (kind <> 'content_draft') not valid"))
     try {
       await expect(capture(org.members.owner, org.organizationId, { note: "会失败的想法", intent: "auto_draft", key: "web-auto-fail1" })).rejects.toThrow()
     } finally {

@@ -1,13 +1,18 @@
 // @vitest-environment node
-// Rehearse the generated release on a database shaped like the live one (DB0): repo migrations up to
+// Rehearse the generated step-1 release on a database shaped like the live one (DB0): repo migrations up to
 // the live head, the CLI history table, the legacy live-only site_* objects, and some V1 rows.
+// (Step 1 is applied live; it must keep regenerating byte-identical. Step 2: release-step2.test.ts.)
+import { readFileSync } from "node:fs"
+import path from "node:path"
 import { describe, expect, it } from "vitest"
 
-import { createSupabaseTestDb, listMigrationFiles, seedOrganization } from "./pglite-harness"
-import { buildRelease, LIVE_HEAD, pendingMigrations } from "./release"
+import { createSupabaseTestDb, listMigrationFiles, REPO_ROOT, seedOrganization } from "./pglite-harness"
+import { buildRelease, LIVE_HEAD, pendingMigrations, RELEASES } from "./release"
 import { diffSnapshots, snapshotQuery, type SchemaSnapshot } from "./schema-snapshot"
 
 const LIVE_HEAD_FILE = listMigrationFiles().find((f) => f.startsWith(LIVE_HEAD))!
+const STEP1 = { ...RELEASES.step1, label: "test" }
+const STEP1_LAST = listMigrationFiles().filter((f) => f.slice(0, 14) <= RELEASES.step1.upTo).at(-1)!
 
 const LIVE_ONLY_LEGACY = `
 create schema if not exists supabase_migrations;
@@ -32,7 +37,7 @@ async function liveLikeDb() {
 }
 
 describe("0.5 release script", () => {
-  it("applies every pending migration on a live-shaped database and matches the repo head exactly", async () => {
+  it("applies the step-1 migrations on a live-shaped database and matches the repo built to the same point", async () => {
     const db = await liveLikeDb()
     const org = await seedOrganization(db, { members: [{ role: "owner" }] })
     await db.asUser(org.members.owner, async (tx) => {
@@ -40,19 +45,19 @@ describe("0.5 release script", () => {
       await tx.query("insert into public.signals(organization_id,category_id,name,is_organized,created_by,updated_by) values ($1,$2,'线上旧信源',true,$3,$3)", [org.organizationId, cat.rows[0].id, org.members.owner])
     })
 
-    await db.db.exec(buildRelease({ label: "test" }))
+    await db.db.exec(buildRelease(STEP1))
 
     const q = <T>(sql: string) => db.asPostgres(async (tx) => (await tx.query<T>(sql)).rows)
     const history = await q<{ version: string }>("select version from supabase_migrations.schema_migrations order by version")
-    expect(history.map((h) => h.version)).toEqual(listMigrationFiles().map((f) => f.slice(0, 14)))
+    expect(history.map((h) => h.version)).toEqual(listMigrationFiles().filter((f) => f <= STEP1_LAST).map((f) => f.slice(0, 14)))
     expect(await q("select 1 from pg_proc where proname in ('ensure_site_settings','ingest_harvested_signals')")).toEqual([])
     const events = await q<{ text: string; work_item_id: string | null }>("select text, work_item_id from public.intake_events")
     expect(events).toEqual([expect.objectContaining({ text: "线上旧信源" })])
     expect(events[0].work_item_id).not.toBeNull()
 
-    // Same structure as building the repo from scratch (the CLI history schema is not part of the snapshot).
+    // Same structure as building the repo from scratch up to the same migration (the CLI history schema is not part of the snapshot).
     const after = (await db.asPostgres((tx) => tx.query<{ snapshot: SchemaSnapshot }>(snapshotQuery()))).rows[0].snapshot
-    const fresh = await createSupabaseTestDb()
+    const fresh = await createSupabaseTestDb({ upTo: STEP1_LAST })
     const head = (await fresh.asPostgres((tx) => tx.query<{ snapshot: SchemaSnapshot }>(snapshotQuery()))).rows[0].snapshot
     await fresh.close()
     const diff = diffSnapshots(after, head)
@@ -62,14 +67,14 @@ describe("0.5 release script", () => {
 
   it("refuses to run twice or on an unexpected history, leaving the database untouched", async () => {
     const db = await liveLikeDb()
-    await db.db.exec(buildRelease({ label: "test" }))
-    await expect(db.db.exec(buildRelease({ label: "test" }))).rejects.toThrow(/preflight/)
+    await db.db.exec(buildRelease(STEP1))
+    await expect(db.db.exec(buildRelease(STEP1))).rejects.toThrow(/preflight/)
     await db.db.exec("rollback") // the failed script left its transaction open
     await db.close()
 
     const drifted = await liveLikeDb()
     await drifted.asPostgres((tx) => tx.query("insert into supabase_migrations.schema_migrations(version, name) values ('20261101000000', 'unknown')"))
-    await expect(drifted.db.exec(buildRelease({ label: "test" }))).rejects.toThrow(/expected last applied migration/)
+    await expect(drifted.db.exec(buildRelease(STEP1))).rejects.toThrow(/expected last applied migration/)
     await drifted.db.exec("rollback")
     expect((await drifted.asPostgres((tx) => tx.query("select to_regclass('public.work_items') r"))).rows[0]).toEqual({ r: null })
     await drifted.close()
@@ -78,15 +83,19 @@ describe("0.5 release script", () => {
   it("refuses to drop a legacy table that holds data", async () => {
     const db = await liveLikeDb()
     await db.asPostgres((tx) => tx.query("insert into public.site_settings(site_id) values ('x')"))
-    await expect(db.db.exec(buildRelease({ label: "test" }))).rejects.toThrow(/must be empty/)
+    await expect(db.db.exec(buildRelease(STEP1))).rejects.toThrow(/must be empty/)
     await db.db.exec("rollback")
     await db.close()
   })
 
   it("contains only the pending migrations and no secrets", () => {
-    const sql = buildRelease({ label: "test" })
-    expect(pendingMigrations().every((f) => f > LIVE_HEAD_FILE)).toBe(true)
-    for (const f of pendingMigrations()) expect(sql).toContain(`-- >>> ${f}`)
+    const sql = buildRelease(STEP1)
+    const files = pendingMigrations(LIVE_HEAD, RELEASES.step1.upTo)
+    expect(files).toHaveLength(12)
+    expect(files.every((f) => f > LIVE_HEAD_FILE)).toBe(true)
+    for (const f of files) expect(sql).toContain(`-- >>> ${f}`)
+    expect(sql).not.toContain("20261123100000")
+    expect(sql).toBe(readFileSync(path.join(REPO_ROOT, "supabase/release", RELEASES.step1.file), "utf8").replace(RELEASES.step1.label, "test"))
     expect(sql).not.toMatch(/service_role_key|sb_secret|password\s*=|supabase\.co/i)
   })
 })

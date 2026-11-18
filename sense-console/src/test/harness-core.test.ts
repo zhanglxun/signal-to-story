@@ -132,20 +132,17 @@ describe("LLM evaluator output validation", () => {
 })
 
 describe("loop controller (in-memory JobStore)", () => {
-  const job = (over: Partial<HarnessJob> = {}): HarnessJob => ({
+  const job = (limits: Partial<HarnessJob["limits"]> = {}): HarnessJob => ({
     id: "job-1",
     organizationId: ORG,
-    jobType: "content_draft",
+    workItemId: null,
+    kind: "content_draft",
     payload: { instruction: "写" },
-    targetType: "content_document",
-    targetId: "doc-1",
-    targetRevision: 1,
+    target: { type: "content_document", id: "doc-1", revision: 1 },
+    approvalRequestId: null,
     createdBy: "user-1",
-    budgetCents: 100,
-    tokenBudget: null,
-    maxHops: 8,
-    maxRounds: 3,
-    ...over,
+    limits: { maxRounds: 3, maxHops: 8, budgetCents: 100, tokenBudget: null, ...limits },
+    leaseEpoch: 1,
   })
   const context = (): HarnessDraftContext => ({
     documentId: "doc-1",

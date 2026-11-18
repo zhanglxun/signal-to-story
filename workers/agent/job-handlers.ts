@@ -7,7 +7,6 @@ export interface JobHandlerContext {
   job: HarnessJob
   claimed: ClaimedJobRow
   backend: AgentQueueBackend
-  workerId: string
   leaseSeconds: number
   generator: LlmClient
   signal?: AbortSignal
@@ -22,7 +21,7 @@ export interface JobHandlerOutcome {
 }
 
 /**
- * A handler owns the job until it calls backend.complete / backend.fail. Thrown errors are handled by the
+ * A handler owns the job until it calls backend.complete / backend.fail with job.leaseEpoch. Thrown errors are handled by the
  * runner exactly like content_draft errors (LlmCallError → no auto-retry when billable, LeaseLostError → no writes).
  */
 export type JobHandler = (context: JobHandlerContext) => Promise<JobHandlerOutcome>

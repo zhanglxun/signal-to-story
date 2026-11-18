@@ -25,9 +25,10 @@ export interface FetchedSource {
 export function assembleDraftContext(job: HarnessJob, rows: DraftContextRows, fetched: FetchedSource | null = null): HarnessDraftContext {
   const instruction = String(job.payload.instruction ?? "").trim()
   if (!instruction) throw new Error("任务缺少创作要求 (payload.instruction)")
-  if (job.targetRevision != null && rows.document.revision !== job.targetRevision) {
+  const queuedRevision = job.target?.revision ?? null
+  if (queuedRevision != null && rows.document.revision !== queuedRevision) {
     // The human edited the document after queueing; drafting against stale text is pointless.
-    throw new StaleTargetError(`稿件已从 v${job.targetRevision} 变为 v${rows.document.revision}，请重新发起生成`)
+    throw new StaleTargetError(`稿件已从 v${queuedRevision} 变为 v${rows.document.revision}，请重新发起生成`)
   }
   const platform = rows.document.platform
   const brief = rows.workItem?.brief ?? {}

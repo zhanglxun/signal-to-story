@@ -9,7 +9,7 @@ import { createSupabaseTestDb, type SupabaseTestDb } from "../../testing/db/pgli
 import { SqlBackend } from "./backends/sql-backend"
 import { buildChildEnv, CliLlmClient } from "./drivers/cli-driver"
 import { CloudLlmClient } from "./drivers/cloud-llm"
-import { demoEvaluatorAlwaysFail, demoEvaluatorAlwaysPass, demoEvaluatorFailThenPass, demoGenerator, enqueueDemoJob, seedDemoWorkspace, type DemoWorkspace } from "./demo/demo-scenario"
+import { demoEvaluatorAlwaysFail, demoEvaluatorAlwaysPass, demoEvaluatorFailThenPass, demoGenerator, enqueueDemoJob, readJobUsage, seedDemoWorkspace, type DemoWorkspace } from "./demo/demo-scenario"
 import { processNextJob, type WorkerLogger } from "./runner"
 
 const silent: WorkerLogger = { info: () => undefined, warn: () => undefined, error: () => undefined }
@@ -27,8 +27,13 @@ afterEach(async () => {
   await db.close()
 })
 
+/** Job row plus the progress derived from its steps (the job row no longer stores rounds / hops). */
 const jobRow = (id: string) =>
-  db.asPostgres(async (tx) => (await tx.query<{ status: string; rounds: number; hops_used: number; error_code: string | null; attempts: number }>("select * from public.agent_jobs where id=$1", [id])).rows[0])
+  db.asPostgres(async (tx) => {
+    const row = (await tx.query<{ status: string; error_code: string | null; attempts: number }>("select * from public.agent_jobs where id=$1", [id])).rows[0]
+    const usage = (await readJobUsage(tx, [id]))[id]
+    return { ...row, rounds: usage.rounds, hops_used: usage.hops }
+  })
 
 describe("agent worker end to end (PGlite + fake LLM)", () => {
   it("enqueue -> claim -> generate -> evaluate fails -> rewrite -> pass -> proposal + pending_review", async () => {
@@ -45,11 +50,13 @@ describe("agent worker end to end (PGlite + fake LLM)", () => {
 
     // Steps and proposal are visible to the human through RLS.
     const seen = await db.asUser(ws.ownerId, async (tx) => {
-      const steps = await tx.query<{ round: number; step_kind: string; status: string }>("select round, step_kind, status from public.agent_job_steps where job_id=$1 order by round, created_at", [job.id])
+      const steps = await tx.query<{ seq: number; round: number; step_kind: string; status: string }>(
+        "select seq, (output->>'round')::int as round, case when kind = 'check' then output->>'stage' else kind end as step_kind, status from public.agent_job_steps where job_id=$1 order by seq", [job.id])
       const proposals = await tx.query<{ status: string; body: string; prompt_version: string; agent_job_id: string }>("select * from public.content_ai_proposals where document_id=$1", [ws.documentId])
       const doc = await tx.query<{ body: string; revision: number }>("select body, revision from public.content_documents where id=$1", [ws.documentId])
       return { steps: steps.rows, proposals: proposals.rows, doc: doc.rows[0] }
     })
+    expect(seen.steps.map((s) => s.seq)).toEqual([1, 2, 3, 4, 5, 6, 7, 8])
     expect(seen.steps.map((s) => `${s.round}:${s.step_kind}:${s.status}`)).toEqual([
       "0:context:succeeded",
       "1:generate:succeeded",
@@ -84,8 +91,14 @@ describe("agent worker end to end (PGlite + fake LLM)", () => {
     const proposals = await db.asPostgres((tx) => tx.query("select 1 from public.content_ai_proposals where agent_job_id=$1", [job.id]))
     expect(proposals.rows).toHaveLength(0)
     // a human can grant one more round
-    const resumed = await db.asUser(ws.ownerId, (tx) => tx.query<{ status: string; max_rounds: number }>("select (r).status, (r).max_rounds from (select public.resume_agent_job($1,1,0) r) s", [job.id]))
-    expect(resumed.rows[0]).toEqual({ status: "queued", max_rounds: 4 })
+    const resumed = await db.asUser(ws.ownerId, (tx) => tx.query<{ status: string; limits: Record<string, number> }>("select (r).status, (r).payload->'limits' as limits from (select public.resume_agent_job($1,1,0) r) s", [job.id]))
+    expect(resumed.rows[0]).toEqual({ status: "queued", limits: { max_rounds: 4, max_hops: 10, budget_cents: 100 } })
+    // the resumed run reads the raised limit from payload.limits and the totals from its steps: only round 4 runs
+    const generator = demoGenerator()
+    const again = await processNextJob({ backend, workerId: "w2", generator, evaluator: demoEvaluatorAlwaysPass(), logger: silent })
+    expect(again.outcome?.status).toBe("pending_review")
+    expect(generator.calls).toHaveLength(1)
+    expect(await jobRow(job.id)).toMatchObject({ status: "pending_review", rounds: 4, hops_used: 8 })
   })
 
   it("resumes from persisted steps after a non-LLM failure without re-billing", async () => {

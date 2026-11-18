@@ -6,8 +6,11 @@ import {
   type ApprovalRequest,
   type EnqueueContentDraftInput,
   type EnqueueContentDraftResult,
+  EMPTY_JOB_USAGE,
+  type JobUsage,
   mapAgentJob,
   mapAgentJobStep,
+  summarizeJobUsage,
   mapApprovalRequest,
 } from "@/contracts/agent-job"
 import { getSupabaseClient } from "@/lib/supabase"
@@ -48,14 +51,14 @@ export async function getAgentJob(jobId: string): Promise<AgentJob | null> {
 export async function listAgentJobs(options: {
   organizationId: string
   statuses?: AgentJobStatus[]
-  jobType?: string
+  kind?: string
   targetId?: string
   limit?: number
 }): Promise<AgentJob[]> {
   let query = db().from("agent_jobs").select("*").eq("organization_id", options.organizationId)
   if (options.statuses?.length) query = query.in("status", options.statuses)
-  if (options.jobType) query = query.eq("job_type", options.jobType)
-  if (options.targetId) query = query.eq("target_id", options.targetId)
+  if (options.kind) query = query.eq("kind", options.kind)
+  if (options.targetId) query = query.eq("payload->target->>id", options.targetId)
   const { data, error } = await query.order("updated_at", { ascending: false }).limit(Math.min(options.limit ?? 50, 200))
   fail(error)
   return (data ?? []).map(mapAgentJob)
@@ -66,10 +69,30 @@ export async function listAgentJobSteps(jobId: string): Promise<AgentJobStep[]> 
     .from("agent_job_steps")
     .select("*")
     .eq("job_id", jobId)
-    .order("round", { ascending: true })
-    .order("created_at", { ascending: true })
+    .order("seq", { ascending: true })
   fail(error)
   return (data ?? []).map(mapAgentJobStep)
+}
+
+/**
+ * Rounds, tokens, cost, model … per job, derived from agent_job_steps (DB2c-1 dropped the job-level columns).
+ * Reads only the small fields (round / stage / usage), not the step outputs.
+ */
+export async function listJobUsage(jobIds: readonly string[]): Promise<Record<string, JobUsage>> {
+  const ids = [...new Set(jobIds)]
+  if (!ids.length) return {}
+  const { data, error } = await db()
+    .from("agent_job_steps")
+    .select("id,job_id,seq,kind,status,error,created_at,round:output->round,stage:output->stage,usage")
+    .in("job_id", ids)
+    .order("seq", { ascending: true })
+  fail(error)
+  const byJob = new Map<string, ReturnType<typeof mapAgentJobStep>[]>()
+  for (const r of (data ?? []) as Record<string, unknown>[]) {
+    const step = mapAgentJobStep({ ...r, output: { round: r.round, stage: r.stage } })
+    byJob.set(step.jobId, [...(byJob.get(step.jobId) ?? []), step])
+  }
+  return Object.fromEntries(ids.map((id) => [id, byJob.has(id) ? summarizeJobUsage(byJob.get(id)!) : { ...EMPTY_JOB_USAGE }]))
 }
 
 export async function cancelAgentJob(jobId: string): Promise<AgentJob> {

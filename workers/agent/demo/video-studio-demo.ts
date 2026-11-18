@@ -40,13 +40,13 @@ export function createBridgeHandler(db: SupabaseTestDb, objectRoot: string) {
   return async (op: string, a: Record<string, unknown>): Promise<unknown> => {
     switch (op) {
       case "claim":
-        return asWorker(async (s) => (await s.query("select * from public.claim_agent_job($1,$2,$3)", [a.worker_id, a.job_types, a.lease_seconds])).rows[0] ?? null)
+        return asWorker(async (s) => (await s.query("select * from public.claim_agent_job($1,$2)", [a.job_types, a.lease_seconds])).rows[0] ?? null)
       case "heartbeat":
-        return asWorker(async (s) => (await s.query<{ b: unknown }>("select public.heartbeat_agent_job($1,$2,$3) as b", [a.job_id, a.worker_id, a.lease_seconds])).rows[0].b)
+        return asWorker(async (s) => (await s.query<{ b: unknown }>("select public.heartbeat_agent_job($1,$2,$3) as b", [a.job_id, a.lease_epoch, a.lease_seconds])).rows[0].b)
       case "complete":
-        return asWorker((s) => s.query("select public.complete_agent_job($1,$2,$3,$4,$5,$6)", [a.job_id, a.worker_id, a.status, a.result, a.error, a.error_code])).then(() => null)
+        return asWorker((s) => s.query("select public.complete_agent_job($1,$2,$3,$4,$5,$6)", [a.job_id, a.lease_epoch, a.status, a.result, a.error, a.error_code])).then(() => null)
       case "fail":
-        return asWorker((s) => s.query("select public.fail_agent_job($1,$2,$3,$4,$5,$6)", [a.job_id, a.worker_id, a.error, a.retryable, a.retry_delay_seconds, a.error_code])).then(() => null)
+        return asWorker((s) => s.query("select public.fail_agent_job($1,$2,$3,$4,$5,$6)", [a.job_id, a.lease_epoch, a.error, a.retryable, a.retry_delay_seconds, a.error_code])).then(() => null)
       case "get_plan":
         return asWorker(async (s) => (await s.query("select * from public.video_plans where id = $1", [a.plan_id])).rows[0] ?? null)
       case "list_shots":
@@ -188,14 +188,14 @@ export async function runVideoStudioDemo(options: { print?: (line: string) => vo
 
     // 6. Results as the viewer sees them
     const view = await db.asUser(ws.viewerId, async (tx) => ({
-      jobs: (await tx.query<{ job_type: string; status: string; error_code: string | null }>("select job_type, status, error_code from public.agent_jobs where organization_id=$1 order by created_at", [ws.organizationId])).rows,
+      jobs: (await tx.query<{ kind: string; status: string; error_code: string | null }>("select kind, status, error_code from public.agent_jobs where organization_id=$1 order by created_at", [ws.organizationId])).rows,
       shots: (await tx.query<{ position: number; render_status: string; actual_duration_ms: number; actual_cost_cents: string }>("select position, render_status, actual_duration_ms, actual_cost_cents from public.video_shots where plan_id=$1 order by position", [planId])).rows,
       plan: (await tx.query<{ status: string; composed_video_asset_id: number | null; final_duration_ms: number | null; revision: number }>("select status, composed_video_asset_id, final_duration_ms, revision from public.video_plans where id=$1", [planId])).rows[0],
       summary: (await tx.query<{ estimated_cents: string; actual_cents: string }>("select estimated_cents, actual_cents from public.video_plan_cost_summary where plan_id=$1", [planId])).rows[0],
       ledger: (await tx.query<{ kind: string; provider: string; n: number; actual: string }>("select kind, provider, count(*)::int as n, sum(actual_cents) as actual from public.video_cost_entries where plan_id=$1 group by kind, provider order by kind", [planId])).rows,
       assets: (await tx.query<{ category: string; n: number }>("select category, count(*)::int as n from public.assets where organization_id=$1 and asset_type='video_studio' group by category order by category", [ws.organizationId])).rows,
     }))
-    for (const j of view.jobs) say(`    job ${j.job_type.padEnd(18)} ${j.status}${j.error_code ? ` (${j.error_code})` : ""}`)
+    for (const j of view.jobs) say(`    job ${j.kind.padEnd(18)} ${j.status}${j.error_code ? ` (${j.error_code})` : ""}`)
     say(`[12] shots: ${view.shots.map((s) => `${s.position}:${s.render_status}/${s.actual_duration_ms}ms`).join(" ")}`)
     say(`     assets: ${view.assets.map((a) => `${a.category}×${a.n}`).join(" ")}`)
     say(`     ledger: ${view.ledger.map((l) => `${l.kind}/${l.provider}×${l.n}=${Number(l.actual)}分`).join(" ")}`)
@@ -216,7 +216,7 @@ export async function runVideoStudioDemo(options: { print?: (line: string) => vo
 
     const ok = rejected.startsWith("rejected") && memberTry.startsWith("denied") && paid.status === "queued" && run1.code === 0 && run2.code === 0
       && view.plan.status === "rendered" && view.shots.every((s) => s.render_status === "rendered") && expired === "expired"
-      && view.jobs.filter((j) => j.job_type !== "video_storyboard").every((j) => j.status === "succeeded")
+      && view.jobs.filter((j) => j.kind !== "video_storyboard").every((j) => j.status === "succeeded")
     say(ok ? "PASS: outline → proposal → adoption → approval → queue → dry-run render → assets → costs" : "FAIL")
     return { ok, lines, planId, finalAssetId, finalBytes, costs: { estimatedCents: Number(view.summary.estimated_cents), actualCents: Number(view.summary.actual_cents) } }
   } finally {

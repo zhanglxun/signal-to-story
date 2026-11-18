@@ -8,7 +8,7 @@ import type { LlmClient } from "../../../sense-console/src/harness/llm"
 import { createSupabaseTestDb } from "../../../testing/db/pglite-harness"
 import { SqlBackend } from "../backends/sql-backend"
 import { buildLlmClientFromEnv } from "../config"
-import { demoEvaluatorAlwaysFail, demoEvaluatorFailThenPass, demoGenerator, enqueueDemoJob, seedDemoWorkspace } from "./demo-scenario"
+import { demoEvaluatorAlwaysFail, demoEvaluatorFailThenPass, demoGenerator, enqueueDemoJob, readJobUsage, seedDemoWorkspace } from "./demo-scenario"
 import { processNextJob, type WorkerLogger } from "../runner"
 
 const quiet: WorkerLogger = { info: () => undefined, warn: () => undefined, error: (m, d) => console.error("  !", m, d) }
@@ -44,13 +44,14 @@ async function scenario(title: string, generator: LlmClient, evaluator: LlmClien
     },
   })
   const final = await db.asPostgres(async (tx) => {
-    const j = await tx.query<{ status: string; rounds: number; hops_used: number; error: string | null }>("select status, rounds, hops_used, error from public.agent_jobs where id=$1", [result.jobId])
+    const j = await tx.query<{ status: string; error: string | null }>("select status, error from public.agent_jobs where id=$1", [result.jobId])
+    const usage = (await readJobUsage(tx, [result.jobId!]))[result.jobId!]
     const steps = await tx.query<{ n: number }>("select count(*)::int as n from public.agent_job_steps where job_id=$1", [result.jobId])
     const p = await tx.query<{ id: string; status: string }>("select id, status from public.content_ai_proposals where agent_job_id=$1", [result.jobId])
     const doc = await tx.query<{ body: string; revision: number }>("select body, revision from public.content_documents where id=$1", [ws.documentId])
-    return { job: j.rows[0], steps: steps.rows[0].n, proposal: p.rows[0] ?? null, doc: doc.rows[0] }
+    return { job: j.rows[0], usage, steps: steps.rows[0].n, proposal: p.rows[0] ?? null, doc: doc.rows[0] }
   })
-  console.log(`result: job.status=${final.job.status} rounds=${final.job.rounds} hops=${final.job.hops_used} steps=${final.steps}`)
+  console.log(`result: job.status=${final.job.status} rounds=${final.usage.rounds} hops=${final.usage.hops} steps=${final.steps}`)
   console.log(`        proposal=${final.proposal ? `${final.proposal.id} (${final.proposal.status})` : "none"}; document untouched: revision=${final.doc.revision} body="${final.doc.body}"`)
   if (final.job.error) console.log(`        reason: ${final.job.error}`)
   await db.close()

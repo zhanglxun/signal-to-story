@@ -21,6 +21,16 @@ const imCapture = (conn: string, target: string | null, text: string, messageId:
 const count = (table: string) =>
   db.asPostgres(async (tx) => Number((await tx.query<{ n: number }>(`select count(*)::int n from public.${table} where organization_id=$1`, [org.organizationId])).rows[0].n))
 
+/** Move a queued job to pending_review (as the table owner, through legal transitions). */
+const toReview = (jobId: string) =>
+  db.asPostgres(async (tx) => {
+    await tx.query("update public.agent_jobs set status='running' where id=$1", [jobId])
+    await tx.query("update public.agent_jobs set status='pending_review' where id=$1", [jobId])
+  })
+type Notice = { kind: string; status: string; reply_to: Record<string, unknown> | null } & Record<string, unknown>
+const notice = async (jobId: string) =>
+  (await db.asServiceRole(async (tx) => (await tx.query<{ n: Notice[] }>("select public.list_pending_notices(200) as n")).rows[0].n)).find((n) => n.id === jobId)
+
 beforeAll(async () => {
   db = await createSupabaseTestDb()
   org = await seedOrganization(db, { members: [{ role: "owner" }, { role: "viewer" }] })
@@ -54,9 +64,9 @@ describe("im_quick_capture (IM webhook trusted path)", () => {
   it("auto_draft intent produces one queued content_draft job per document and records the reply target", async () => {
     const r = await imCapture(feishuConn, "oc_chat_2", "出稿 写成小红书 https://example.com/im2", "om_auto_1")
     expect(r.documents.map((d) => d.platform)).toEqual(["master", "xiaohongshu"])
-    const jobs = await db.asPostgres((tx) => tx.query<{ status: string; job_type: string; created_by: string }>("select status, job_type, created_by from public.agent_jobs where id = any($1)", [r.documents.map((d) => d.job_id)]))
+    const jobs = await db.asPostgres((tx) => tx.query<{ status: string; kind: string; created_by: string; work_item_id: string }>("select status, kind, created_by, work_item_id from public.agent_jobs where id = any($1)", [r.documents.map((d) => d.job_id)]))
     expect(jobs.rows).toHaveLength(2)
-    expect(jobs.rows.every((j) => j.status === "queued" && j.job_type === "content_draft" && j.created_by === org.members.owner)).toBe(true)
+    expect(jobs.rows.every((j) => j.status === "queued" && j.kind === "content_draft" && j.created_by === org.members.owner && j.work_item_id === r.work_item_id)).toBe(true)
     expect(r.work_item_id).toBeTruthy()
     const ev = await db.asPostgres((tx) => tx.query<{ payload: { reply_to: { channel: string; target: string } } }>("select payload from public.intake_events where id=$1", [r.event_id]))
     expect(ev.rows[0].payload.reply_to).toEqual({ channel: "feishu", target: "oc_chat_2" })
@@ -65,16 +75,19 @@ describe("im_quick_capture (IM webhook trusted path)", () => {
     expect(await count("agent_jobs")).toBe(2)
   })
 
-  it("im_notify_target resolves the originating conversation and is null for non-IM jobs", async () => {
+  it("the notice for a job that needs a human carries the originating conversation; non-IM jobs have none", async () => {
     const r = await imCapture(feishuConn, "oc_chat_3", "出稿 https://example.com/im3", "om_auto_2")
-    const t = await db.asServiceRole(async (tx) => (await tx.query<{ t: Record<string, unknown> | null }>("select public.im_notify_target($1) as t", [r.documents[0].job_id])).rows[0].t)
-    expect(t).toMatchObject({ channel: "feishu", reply_target: "oc_chat_3", connection_id: feishuConn, job_id: r.documents[0].job_id, status: "queued", platform: "master", work_item_id: r.work_item_id })
+    expect(await notice(r.documents[0].job_id)).toBeUndefined() // queued jobs need no human
+    await toReview(r.documents[0].job_id)
+    expect(await notice(r.documents[0].job_id)).toMatchObject({ kind: "job", status: "pending_review", reply_to: { channel: "feishu", target: "oc_chat_3", connection_id: feishuConn },
+      job_id: r.documents[0].job_id, platform: "master", work_item_id: r.work_item_id, rounds: 0, max_rounds: 3 })
     const web = await db.asUser(org.members.owner, async (tx) => (await tx.query<{ r: Cap }>("select public.quick_capture($1,null,'web idea','auto_draft','{}','web-im-0001') as r", [org.organizationId])).rows[0].r)
-    const none = await db.asServiceRole(async (tx) => (await tx.query<{ t: unknown }>("select public.im_notify_target($1) as t", [web.documents[0].job_id])).rows[0].t)
-    expect(none).toBeNull()
+    await toReview(web.documents[0].job_id)
+    expect((await notice(web.documents[0].job_id))?.reply_to).toBeNull()
     // capture without a reply target has nowhere to notify
     const silent = await imCapture(feishuConn, null, "出稿 https://example.com/im4", "om_auto_3")
-    expect(await db.asServiceRole(async (tx) => (await tx.query<{ t: unknown }>("select public.im_notify_target($1) as t", [silent.documents[0].job_id])).rows[0].t)).toBeNull()
+    await toReview(silent.documents[0].job_id)
+    expect((await notice(silent.documents[0].job_id))?.reply_to).toBeNull()
   })
 
   it("rejects revoked, expired and non-IM connections, stops notifying for them; browser roles cannot call it", async () => {
@@ -85,12 +98,14 @@ describe("im_quick_capture (IM webhook trusted path)", () => {
     await expect(imCapture(generic, null, "https://example.com/g", "om_g1")).rejects.toThrow(/invalid_connection/)
     // expired
     const pending = await imCapture(wecomConn, "CHAT2", "出稿 https://example.com/pending", "om_p1", "wecom")
+    await toReview(pending.documents[0].job_id)
+    expect((await notice(pending.documents[0].job_id))?.reply_to).toMatchObject({ channel: "wecom", target: "CHAT2" })
     await db.asPostgres((tx) => tx.query("update public.intake_connections set expires_at = now() - interval '1 hour' where id=$1", [wecomConn]))
-    expect(await db.asServiceRole(async (tx) => (await tx.query<{ t: unknown }>("select public.im_notify_target($1) as t", [pending.documents[0].job_id])).rows[0].t)).toBeNull()
+    expect((await notice(pending.documents[0].job_id))?.reply_to).toBeNull()
     await expect(imCapture(wecomConn, null, "https://example.com/e", "om_e1", "wecom")).rejects.toThrow(/invalid_connection/)
-    expect(await db.asServiceRole(async (tx) => (await tx.query<{ t: unknown }>("select public.im_notify_target(gen_random_uuid()) as t")).rows[0].t)).toBeNull()
     await expect(db.asUser(org.members.owner, (tx) => tx.query("select public.im_quick_capture($1,null,'{}'::jsonb)", [feishuConn]))).rejects.toThrow(/permission denied/)
-    await expect(db.asUser(org.members.owner, (tx) => tx.query("select public.im_notify_target(gen_random_uuid())"))).rejects.toThrow(/permission denied/)
+    await expect(db.asUser(org.members.owner, (tx) => tx.query("select public.list_pending_notices()"))).rejects.toThrow(/permission denied/)
+    await expect(db.asUser(org.members.owner, (tx) => tx.query("select public.mark_notice_sent('job', gen_random_uuid(), 'failed')"))).rejects.toThrow(/permission denied/)
   })
 
   it("cross-org: another organization cannot see IM events", async () => {

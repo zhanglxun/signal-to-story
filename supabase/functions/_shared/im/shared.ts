@@ -166,10 +166,12 @@ export const HINT_FAILED = "收录暂时失败，稍后会自动重试，或请�
 /** Information shown on a review notification. All free text is untrusted and length-bounded. */
 export type ReviewNotice = {
   jobId: string
-  status: "pending_review" | "blocked_needs_human"
+  /** Job states that need a human, plus pending approval requests and agent questions. */
+  status: "pending_review" | "blocked_needs_human" | "failed" | "approval" | "question"
   title: string
   platform?: string | null
-  rounds: number
+  /** Evaluated rounds; 0 / absent hides the field (approvals, questions). */
+  rounds?: number
   maxRounds?: number
   summary?: string
   taskUrl: string
@@ -181,4 +183,15 @@ export function sanitizeForNotice(text: string | null | undefined, max: number):
   return clip((text ?? "").replace(/[\u0000-\u0008\u000b\u000c\u000e-\u001f\u007f]/g, "").replace(/\s+/g, " ").trim(), max)
 }
 
-export const statusLabel = (s: ReviewNotice["status"]) => (s === "pending_review" ? "待审核" : "需要人工处理")
+const STATUS_LABELS: Record<ReviewNotice["status"], string> = {
+  pending_review: "待审核",
+  blocked_needs_human: "需要人工处理",
+  failed: "任务失败",
+  approval: "待批准",
+  question: "Agent 提问",
+}
+export const statusLabel = (s: ReviewNotice["status"]) => STATUS_LABELS[s] ?? "需要人工处理"
+
+/** "2/3" / "2" / null when no round has run (approvals and questions). */
+export const roundsLabel = (n: Pick<ReviewNotice, "rounds" | "maxRounds">) =>
+  n.rounds ? (n.maxRounds ? `${n.rounds}/${n.maxRounds}` : String(n.rounds)) : null

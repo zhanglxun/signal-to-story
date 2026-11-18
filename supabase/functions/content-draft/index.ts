@@ -30,6 +30,8 @@ Deno.serve(async req => {
       p_organization_id: doc.organization_id, p_job_type: 'content_draft', p_idempotency_key: idempotencyKey,
       p_payload: { document_id: doc.id, instruction: input.instruction.trim(), platform: doc.platform },
       p_target_type: 'content_document', p_target_id: doc.id, p_target_revision: doc.revision,
+      // The job belongs to the document's board card (status sync + one running job per card).
+      p_work_item_id: doc.work_item_id ?? null,
     })
     if (enqueueError || !job) return reply({ error: enqueueError?.code === '42501' ? '没有调度 Agent 任务的权限' : '排队失败，稿件可能已被修改，请刷新后重试' }, enqueueError?.code === '42501' ? 403 : 409)
     return reply({ job_id: job.id, status: job.status, duplicate: Boolean(existing) }, existing ? 200 : 202)

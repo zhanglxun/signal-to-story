@@ -236,27 +236,29 @@ export function checkStoryboardSop(draft: VideoPlanDraft): StoryboardSopIssue[] 
 }
 
 // ---------------------------------------------------------------- render jobs (TS ↔ Python contract)
+// A claimed agent_jobs row (DB2c-1): the target, approval and limits live in payload; lease_epoch must be
+// passed back on every heartbeat / complete / fail.
 export const VideoRenderJobPayloadSchema = z.object({
   schema_version: z.literal(VIDEO_STUDIO_SCHEMA_VERSION),
   plan_id: z.string().uuid(),
   plan_revision: z.number().int().min(1),
   shot_id: z.string().uuid().nullable(),
+  target: z.object({ type: z.literal("video_plan"), id: z.string().uuid(), revision: z.number().int().min(1) }),
+  approval_request_id: z.string().uuid().optional(),
+  limits: z.object({ max_rounds: z.number().int(), max_hops: z.number().int(), budget_cents: z.number().int(), token_budget: z.number().int().optional() }).optional(),
   server_estimate: z.object({ cost_cents: z.number().min(0), uses_cloud_video: z.boolean(), requires_approval: z.boolean() }).optional(),
 })
 
 export const VideoRenderJobSchema = z.object({
   id: z.string().uuid(),
   organization_id: z.string().uuid(),
-  job_type: z.enum(videoRenderJobTypes),
-  target_type: z.literal("video_plan"),
-  target_id: z.string().uuid(),
-  target_revision: z.number().int().min(1),
-  approval_request_id: z.string().uuid().nullable(),
+  kind: z.enum(videoRenderJobTypes),
+  lease_epoch: z.number().int().min(1),
   created_by: z.string().uuid().nullable(),
   payload: VideoRenderJobPayloadSchema,
 }).superRefine((job, ctx) => {
-  if (job.job_type !== "video_compose" && !job.payload.shot_id) ctx.addIssue({ code: "custom", message: "shot_id is required", path: ["payload", "shot_id"] })
-  if (job.payload.plan_id !== job.target_id) ctx.addIssue({ code: "custom", message: "payload.plan_id must equal target_id", path: ["payload", "plan_id"] })
+  if (job.kind !== "video_compose" && !job.payload.shot_id) ctx.addIssue({ code: "custom", message: "shot_id is required", path: ["payload", "shot_id"] })
+  if (job.payload.plan_id !== job.payload.target.id) ctx.addIssue({ code: "custom", message: "payload.plan_id must equal payload.target.id", path: ["payload", "plan_id"] })
 })
 export type VideoRenderJob = z.infer<typeof VideoRenderJobSchema>
 
@@ -272,7 +274,7 @@ export const VideoJobAssetSchema = z.object({
 
 export const VideoRenderJobResultSchema = z.object({
   schema_version: z.literal(VIDEO_STUDIO_SCHEMA_VERSION),
-  job_type: z.enum(videoRenderJobTypes),
+  kind: z.enum(videoRenderJobTypes),
   engine: z.string().min(1).max(64),
   dry_run: z.boolean(),
   plan_id: z.string().uuid(),

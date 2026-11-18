@@ -19,7 +19,7 @@ const db = await createSupabaseTestDb()                 // 约 1 秒；建议每
 const org = await seedOrganization(db, { members: [{ role: "owner" }, { role: "viewer" }] })
 
 await db.asUser(org.members.owner, (tx) => tx.query("select * from public.agent_jobs"))   // role authenticated + JWT sub
-await db.asServiceRole((tx) => tx.query("select * from public.claim_agent_job($1,$2,$3)", ["w1", ["content_draft"], 60]))
+await db.asServiceRole((tx) => tx.query("select * from public.claim_agent_job($1,$2)", [["content_draft"], 60]))
 await db.asAnon((tx) => tx.query("select 1"))
 await db.asPostgres((tx) => tx.query("update ..."))     // 超级用户，造数据/模拟时间流逝
 await runSqlAcceptanceScript(db, "agent_harness_kernel.sql")

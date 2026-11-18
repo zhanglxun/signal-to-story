@@ -1,4 +1,4 @@
-import type { HarnessJob, HarnessProgress, HarnessStepRecord, HarnessTerminalStatus, SaveProposalInput } from "../../../sense-console/src/harness/job-store"
+import type { HarnessJob, HarnessStepRecord, HarnessTerminalStatus, SaveProposalInput } from "../../../sense-console/src/harness/job-store"
 import { type AgentQueueBackend, type ClaimedJobRow, type DraftContextRows, rowToStep, stepToRow } from "../backend"
 
 /** Minimal executor: PGlite, a PGlite Transaction or node-postgres all fit. */
@@ -30,55 +30,43 @@ export class SqlBackend implements AgentQueueBackend {
     }
   }
 
-  async claim(workerId: string, jobTypes: string[], leaseSeconds: number) {
+  async claim(jobTypes: string[], leaseSeconds: number) {
     return this.run(async (sql) => {
-      const r = await sql.query<ClaimedJobRow>("select * from public.claim_agent_job($1, $2, $3)", [workerId, jobTypes, leaseSeconds])
+      const r = await sql.query<ClaimedJobRow>("select * from public.claim_agent_job($1, $2)", [jobTypes, leaseSeconds])
       return r.rows[0] ?? null
     })
   }
 
-  async heartbeat(jobId: string, workerId: string, leaseSeconds: number) {
+  async heartbeat(jobId: string, leaseEpoch: number, leaseSeconds: number) {
     return this.run(async (sql) => {
-      const r = await sql.query<{ beat: { ok: boolean; cancel_requested: boolean } }>("select public.heartbeat_agent_job($1, $2, $3) as beat", [jobId, workerId, leaseSeconds])
+      const r = await sql.query<{ beat: { ok: boolean; cancel_requested: boolean } }>("select public.heartbeat_agent_job($1, $2, $3) as beat", [jobId, leaseEpoch, leaseSeconds])
       const beat = r.rows[0].beat
       return { ok: beat.ok, cancelRequested: beat.cancel_requested }
     })
   }
 
-  async complete(jobId: string, workerId: string, status: HarnessTerminalStatus, result: Record<string, unknown>, error: string | null, errorCode: string | null) {
-    await this.run((sql) => sql.query("select public.complete_agent_job($1, $2, $3, $4, $5, $6)", [jobId, workerId, status, result, error, errorCode]))
+  async complete(jobId: string, leaseEpoch: number, status: HarnessTerminalStatus, result: Record<string, unknown>, error: string | null, errorCode: string | null) {
+    await this.run((sql) => sql.query("select public.complete_agent_job($1, $2, $3, $4, $5, $6)", [jobId, leaseEpoch, status, result, error, errorCode]))
   }
 
-  async fail(jobId: string, workerId: string, error: string, retryable: boolean, retryDelaySeconds: number, errorCode: string | null) {
-    await this.run((sql) => sql.query("select public.fail_agent_job($1, $2, $3, $4, $5, $6)", [jobId, workerId, error.slice(0, 4000), retryable, retryDelaySeconds, errorCode]))
+  async fail(jobId: string, leaseEpoch: number, error: string, retryable: boolean, retryDelaySeconds: number, errorCode: string | null) {
+    await this.run((sql) => sql.query("select public.fail_agent_job($1, $2, $3, $4, $5, $6)", [jobId, leaseEpoch, error.slice(0, 4000), retryable, retryDelaySeconds, errorCode]))
   }
 
   async listSteps(jobId: string): Promise<HarnessStepRecord[]> {
     return this.run(async (sql) => {
-      const r = await sql.query("select * from public.agent_job_steps where job_id = $1 order by round, created_at", [jobId])
+      const r = await sql.query("select * from public.agent_job_steps where job_id = $1 order by seq", [jobId])
       return r.rows.map(rowToStep)
     })
   }
 
-  async insertStep(step: HarnessStepRecord) {
+  /** Idempotent per (round, stepKind): the lease holder is the only writer, so check-then-append is safe. */
+  async insertStep(step: HarnessStepRecord, leaseEpoch: number) {
+    const existing = await this.listSteps(step.jobId)
+    if (existing.some((s) => s.round === step.round && s.stepKind === step.stepKind)) return
     const row = stepToRow(step)
     await this.run((sql) =>
-      sql.query(
-        `insert into public.agent_job_steps(organization_id, job_id, round, step_kind, status, driver, model, input_digest, input_summary, output, evaluation, usage, cost_cents, duration_ms, error)
-         values ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15)
-         on conflict (job_id, round, step_kind) do nothing`,
-        [row.organization_id, row.job_id, row.round, row.step_kind, row.status, row.driver, row.model, row.input_digest, row.input_summary,
-          row.output === null ? null : JSON.stringify(row.output), row.evaluation === null ? null : JSON.stringify(row.evaluation), row.usage, row.cost_cents, row.duration_ms, row.error]
-      )
-    )
-  }
-
-  async updateProgress(jobId: string, p: HarnessProgress) {
-    await this.run((sql) =>
-      sql.query(
-        "update public.agent_jobs set rounds=$2, hops_used=$3, cost_cents=$4, tokens_used=$5, driver=coalesce($6, driver), model=coalesce($7, model) where id=$1 and status='running'",
-        [jobId, p.rounds, p.hopsUsed, p.costCents, p.tokensUsed, p.driver ?? null, p.model ?? null]
-      )
+      sql.query("select public.record_agent_job_step($1, $2, $3, $4, $5, $6, $7)", [step.jobId, leaseEpoch, row.kind, row.status, JSON.stringify(row.output), JSON.stringify(row.usage), row.error])
     )
   }
 
@@ -100,7 +88,7 @@ export class SqlBackend implements AgentQueueBackend {
     return this.run(async (sql) => {
       const doc = await sql.query<DraftContextRows["document"]>(
         "select id, organization_id, work_item_id, platform, title, body, revision from public.content_documents where id::text = $1 and organization_id = $2",
-        [job.targetId, job.organizationId]
+        [job.target?.id ?? "", job.organizationId]
       )
       const document = doc.rows[0]
       if (!document) throw new Error("稿件不存在或不属于该组织")

@@ -68,7 +68,8 @@ export function groupStepsByRound(steps: readonly AgentJobStep[]): RoundView[] {
 }
 
 export function stepTokens(step: AgentJobStep): number {
-  const u = step.usage as { inputTokens?: number; outputTokens?: number; input_tokens?: number; output_tokens?: number } | null
-  if (!u) return 0
-  return Number(u.inputTokens ?? u.input_tokens ?? 0) + Number(u.outputTokens ?? u.output_tokens ?? 0)
+  return step.usage.inputTokens + step.usage.outputTokens
 }
+
+/** Display key: a check step shows its stage (precheck / evaluate). */
+export const stepLabelKey = (step: AgentJobStep): string => (step.kind === "check" ? (step.stage ?? "check") : step.kind)

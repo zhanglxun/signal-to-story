@@ -40,9 +40,9 @@ async function runningJob(key: string) {
   })
   // The database is shared across tests: keep other queued jobs out of this claim.
   await db.asPostgres((tx) => tx.query("update public.agent_jobs set run_after = now() + interval '1 hour' where status = 'queued' and id <> $1", [job]))
-  const claimed = await db.asServiceRole((tx) => tx.query<{ id: string }>("select id from public.claim_agent_job('w-q', array['content_draft'], 60)"))
+  const claimed = await db.asServiceRole((tx) => tx.query<{ id: string; lease_epoch: number }>("select id, lease_epoch from public.claim_agent_job(array['content_draft'], 60)"))
   expect(claimed.rows[0].id).toBe(job)
-  return { org, job }
+  return { org, job, epoch: Number(claimed.rows[0].lease_epoch) }
 }
 
 const status = async (jobId: string) =>
@@ -50,11 +50,11 @@ const status = async (jobId: string) =>
 
 describe("agent questions (approval_requests.kind = 'question')", () => {
   it("parks the job, only a human answers, and the answer re-queues the job", async () => {
-    const { org, job } = await runningJob("q-1")
+    const { org, job, epoch } = await runningJob("q-1")
     const q = await db.asServiceRole((tx) =>
       tx.query<{ id: string; kind: string; status: string }>(
-        `select (a).id, (a).kind, (a).status from (select public.ask_question($1, '{"title":"用哪个角度？","options":["A","B"],"recommended":"A"}'::jsonb) a) s`,
-        [job]
+        `select (a).id, (a).kind, (a).status from (select public.ask_question($1, '{"title":"用哪个角度？","options":["A","B"],"recommended":"A"}'::jsonb, $2) a) s`,
+        [job, epoch]
       )
     )
     expect(q.rows[0]).toMatchObject({ kind: "question", status: "pending" })
@@ -76,10 +76,10 @@ describe("agent questions (approval_requests.kind = 'question')", () => {
   })
 
   it("rejects malformed questions and asking from a job that is not running", async () => {
-    const { job } = await runningJob("q-2")
-    await expectDenied(db.asServiceRole((tx) => tx.query(`select public.ask_question($1, '{"options":["A"]}'::jsonb)`, [job])), /格式/)
-    await db.asServiceRole((tx) => tx.query(`select public.ask_question($1, '{"title":"t"}'::jsonb)`, [job]))
-    await expectDenied(db.asServiceRole((tx) => tx.query(`select public.ask_question($1, '{"title":"again"}'::jsonb)`, [job])), /运行中/)
+    const { job, epoch } = await runningJob("q-2")
+    await expectDenied(db.asServiceRole((tx) => tx.query(`select public.ask_question($1, '{"options":["A"]}'::jsonb, $2)`, [job, epoch])), /格式/)
+    await db.asServiceRole((tx) => tx.query(`select public.ask_question($1, '{"title":"t"}'::jsonb, $2)`, [job, epoch]))
+    await expectDenied(db.asServiceRole((tx) => tx.query(`select public.ask_question($1, '{"title":"again"}'::jsonb, $2)`, [job, epoch])), /运行中/)
   })
 
   it("enforces the kind shape at table level", async () => {

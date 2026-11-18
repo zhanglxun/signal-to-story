@@ -20,6 +20,7 @@ import {
   safeEqual,
   sanitizeForNotice,
   sha256Hex,
+  roundsLabel,
   statusLabel,
   PLATFORM_LABELS,
 } from "./shared.ts"
@@ -213,7 +214,7 @@ export const feishuTextContent = (text: string) => JSON.stringify({ text })
 /** Interactive card (JSON 1.0): two LINK buttons only; Feishu never carries an approval action. */
 export function buildFeishuReviewCard(n: ReviewNotice): Record<string, unknown> {
   const platform = n.platform ? (PLATFORM_LABELS[n.platform] ?? n.platform) : "稿件"
-  const rounds = n.maxRounds ? `${n.rounds}/${n.maxRounds}` : String(n.rounds)
+  const rounds = roundsLabel(n)
   return {
     config: { wide_screen_mode: true },
     header: {
@@ -225,7 +226,7 @@ export function buildFeishuReviewCard(n: ReviewNotice): Record<string, unknown> 
         tag: "div",
         fields: [
           { is_short: true, text: { tag: "plain_text", content: `平台：${platform}` } },
-          { is_short: true, text: { tag: "plain_text", content: `评估轮数：${rounds}` } },
+          ...(rounds ? [{ is_short: true, text: { tag: "plain_text", content: `评估轮数：${rounds}` } }] : []),
         ],
       },
       ...(n.summary ? [{ tag: "div", text: { tag: "plain_text", content: sanitizeForNotice(n.summary, 300) } }] : []),

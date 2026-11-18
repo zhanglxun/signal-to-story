@@ -178,7 +178,7 @@ export async function enqueueStoryboardJob(input: {
 }
 
 export async function listStoryboardJobs(organizationId: string): Promise<AgentJob[]> {
-  const { data, error } = await db().from("agent_jobs").select("*").eq("organization_id", organizationId).eq("job_type", VIDEO_STORYBOARD_JOB_TYPE).order("created_at", { ascending: false }).limit(10)
+  const { data, error } = await db().from("agent_jobs").select("*").eq("organization_id", organizationId).eq("kind", VIDEO_STORYBOARD_JOB_TYPE).order("created_at", { ascending: false }).limit(10)
   fail(error)
   return (data ?? []).map(mapAgentJob)
 }
@@ -238,7 +238,7 @@ export async function enqueueVideoJob(input: { planId: string; jobType: VideoRen
 }
 
 export async function listPlanJobs(planId: string): Promise<AgentJob[]> {
-  const { data, error } = await db().from("agent_jobs").select("*").eq("target_type", "video_plan").eq("target_id", planId).in("job_type", [...videoRenderJobTypes]).order("created_at", { ascending: false }).limit(50)
+  const { data, error } = await db().from("agent_jobs").select("*").eq("payload->target->>type", "video_plan").eq("payload->target->>id", planId).in("kind", [...videoRenderJobTypes]).order("created_at", { ascending: false }).limit(50)
   fail(error)
   return (data ?? []).map(mapAgentJob)
 }

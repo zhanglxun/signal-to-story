@@ -94,10 +94,10 @@ describe("shortcut", () => {
 })
 
 const job = (id: string, status: AgentJob["status"]): AgentJob => ({
-  id, organizationId: "o", jobType: "content_draft", status, priority: 100, targetType: "content_document", targetId: `d-${id}`, targetRevision: 1,
-  payload: {}, result: null, idempotencyKey: id, attempts: 0, maxAttempts: 2, lockedBy: null, lockedUntil: null, cancelRequestedAt: null,
-  budgetCents: 100, costCents: 0, tokenBudget: null, tokensUsed: 0, hopsUsed: 0, maxHops: 8, rounds: 0, maxRounds: 3, driver: null, model: null,
-  approvalRequestId: null, error: null, errorCode: null, createdBy: null, createdAt: "2026-11-15T00:00:00Z", updatedAt: "2026-11-15T00:00:00Z", startedAt: null, finishedAt: null,
+  id, organizationId: "o", workItemId: null, kind: "content_draft", status, payload: {}, result: null, idempotencyKey: id, attempts: 0, maxAttempts: 2,
+  runAfter: null, nodeId: null, lockedUntil: null, leaseEpoch: 0, cancelRequestedAt: null, notifiedAt: null, error: null, errorCode: null, createdBy: null,
+  createdAt: "2026-11-15T00:00:00Z", updatedAt: "2026-11-15T00:00:00Z",
+  target: { type: "content_document", id: `d-${id}`, revision: 1 }, limits: { maxRounds: 3, maxHops: 8, budgetCents: 100, tokenBudget: null }, approvalRequestId: null,
 })
 
 describe("task grouping", () => {
@@ -116,7 +116,7 @@ describe("task grouping", () => {
   })
 
   it("groups steps by round", () => {
-    const s = (round: number, stepKind: string) => ({ id: `${round}${stepKind}`, round, stepKind }) as never
-    expect(groupStepsByRound([s(1, "generate"), s(0, "context"), s(1, "evaluate")]).map((r) => [r.round, r.steps.length])).toEqual([[0, 1], [1, 2]])
+    const s = (round: number, kind: string) => ({ id: `${round}${kind}`, round, kind }) as never
+    expect(groupStepsByRound([s(1, "generate"), s(0, "context"), s(1, "check")]).map((r) => [r.round, r.steps.length])).toEqual([[0, 1], [1, 2]])
   })
 })

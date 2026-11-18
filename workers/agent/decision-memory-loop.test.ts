@@ -22,7 +22,7 @@ afterEach(async () => {
 
 async function claimContext(key: string) {
   await enqueueDemoJob(db, ws, key)
-  const row = await backend.claim("w1", ["content_draft"], 60)
+  const row = await backend.claim(["content_draft"], 60)
   const job = toHarnessJob(row!)
   return assembleDraftContext(job, await backend.loadDraftContext(job))
 }

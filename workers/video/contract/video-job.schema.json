@@ -16,7 +16,7 @@
           "format": "uuid",
           "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
         },
-        "job_type": {
+        "kind": {
           "type": "string",
           "enum": [
             "video_tts_preview",
@@ -24,31 +24,10 @@
             "video_compose"
           ]
         },
-        "target_type": {
-          "type": "string",
-          "const": "video_plan"
-        },
-        "target_id": {
-          "type": "string",
-          "format": "uuid",
-          "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
-        },
-        "target_revision": {
+        "lease_epoch": {
           "type": "integer",
           "minimum": 1,
           "maximum": 9007199254740991
-        },
-        "approval_request_id": {
-          "anyOf": [
-            {
-              "type": "string",
-              "format": "uuid",
-              "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
-            },
-            {
-              "type": "null"
-            }
-          ]
         },
         "created_by": {
           "anyOf": [
@@ -91,6 +70,65 @@
                 }
               ]
             },
+            "target": {
+              "type": "object",
+              "properties": {
+                "type": {
+                  "type": "string",
+                  "const": "video_plan"
+                },
+                "id": {
+                  "type": "string",
+                  "format": "uuid",
+                  "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                },
+                "revision": {
+                  "type": "integer",
+                  "minimum": 1,
+                  "maximum": 9007199254740991
+                }
+              },
+              "required": [
+                "type",
+                "id",
+                "revision"
+              ]
+            },
+            "approval_request_id": {
+              "type": "string",
+              "format": "uuid",
+              "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+            },
+            "limits": {
+              "type": "object",
+              "properties": {
+                "max_rounds": {
+                  "type": "integer",
+                  "minimum": -9007199254740991,
+                  "maximum": 9007199254740991
+                },
+                "max_hops": {
+                  "type": "integer",
+                  "minimum": -9007199254740991,
+                  "maximum": 9007199254740991
+                },
+                "budget_cents": {
+                  "type": "integer",
+                  "minimum": -9007199254740991,
+                  "maximum": 9007199254740991
+                },
+                "token_budget": {
+                  "type": "integer",
+                  "minimum": -9007199254740991,
+                  "maximum": 9007199254740991
+                }
+              },
+              "required": [
+                "max_rounds",
+                "max_hops",
+                "budget_cents"
+              ]
+            },
             "server_estimate": {
               "type": "object",
               "properties": {
@@ -116,18 +154,16 @@
             "schema_version",
             "plan_id",
             "plan_revision",
-            "shot_id"
+            "shot_id",
+            "target"
           ]
         }
       },
       "required": [
         "id",
         "organization_id",
-        "job_type",
-        "target_type",
-        "target_id",
-        "target_revision",
-        "approval_request_id",
+        "kind",
+        "lease_epoch",
         "created_by",
         "payload"
       ]
@@ -139,7 +175,7 @@
           "type": "number",
           "const": 1
         },
-        "job_type": {
+        "kind": {
           "type": "string",
           "enum": [
             "video_tts_preview",
@@ -306,7 +342,7 @@
       },
       "required": [
         "schema_version",
-        "job_type",
+        "kind",
         "engine",
         "dry_run",
         "plan_id",

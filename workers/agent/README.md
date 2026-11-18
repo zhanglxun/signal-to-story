@@ -23,7 +23,7 @@ npm run worker:agent
 1. **云端容器（默认）**：`workers/agent/Dockerfile`（构建上下文为仓库根目录），环境变量由平台 Secret 注入。水平扩展＝多跑几个进程/副本（每个进程一次一个任务，`SKIP LOCKED` 保证不重复）。
 2. **个人电脑作为本地算力节点**：在本机直接 `npm run worker:agent`。适合复用本机已登录的 CLI（`SENSE_LLM_DRIVER=cli`）。只需出站网络、无需公网 IP。建议：
    - 用 `SENSE_WORKER_JOB_TYPES` 只认领需要本机能力的任务类型；
-   - `SENSE_WORKER_ID` 设成可识别的机器名，方便在任务中心看出是谁执行的；
+   - `SENSE_WORKER_ID` 设成可识别的机器名，日志里能看出是谁执行的（任务表里的节点身份 `node_id` 随 `runner_nodes` 在 DB2c-2 接入）；
    - service_role 密钥等同数据库最高权限，仅放在你自己控制的机器上。多租户 SaaS 场景下应改为按组织签发的受限 worker 凭证（尚未实现）。
 
 ## 驱动
@@ -41,3 +41,7 @@ npm --prefix sense-console run demo:harness
 ```
 
 PGlite + 全量迁移 + fake LLM：场景 1 评估先失败后通过 → 提案 + `pending_review`；场景 2 三轮不过 → `blocked_needs_human`。若环境里配置了 `SENSE_LLM_*`，场景 1 改用真实模型（会产生费用）。
+
+## 通知
+
+IM 通知不在任务结束时内联发送：worker 主循环每 15 秒（`notifyIntervalMs`）调用 `list_pending_notices`，把需要人处理的任务、待批准和 Agent 提问发到来源会话（`intake_events.payload.reply_to`），发送成功后 `mark_notice_sent` 写 `notified_at`；发送失败不标记，下一轮重试。没有 IM 来源或本机没配该通道凭证的记录直接标记，不发送。

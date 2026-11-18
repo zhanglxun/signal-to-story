@@ -89,6 +89,21 @@ class ProcessorTest(unittest.TestCase):
         self.db.cancel = True
         self.assertEqual(self.run_one()["status"], "cancelled")
 
+    def test_stale_lease_epoch_stops_without_writes(self):
+        pid = self.db.add_plan(1)
+        shot = self.db.plan_shots(pid)[0]
+        jid = self.db.add_job("video_tts_preview", pid, shot["id"])
+        original = self.db.claim
+
+        def claim_then_reclaimed(job_types, lease_seconds):
+            row = original(job_types, lease_seconds)
+            self.db.jobs[jid]["lease_epoch"] += 1  # the lease expired and another node claimed the job
+            return row
+
+        self.db.claim = claim_then_reclaimed
+        self.assertEqual(self.run_one()["status"], "lease_lost")
+        self.assertEqual(self.db.calls, [])
+
     def test_tts_preview_only_touches_audio(self):
         pid = self.db.add_plan(1)
         shot = self.db.plan_shots(pid)[0]
@@ -131,12 +146,12 @@ class TransportTest(unittest.TestCase):
             return FakeResponse(b"")
 
         rest = RestBackend("https://example.supabase.co/", "service-key", opener=opener)
-        self.assertEqual(rest.claim("w", ["video_compose"], 60), {"id": "j1"})
+        self.assertEqual(rest.claim(["video_compose"], 60), {"id": "j1"})
         self.assertEqual(rest.insert_asset({"name": "a"}), 7)
         rest.update_shot("s 1", {"render_status": "rendering"})
         claim, asset, patch = seen
         self.assertEqual(claim.get_method(), "POST")
-        self.assertEqual(json.loads(claim.data), {"p_worker_id": "w", "p_job_types": ["video_compose"], "p_lease_seconds": 60})
+        self.assertEqual(json.loads(claim.data), {"p_job_types": ["video_compose"], "p_lease_seconds": 60})
         self.assertEqual(claim.headers["Authorization"], "Bearer service-key")
         self.assertEqual(asset.headers["Prefer"], "return=representation")
         self.assertEqual(patch.get_method(), "PATCH")
@@ -146,8 +161,8 @@ class TransportTest(unittest.TestCase):
         stdout = io.StringIO()
         stdin = io.StringIO(json.dumps({"id": 1, "ok": True, "result": {"ok": True, "cancel_requested": False}}) + "\n")
         bridge = StdioBackend(stdin=stdin, stdout=stdout)
-        self.assertEqual(bridge.heartbeat("j", "w", 60), {"ok": True, "cancel_requested": False})
-        self.assertEqual(json.loads(stdout.getvalue()), {"id": 1, "op": "heartbeat", "args": {"job_id": "j", "worker_id": "w", "lease_seconds": 60}})
+        self.assertEqual(bridge.heartbeat("j", 3, 60), {"ok": True, "cancel_requested": False})
+        self.assertEqual(json.loads(stdout.getvalue()), {"id": 1, "op": "heartbeat", "args": {"job_id": "j", "lease_epoch": 3, "lease_seconds": 60}})
 
 
 if __name__ == "__main__":

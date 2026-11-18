@@ -145,6 +145,8 @@
 
 **`agent_jobs`**（约 20 列）：
 
+> **DB2c-1 已实施**（迁移 `20261123100000_agent_jobs_mvp`，上线脚本 `supabase/release/0.5.0-step2.sql`）。
+
 - 身份与归属：`id` `organization_id` `work_item_id`（可空）`kind`（取代 `job_type`）`idempotency_key`；
 - 状态与数据：`status` `payload`（输入，以及预算、轮次上限、目标对象）`result` `error_code` `error`；
 - 排队与租约：`attempts` `max_attempts` `run_after` `node_id` `locked_until` `lease_epoch` `cancel_requested_at`；
@@ -152,20 +154,27 @@
 
 删掉的列：`priority`、`target_*`、`budget_cents`、`cost_cents`、`token_budget`、`tokens_used`、`hops_used`、`max_hops`、`rounds`、`max_rounds`、`driver`、`model`、`approval_request_id`、`locked_by`、`last_heartbeat_at`、`started_at`、`finished_at`。它们的去向：
 
-- 上限放 `payload.limits`；
-- 用量按步骤累加（`agent_job_steps.usage`）；
-- 时间从步骤推出；
-- 批准关系由 `approval_requests.requested_by_job` 反查。
+- 目标放 `payload.target = {type, id, revision?}`，形状由 CHECK 约束；和身份、输入一样不可修改；
+- 门禁批准放 `payload.approval_request_id`，Mandate 触发器照旧校验（已批准、未过期、同组织 / 动作 / 对象、批准版本等于对象当前版本）；`approval_requests.requested_by_job` 保留为反向关系；
+- 上限放 `payload.limits = {max_rounds 1–5（默认 3）, max_hops 2–32（默认 8）, budget_cents 0–1000000（默认 100）, token_budget?}`，CHECK 约束取值；只有 `resume_agent_job` 能调高；
+- 用量（tokens、费用、轮次、跳数、模型、驱动、耗时、开始 / 结束时间）按步骤推出；控制台用 `summarizeJobUsage`；
+- `locked_by` → `lease_epoch`：每次认领 +1 并返回，心跳、步骤、完成、失败、提问都必须带当前值，否则拒绝；`node_id` 列已加，外键等 `runner_nodes`（DB2c-2）；
+- `priority` → 按 `run_after, created_at` 先进先出；
+- 已有行原地搬迁，旧的进度列保存在 `result.legacy_columns`。
 
-**风险**：预算上限从数据库检查改为节点内检查（core 循环控制器）。付费渲染仍然由审批门禁拦在数据库层。
+任务状态变化同步卡片（触发器）：`queued / running → doing`，`pending_review → review`，`blocked_needs_human / failed → waiting`，`succeeded / cancelled` 不动；`done / dropped` 的卡和 Chat 回合不动。`work_item_id` 由入队方传入，或从稿件的 `work_item_id` 推出，两者不一致时拒绝（B7）。
 
-**`agent_job_steps`**（10 列）：`id` `organization_id` `job_id` `seq` `kind`（context / generate / check / persist）`status` `output jsonb`（含评估和输入摘要）`usage jsonb`（tokens、费用、模型、驱动、耗时）`error` `created_at`。
+节点（`service_role`）不再能直接 INSERT / UPDATE 这两张表，只能走 RPC。
 
-**`approval_requests`**：保留 DB1 的结构，`estimated_cost_cents` 并入 `payload`，新增 `notified_at`。
+**风险（已接受）**：轮次、跳数、预算、Token 上限从数据库列检查改为节点内检查——worker 的循环控制器从 `payload.limits` 读上限、从已落库的步骤累加用量（恢复时也一样）。一个有缺陷或被篡改的节点可能超支 LLM 预算；数据库仍然保证：上限本身只能由人调高，所有写入带有效租约，**付费渲染和发布由审批门禁拦在数据库层**，强度不变。
+
+**`agent_job_steps`**（10 列）：`id` `organization_id` `job_id` `seq` `kind`（context / fetch / generate / check / persist；check 的 `output.stage` 为 precheck / evaluate）`status` `output jsonb`（含 round、评估、输入摘要）`usage jsonb`（input/output tokens、cost_cents、模型、驱动、耗时）`error` `created_at`。只追加，只能经 `record_agent_job_step` 写入，`seq` 在任务行锁下分配。
+
+**`approval_requests`**：保留 DB1 的结构，新增 `notified_at`（DB2c-1 已加）；`estimated_cost_cents` 并入 `payload` 留到 DB5（视频门禁还在用它算批准额度）。
 
 **`runner_nodes`**：`id` `organization_id` `name` `token_hash` `revoked_at` `last_seen_at` `created_at`。上一版的 `allowed_job_types` 先不做。
 
-**通知**（取代 outbox）：节点轮询两类「需要发通知」的记录：`approval_requests` 中 `status='pending' and notified_at is null` 的，以及 `agent_jobs` 中已结束且 `notified_at is null` 的。发送地址取事项来源输入的 `payload.reply_to`，发完回写 `notified_at`。失败就不回写，下一轮自动重试。
+**通知**（取代 outbox，DB2c-1 已实施）：节点主循环调用 `list_pending_notices`，取两类记录：`approval_requests` 中 `status='pending' and notified_at is null` 的（批准和提问），以及 `agent_jobs` 中 `pending_review / blocked_needs_human / failed` 且 `notified_at is null` 的。发送地址取任务来源输入或事项最早 IM 输入的 `payload.reply_to`，发完 `mark_notice_sent` 回写 `notified_at`；失败不回写，下一轮自动重试；没有 IM 地址的直接标记。任务状态一变 `notified_at` 自动清空；提问时任务本身记为已通知，由提问那条负责通知。上线前已有的记录记为已通知。
 
 ### 4.5 Chat
 
@@ -198,8 +207,8 @@ erDiagram
 ## 6. 数据库强制的不变量
 
 1. `intake_events` 去重键唯一；除 `work_item_id` 和 `ignored_at` 外不可更新。
-2. 同一个 `work_item` 同时最多一个 `queued/running` 的非 Chat 任务（部分唯一索引，`kind <> 'chat_turn'`，原 B6）。
-3. 节点写入时 `lease_epoch` 必须等于当前值。
+2. 同一个 `work_item` 同时最多一个 `running` 的非 Chat 任务（部分唯一索引，`kind <> 'chat_turn'`，原 B6）；可以有多个 `queued`（自动出稿每个平台一条），认领时跳过已有运行任务的事项。
+3. 节点写入时 `lease_epoch` 必须等于当前值（心跳、步骤、完成、失败、提问）。
 4. 发布、付费渲染必须带有效批准，且批准的版本等于对象当前的 `revision`（已有逻辑，保留）。
 5. `decide_approval_request` / `answer_question` 只允许登录的人调用（DB1 已实现）。
 6. `published_*` 列只能由发布 RPC 写入；`anon` 只能读这几列。
@@ -230,7 +239,9 @@ erDiagram
 | **DB1 基线整理**（2026-11-17 完成） | 迁移历史对齐线上（A4）；在未上线迁移里原地修正 B1、B5。`quick_captures`、本地 `site_*` 这类要被替换的部分，等 DB2/DB4 的替代物就位后再删，保证每一步门禁都是绿的 | 根目录全部测试 + 三个 demo 通过 | 否 |
 | **DB2a 核心表**（2026-11-18 完成） | 迁移 `20261115090000_mvp_core`：`work_items`、`intake_events` + `record_intake_event`、`content_documents.work_item_id`、回填函数 `private.backfill_v1()`（V1 → 0.5，可重复执行）；旧表暂不删 | `mvp-core-db.test.ts`：幂等、权限、原始输入不可改、回填可追溯且第二次执行为 0 | 否 |
 | **DB2b 入口与调用方**（2026-11-18 完成） | 速记、外部收录、IM 共用 `private.capture_core`：只收录 → 收件箱；自动出稿 → 同一事务建事项 + 稿件 + 任务；`accept_intake` 保留 V1 输入契约；`im_channels` 删除，回复地址进 `payload.reply_to`；`promote_intake_event` 一步把输入转成事项；稿件 `project_id` 改可空、新稿件只挂 `work_item_id`；worker、Edge Function、控制台（收件箱 + 事项页）全部改用新表。AI 写草稿 RPC 并入 DB2c | 全部门禁 | 否 |
-| **DB2c 执行精简** | `agent_jobs` / `agent_job_steps` 按 4.4 精简；`runner_nodes`；`notified_at` 通知；同步改 worker | 状态同步、串行、epoch 测试 | 否 |
+| **DB2c-1 执行精简**（2026-11-18 完成，上线脚本第 2 批） | `agent_jobs` / `agent_job_steps` 按 4.4 精简；`lease_epoch`；串行与卡片状态同步；`notified_at` 通知；worker、视频 worker、控制台同步改 | `agent-jobs-mvp-db.test.ts`（串行、状态同步、payload 形状、门禁、迁移搬运）、`release-step2.test.ts`、全部门禁 | 第 2 批由 Codex 执行 |
+| **DB2c-2 节点身份** | `runner_nodes` + `agent_jobs.node_id` 外键；节点令牌 + Edge Function 代理（DB-D8），worker 不再持有 `service_role` | 吊销的节点无法认领；节点只能写自己的任务 | 否 |
+| **DB2c-3 AI 直接写草稿** | `write_document_draft(base_revision)`；退役 `content_ai_proposals`，审核走稿件本身 | 人改过就拒绝写入 | 否 |
 | **退役迁移**（DB2 收尾，代码不再引用旧表后） | 调用 `private.backfill_v1()`，校验行数守恒，删除旧表；`content_documents.work_item_id` 改必填、删 `project_id` | 行数守恒断言 | 否 |
 | **DB3 Chat** | `chat_sessions` `chat_messages` + chat 回合 | 浏览器无法伪造 assistant 消息 | 否 |
 | **DB4 发布与读者站** | 发布 RPC 写 `published_*`；`anon` 列授权；sense-site 改读 `content_documents`；删除本地 `site_*` 迁移和外部发布三表的代码 | 未批准读不到；下线后读不到；改稿不影响已发布内容 | 否 |
@@ -346,3 +357,4 @@ DB1～DB5 都只在仓库和 PGlite 上进行，可以和 R2（抽出 core）、
 | DB-D12 | 2026-11-18 | 第 2 轮确认：`publishing_channels` 一起退役；`prompt_examples` 保留，不再投入；资产关联暂不做；补充 1～4 全部同意；`im_channels` 移除 |
 | DB-D13 | 2026-11-18 | 字段级：`agent_jobs`、`agent_job_steps`、`video_shots`、`approval_requests` 中标「MVP 删除」的列全部删除，标「计划新增」的列按第 4 节加入 |
 | DB-D14 | 2026-11-18 | **线上库就是唯一环境**（开发、测试、正式共用，目前只有你在用）。迁移改为**分批推送**：每批由 `testing/db/release.ts` 从迁移生成一个单事务脚本，先在模拟线上状态的 PGlite 上演练，再由 Codex 执行（手册见 `supabase/release/README.md`）。推上线的迁移从此只能追加；取代 DB-D6、DB-D7 里「只上线一次」的部分，第 8.1 节的脚本形态不变 |
+| DB-D15 | 2026-11-18 | DB2c 拆成三步：**DB2c-1** 任务表精简（本批，`lease_epoch`、串行、卡片状态同步、`notified_at` 通知）、**DB2c-2** `runner_nodes` + 节点网关、**DB2c-3** AI 直接写草稿并退役 `content_ai_proposals`。上限检查移到节点内的风险已接受（4.4） |

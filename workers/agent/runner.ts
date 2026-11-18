@@ -5,7 +5,7 @@ import { type AgentQueueBackend, toHarnessJob } from "./backend"
 import { assembleDraftContext, type FetchedSource, StaleTargetError } from "./context"
 import { defaultSourceFetcher, type SourceFetcher } from "./fetch-source"
 import type { JobHandler, JobHandlerOutcome } from "./job-handlers"
-import { type ImNotifyEnv, notifyJobNeedsHuman } from "./notify/im-notify"
+import { type ImNotifyDeps, type ImNotifyEnv, runNotifierOnce } from "./notify/im-notify"
 
 export const SUPPORTED_JOB_TYPES = ["content_draft"] as const
 
@@ -40,27 +40,27 @@ export interface WorkerOptions {
   signal?: AbortSignal
   /** Env for IM push credentials (tests). Defaults to process.env. */
   notifyEnv?: ImNotifyEnv
+  /** HTTP client for IM pushes (tests). Defaults to global fetch. */
+  notifyFetch?: ImNotifyDeps["fetch"]
+  /** How often the loop runs the notifier poll (ms). Default 15000; 0 disables it. */
+  notifyIntervalMs?: number
 }
 
-/** IM push for jobs that need a human. Isolated: a failure here never changes the job result. */
-async function notifyHuman(options: WorkerOptions, jobId: string, status: string): Promise<void> {
-  const log = options.logger ?? consoleLogger
-  try {
-    await notifyJobNeedsHuman({ rpc: (fn, args) => options.backend.rpc(fn, args), env: options.notifyEnv, log: (e, f) => log.warn(e, f) }, { id: jobId, status })
-  } catch (error) {
-    log.warn("im_notify_failed", { job_id: jobId, error: String(error) })
-  }
-}
-
-export function createJobStore(backend: AgentQueueBackend, workerId: string, leaseSeconds: number): JobStore {
+/** Job store bound to one lease: every write carries the epoch claim returned. */
+export function createJobStore(backend: AgentQueueBackend, leaseEpoch: number, leaseSeconds: number): JobStore {
   return {
     listSteps: (jobId) => backend.listSteps(jobId),
-    recordStep: (step) => backend.insertStep(step),
-    updateProgress: (jobId, progress) => backend.updateProgress(jobId, progress),
-    heartbeat: (jobId) => backend.heartbeat(jobId, workerId, leaseSeconds),
+    recordStep: (step) => backend.insertStep(step, leaseEpoch),
+    heartbeat: (jobId) => backend.heartbeat(jobId, leaseEpoch, leaseSeconds),
     saveProposal: (input) => backend.saveProposal(input),
-    finish: (jobId, outcome) => backend.complete(jobId, workerId, outcome.status, outcome.result, outcome.error ?? null, outcome.errorCode ?? null),
+    finish: (jobId, outcome) => backend.complete(jobId, leaseEpoch, outcome.status, outcome.result, outcome.error ?? null, outcome.errorCode ?? null),
   }
+}
+
+/** One notifier poll (isolated: a notification problem never affects job processing). */
+export async function pollNotices(options: Pick<WorkerOptions, "backend" | "notifyEnv" | "notifyFetch" | "logger">) {
+  const log = options.logger ?? consoleLogger
+  return runNotifierOnce({ rpc: (fn, args) => options.backend.rpc(fn, args), env: options.notifyEnv, fetch: options.notifyFetch, log: (e, f) => log.warn(e, f) })
 }
 
 export interface ProcessResult {
@@ -75,28 +75,28 @@ export interface ProcessResult {
 export async function processNextJob(options: WorkerOptions): Promise<ProcessResult> {
   const log = options.logger ?? consoleLogger
   const lease = options.leaseSeconds ?? 120
-  const { backend, workerId } = options
-  const claimed = await backend.claim(workerId, options.jobTypes ?? [...SUPPORTED_JOB_TYPES, ...Object.keys(options.jobHandlers ?? {})], lease)
+  const { backend } = options
+  const claimed = await backend.claim(options.jobTypes ?? [...SUPPORTED_JOB_TYPES, ...Object.keys(options.jobHandlers ?? {})], lease)
   if (!claimed) return { processed: false }
   const job = toHarnessJob(claimed)
-  log.info("job claimed", { job_id: job.id, job_type: job.jobType, attempt: claimed.attempts })
+  const epoch = job.leaseEpoch
+  log.info("job claimed", { job_id: job.id, kind: job.kind, attempt: claimed.attempts, lease_epoch: epoch, worker_id: options.workerId })
 
   // Background heartbeat keeps the lease alive during long model calls.
   const beat = setInterval(() => {
-    backend.heartbeat(job.id, workerId, lease).catch((error) => log.warn("heartbeat failed", { job_id: job.id, error: String(error) }))
+    backend.heartbeat(job.id, epoch, lease).catch((error) => log.warn("heartbeat failed", { job_id: job.id, error: String(error) }))
   }, Math.max(5, Math.floor(lease / 3)) * 1000)
   beat.unref?.()
 
   try {
-    const handler = options.jobHandlers?.[job.jobType]
+    const handler = options.jobHandlers?.[job.kind]
     if (handler) {
-      const handlerOutcome = await handler({ job, claimed, backend, workerId, leaseSeconds: lease, generator: options.generator, signal: options.signal })
+      const handlerOutcome = await handler({ job, claimed, backend, leaseSeconds: lease, generator: options.generator, signal: options.signal })
       log.info("job finished", { job_id: job.id, status: handlerOutcome.status, rounds: handlerOutcome.roundsExecuted, proposal_id: handlerOutcome.proposalId })
-      await notifyHuman(options, job.id, handlerOutcome.status)
       return { processed: true, jobId: job.id, handlerOutcome }
     }
-    if (job.jobType !== "content_draft") {
-      await backend.fail(job.id, workerId, `worker 不支持任务类型 ${job.jobType}`, false, 0, "unsupported_job_type")
+    if (job.kind !== "content_draft") {
+      await backend.fail(job.id, epoch, `worker 不支持任务类型 ${job.kind}`, false, 0, "unsupported_job_type")
       return { processed: true, jobId: job.id, error: "unsupported_job_type" }
     }
     const rows = await backend.loadDraftContext(job)
@@ -104,7 +104,7 @@ export async function processNextJob(options: WorkerOptions): Promise<ProcessRes
     const context = assembleDraftContext(job, rows, fetched)
     const outcome = await runHarnessJob({
       job,
-      store: createJobStore(backend, workerId, lease),
+      store: createJobStore(backend, epoch, lease),
       context,
       generator: options.generator,
       evaluator: options.evaluator,
@@ -112,7 +112,6 @@ export async function processNextJob(options: WorkerOptions): Promise<ProcessRes
       onEvent: (event) => options.onEvent?.(job, event),
     })
     log.info("job finished", { job_id: job.id, status: outcome.status, rounds: outcome.roundsExecuted, proposal_id: outcome.proposalId })
-    await notifyHuman(options, job.id, outcome.status)
     return { processed: true, jobId: job.id, outcome }
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error)
@@ -121,13 +120,13 @@ export async function processNextJob(options: WorkerOptions): Promise<ProcessRes
     } else if (options.signal?.aborted) {
       log.warn("shutdown during job; lease will expire and the job resumes from its last step", { job_id: job.id })
     } else if (error instanceof StaleTargetError) {
-      await backend.complete(job.id, workerId, "failed", { termination_reason: message }, message, "stale_target")
+      await backend.complete(job.id, epoch, "failed", { termination_reason: message }, message, "stale_target")
     } else if (error instanceof LlmCallError) {
       // Billable failures are never retried automatically (same rule as content-draft).
-      await backend.fail(job.id, workerId, message, error.retryable, options.retryDelaySeconds ?? 30, error.code)
+      await backend.fail(job.id, epoch, message, error.retryable, options.retryDelaySeconds ?? 30, error.code)
     } else {
       // Non-LLM failure (DB/network). Completed steps are persisted, so a retry resumes without re-billing.
-      await backend.fail(job.id, workerId, message.slice(0, 1000), true, options.retryDelaySeconds ?? 30, "worker_error").catch((e) =>
+      await backend.fail(job.id, epoch, message.slice(0, 1000), true, options.retryDelaySeconds ?? 30, "worker_error").catch((e) =>
         log.error("could not record failure", { job_id: job.id, error: String(e) })
       )
     }
@@ -166,7 +165,7 @@ async function loadFetchedSource(options: WorkerOptions, job: HarnessJob, url: s
     durationMs: Date.now() - started,
     error: result.ok ? null : `${result.code}: ${result.error}`.slice(0, 1000),
   }
-  await options.backend.insertStep(step)
+  await options.backend.insertStep(step, job.leaseEpoch)
   options.onEvent?.(job, { type: "step", step, resumed: false })
   return result.ok ? { url: result.finalUrl, title: result.title, text: result.text } : null
 }
@@ -182,7 +181,13 @@ function sleep(ms: number, signal?: AbortSignal) {
 export async function runWorkerLoop(options: WorkerOptions): Promise<void> {
   const log = options.logger ?? consoleLogger
   log.info("worker started", { worker_id: options.workerId, job_types: options.jobTypes ?? SUPPORTED_JOB_TYPES, generator: options.generator.driver, evaluator: options.evaluator?.driver ?? null })
+  const notifyEvery = options.notifyIntervalMs ?? 15_000
+  let lastNotify = 0
   while (!options.signal?.aborted) {
+    if (notifyEvery > 0 && Date.now() - lastNotify >= notifyEvery) {
+      lastNotify = Date.now()
+      await pollNotices(options)
+    }
     try {
       const result = await processNextJob(options)
       if (!result.processed) await sleep(options.pollIntervalMs ?? 5000, options.signal)

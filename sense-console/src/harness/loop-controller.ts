@@ -68,7 +68,7 @@ async function sha256Hex(text: string): Promise<string> {
   return Array.from(new Uint8Array(bytes), (b) => b.toString(16).padStart(2, "0")).join("")
 }
 
-function progressFromSteps(steps: readonly HarnessStepRecord[]): HarnessProgress {
+export function progressFromSteps(steps: readonly HarnessStepRecord[]): HarnessProgress {
   let hops = 0
   let cost = 0
   let tokens = 0
@@ -125,7 +125,6 @@ export async function runHarnessJob(options: RunHarnessJobOptions): Promise<Harn
     await store.recordStep(step)
     steps.push(step)
     options.onEvent?.({ type: "step", step, resumed: false })
-    await store.updateProgress(job.id, { ...progressFromSteps(steps), driver: generator.driver, model: generator.model })
   }
   const checkLease = async () => {
     const beat = await store.heartbeat(job.id)
@@ -143,7 +142,6 @@ export async function runHarnessJob(options: RunHarnessJobOptions): Promise<Harn
       proposal_id: extra.proposalId ?? null,
       last_score: evaluations.at(-1)?.score ?? null,
     }
-    await store.updateProgress(job.id, { ...p, driver: generator.driver, model: generator.model })
     await store.finish(job.id, {
       status,
       result,
@@ -197,21 +195,24 @@ export async function runHarnessJob(options: RunHarnessJobOptions): Promise<Harn
   }
 
   const hopsPerRound = evaluator ? 2 : 1
-  for (let round = 1; round <= job.maxRounds; round++) {
+  // Limits come from payload.limits; totals are recomputed from the durable steps, so a resumed job
+  // continues counting where it stopped (the database no longer stores progress columns).
+  const { maxRounds, maxHops, budgetCents, tokenBudget } = job.limits
+  for (let round = 1; round <= maxRounds; round++) {
     if (await checkLease()) return finish("cancelled", "人工取消，已在步骤边界停止。", { errorCode: "cancelled" })
 
     // ---- generate
     let gen = find(round, "generate")
     if (!gen) {
       const p = progressFromSteps(steps)
-      if (p.hopsUsed + hopsPerRound > job.maxHops) {
-        return finish("blocked_needs_human", `触发跳数上限 (max_hops=${job.maxHops})，已停止并转交人工。`, { errorCode: "max_hops" })
+      if (p.hopsUsed + hopsPerRound > maxHops) {
+        return finish("blocked_needs_human", `触发跳数上限 (max_hops=${maxHops})，已停止并转交人工。`, { errorCode: "max_hops" })
       }
-      if (p.costCents > 0 && p.costCents >= job.budgetCents) {
-        return finish("blocked_needs_human", `已达到预算上限 (${p.costCents}/${job.budgetCents} 分)，已停止并转交人工。`, { errorCode: "budget" })
+      if (p.costCents > 0 && p.costCents >= budgetCents) {
+        return finish("blocked_needs_human", `已达到预算上限 (${p.costCents}/${budgetCents} 分)，已停止并转交人工。`, { errorCode: "budget" })
       }
-      if (job.tokenBudget && p.tokensUsed >= job.tokenBudget) {
-        return finish("blocked_needs_human", `已达到 Token 上限 (${p.tokensUsed}/${job.tokenBudget})，已停止并转交人工。`, { errorCode: "token_budget" })
+      if (tokenBudget && p.tokensUsed >= tokenBudget) {
+        return finish("blocked_needs_human", `已达到 Token 上限 (${p.tokensUsed}/${tokenBudget})，已停止并转交人工。`, { errorCode: "token_budget" })
       }
       const messages = buildGeneratorMessages(context, feedback, latestDraft || null)
       const started = Date.now()
@@ -328,5 +329,5 @@ export async function runHarnessJob(options: RunHarnessJobOptions): Promise<Harn
     feedback = finalReport.revisionInstruction
   }
 
-  return finish("blocked_needs_human", `已达到最大生成-评估轮数 (${job.maxRounds}) 仍未通过，已停止自动重试并挂起等待人工介入。`, { errorCode: "max_rounds" })
+  return finish("blocked_needs_human", `已达到最大生成-评估轮数 (${maxRounds}) 仍未通过，已停止自动重试并挂起等待人工介入。`, { errorCode: "max_rounds" })
 }

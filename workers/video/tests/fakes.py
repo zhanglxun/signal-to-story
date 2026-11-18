@@ -35,9 +35,10 @@ class MemoryBackend:
 
     def add_job(self, job_type, plan_id, shot_id=None, revision=None, **over):
         jid = new_id()
-        row = {"id": jid, "organization_id": ORG, "job_type": job_type, "target_type": "video_plan", "target_id": plan_id,
-               "target_revision": revision or self.plans[plan_id]["revision"], "approval_request_id": None, "created_by": USER, "attempts": 1, "status": "queued",
-               "payload": {"schema_version": 1, "plan_id": plan_id, "plan_revision": revision or self.plans[plan_id]["revision"], "shot_id": shot_id}}
+        rev = revision or self.plans[plan_id]["revision"]
+        row = {"id": jid, "organization_id": ORG, "kind": job_type, "lease_epoch": 0, "created_by": USER, "attempts": 1, "status": "queued",
+               "payload": {"schema_version": 1, "plan_id": plan_id, "plan_revision": rev, "shot_id": shot_id,
+                           "target": {"type": "video_plan", "id": plan_id, "revision": rev}, "limits": {"max_rounds": 1, "max_hops": 8, "budget_cents": 1}}}
         row.update(over)
         self.jobs[jid] = row
         return jid
@@ -46,21 +47,31 @@ class MemoryBackend:
         return sorted([s for s in self.shots.values() if s["plan_id"] == pid], key=lambda s: s["position"])
 
     # Backend protocol
-    def claim(self, worker_id, job_types, lease_seconds):
+    def claim(self, job_types, lease_seconds):
         for j in self.jobs.values():
-            if j["status"] == "queued" and j["job_type"] in job_types:
+            if j["status"] == "queued" and j["kind"] in job_types:
                 j["status"] = "running"
+                j["lease_epoch"] += 1
                 return dict(j)
         return None
 
-    def heartbeat(self, job_id, worker_id, lease_seconds):
+    def _check_epoch(self, job_id, lease_epoch):
+        # Mirrors the database: a write from an older lease is refused.
+        if self.jobs[job_id]["lease_epoch"] != lease_epoch:
+            raise AssertionError(f"stale lease epoch {lease_epoch} != {self.jobs[job_id]['lease_epoch']}")
+
+    def heartbeat(self, job_id, lease_epoch, lease_seconds):
+        if self.jobs[job_id]["lease_epoch"] != lease_epoch:
+            return {"ok": False, "cancel_requested": False}
         return {"ok": self.lease_ok, "cancel_requested": self.cancel}
 
-    def complete(self, job_id, worker_id, status, result, error, error_code):
+    def complete(self, job_id, lease_epoch, status, result, error, error_code):
+        self._check_epoch(job_id, lease_epoch)
         self.calls.append(("complete", status, error_code))
         self.jobs[job_id].update(status=status, result=result, error=error, error_code=error_code)
 
-    def fail(self, job_id, worker_id, error, retryable, retry_delay_seconds, error_code):
+    def fail(self, job_id, lease_epoch, error, retryable, retry_delay_seconds, error_code):
+        self._check_epoch(job_id, lease_epoch)
         self.calls.append(("fail", retryable, error_code))
         self.jobs[job_id].update(status="queued" if retryable else "failed", error=error, error_code=error_code)
 

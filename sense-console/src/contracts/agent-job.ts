@@ -11,65 +11,150 @@ export const AGENT_JOB_STATUSES = [
 ] as const
 export type AgentJobStatus = (typeof AGENT_JOB_STATUSES)[number]
 
-/** Known job types. The column is free text (format-checked) so new pipelines need no migration. */
-export type AgentJobType = "content_draft" | "evaluate" | "video_render" | "publish_external" | "publish_site" | (string & {})
+/** Known job kinds. The column is free text (format-checked) so new pipelines need no migration. */
+export type AgentJobKind = "content_draft" | "evaluate" | "video_render" | "publish_external" | "publish_site" | "chat_turn" | (string & {})
 
+/** payload.target: the object the job acts on (DB2c-1). */
+export interface JobTarget {
+  type: string
+  id: string
+  revision: number | null
+}
+
+/** payload.limits: set at enqueue, raised by a human on resume, enforced by the worker loop. */
+export interface JobLimits {
+  maxRounds: number
+  maxHops: number
+  budgetCents: number
+  tokenBudget: number | null
+}
+
+export const DEFAULT_JOB_LIMITS: JobLimits = { maxRounds: 3, maxHops: 8, budgetCents: 100, tokenBudget: null }
+
+const isObj = (v: unknown): v is Record<string, unknown> => typeof v === "object" && v !== null && !Array.isArray(v)
+
+export function readJobTarget(payload: Record<string, unknown> | null | undefined): JobTarget | null {
+  const t = payload?.target
+  if (!isObj(t) || typeof t.type !== "string" || typeof t.id !== "string") return null
+  return { type: t.type, id: t.id, revision: typeof t.revision === "number" ? t.revision : null }
+}
+
+export function readJobLimits(payload: Record<string, unknown> | null | undefined): JobLimits {
+  const l = isObj(payload?.limits) ? (payload!.limits as Record<string, unknown>) : {}
+  const n = (v: unknown, d: number) => (typeof v === "number" && Number.isFinite(v) ? v : d)
+  return {
+    maxRounds: n(l.max_rounds, DEFAULT_JOB_LIMITS.maxRounds),
+    maxHops: n(l.max_hops, DEFAULT_JOB_LIMITS.maxHops),
+    budgetCents: n(l.budget_cents, DEFAULT_JOB_LIMITS.budgetCents),
+    tokenBudget: typeof l.token_budget === "number" ? l.token_budget : null,
+  }
+}
+
+/** Row of public.agent_jobs. target / limits / approvalRequestId are read from payload. */
 export interface AgentJob {
   id: string
   organizationId: string
-  jobType: AgentJobType
+  workItemId: string | null
+  kind: AgentJobKind
   status: AgentJobStatus
-  priority: number
-  targetType: string | null
-  targetId: string | null
-  targetRevision: number | null
   payload: Record<string, unknown>
   result: Record<string, unknown> | null
   idempotencyKey: string
   attempts: number
   maxAttempts: number
-  lockedBy: string | null
+  runAfter: string | null
+  nodeId: string | null
   lockedUntil: string | null
+  leaseEpoch: number
   cancelRequestedAt: string | null
-  budgetCents: number
-  costCents: number
-  tokenBudget: number | null
-  tokensUsed: number
-  hopsUsed: number
-  maxHops: number
-  rounds: number
-  maxRounds: number
-  driver: string | null
-  model: string | null
-  approvalRequestId: string | null
+  notifiedAt: string | null
   error: string | null
   errorCode: string | null
   createdBy: string | null
   createdAt: string
   updatedAt: string
-  startedAt: string | null
-  finishedAt: string | null
+  target: JobTarget | null
+  limits: JobLimits
+  approvalRequestId: string | null
 }
 
-export type AgentJobStepKind = "context" | "fetch" | "generate" | "precheck" | "evaluate" | "persist"
+export type AgentJobStepKind = "context" | "fetch" | "generate" | "check" | "persist"
 
+/** Step usage (agent_job_steps.usage). */
+export interface StepUsage {
+  inputTokens: number
+  outputTokens: number
+  costCents: number
+  model: string | null
+  driver: string | null
+  durationMs: number | null
+}
+
+/** Row of public.agent_job_steps; round / stage / evaluation / inputSummary are read from output. */
 export interface AgentJobStep {
   id: string
   jobId: string
+  seq: number
+  kind: AgentJobStepKind
+  /** For kind = check: precheck (deterministic) or evaluate (independent model). */
+  stage: "precheck" | "evaluate" | null
   round: number
-  stepKind: AgentJobStepKind
   status: "succeeded" | "failed"
-  driver: string | null
-  model: string | null
-  inputDigest: string | null
-  inputSummary: Record<string, unknown> | null
-  output: unknown
+  output: Record<string, unknown>
   evaluation: unknown
-  usage: Record<string, unknown> | null
-  costCents: number
-  durationMs: number | null
+  inputSummary: Record<string, unknown> | null
+  usage: StepUsage
   error: string | null
   createdAt: string
+}
+
+/** Progress and usage of one job, derived from its steps (the job row no longer stores them). */
+export interface JobUsage {
+  rounds: number
+  evaluatedRounds: number
+  hops: number
+  tokens: number
+  costCents: number
+  driver: string | null
+  model: string | null
+  durationMs: number
+  startedAt: string | null
+  lastStepAt: string | null
+}
+
+export const EMPTY_JOB_USAGE: JobUsage = { rounds: 0, evaluatedRounds: 0, hops: 0, tokens: 0, costCents: 0, driver: null, model: null, durationMs: 0, startedAt: null, lastStepAt: null }
+
+export function summarizeJobUsage(steps: readonly AgentJobStep[]): JobUsage {
+  if (!steps.length) return { ...EMPTY_JOB_USAGE }
+  const ordered = [...steps].sort((a, b) => a.seq - b.seq)
+  let rounds = 0, hops = 0, tokens = 0, cost = 0, duration = 0
+  let driver: string | null = null
+  let model: string | null = null
+  const evaluated = new Set<number>()
+  for (const s of ordered) {
+    if (s.kind === "generate") {
+      rounds = Math.max(rounds, s.round)
+      if (s.usage.model) model = s.usage.model
+      if (s.usage.driver) driver = s.usage.driver
+    }
+    if ((s.kind === "generate" || (s.kind === "check" && s.stage === "evaluate")) && s.usage.driver) hops += 1
+    if (s.kind === "check") evaluated.add(s.round)
+    tokens += s.usage.inputTokens + s.usage.outputTokens
+    cost += s.usage.costCents
+    duration += s.usage.durationMs ?? 0
+  }
+  return {
+    rounds,
+    evaluatedRounds: evaluated.size,
+    hops,
+    tokens,
+    costCents: Math.round(cost * 10_000) / 10_000,
+    driver,
+    model,
+    durationMs: duration,
+    startedAt: ordered[0].createdAt,
+    lastStepAt: ordered.at(-1)!.createdAt,
+  }
 }
 
 export type ApprovalAction =
@@ -119,60 +204,58 @@ const str = (v: unknown) => (v == null ? null : String(v))
 const num = (v: unknown) => (v == null ? 0 : Number(v))
 
 export function mapAgentJob(row: Row): AgentJob {
+  const payload = (row.payload as Record<string, unknown>) ?? {}
   return {
     id: String(row.id),
     organizationId: String(row.organization_id),
-    jobType: String(row.job_type),
+    workItemId: str(row.work_item_id),
+    kind: String(row.kind),
     status: row.status as AgentJobStatus,
-    priority: num(row.priority),
-    targetType: str(row.target_type),
-    targetId: str(row.target_id),
-    targetRevision: row.target_revision == null ? null : Number(row.target_revision),
-    payload: (row.payload as Record<string, unknown>) ?? {},
+    payload,
     result: (row.result as Record<string, unknown> | null) ?? null,
     idempotencyKey: String(row.idempotency_key),
     attempts: num(row.attempts),
     maxAttempts: num(row.max_attempts),
-    lockedBy: str(row.locked_by),
+    runAfter: str(row.run_after),
+    nodeId: str(row.node_id),
     lockedUntil: str(row.locked_until),
+    leaseEpoch: num(row.lease_epoch),
     cancelRequestedAt: str(row.cancel_requested_at),
-    budgetCents: num(row.budget_cents),
-    costCents: num(row.cost_cents),
-    tokenBudget: row.token_budget == null ? null : Number(row.token_budget),
-    tokensUsed: num(row.tokens_used),
-    hopsUsed: num(row.hops_used),
-    maxHops: num(row.max_hops),
-    rounds: num(row.rounds),
-    maxRounds: num(row.max_rounds),
-    driver: str(row.driver),
-    model: str(row.model),
-    approvalRequestId: str(row.approval_request_id),
+    notifiedAt: str(row.notified_at),
     error: str(row.error),
     errorCode: str(row.error_code),
     createdBy: str(row.created_by),
     createdAt: String(row.created_at),
     updatedAt: String(row.updated_at),
-    startedAt: str(row.started_at),
-    finishedAt: str(row.finished_at),
+    target: readJobTarget(payload),
+    limits: readJobLimits(payload),
+    approvalRequestId: typeof payload.approval_request_id === "string" ? payload.approval_request_id : null,
   }
 }
 
 export function mapAgentJobStep(row: Row): AgentJobStep {
+  const output = isObj(row.output) ? row.output : {}
+  const usage = isObj(row.usage) ? row.usage : {}
+  const stage = output.stage === "precheck" || output.stage === "evaluate" ? output.stage : null
   return {
     id: String(row.id),
     jobId: String(row.job_id),
-    round: num(row.round),
-    stepKind: row.step_kind as AgentJobStepKind,
+    seq: num(row.seq),
+    kind: row.kind as AgentJobStepKind,
+    stage,
+    round: num(output.round),
     status: row.status as "succeeded" | "failed",
-    driver: str(row.driver),
-    model: str(row.model),
-    inputDigest: str(row.input_digest),
-    inputSummary: (row.input_summary as Record<string, unknown> | null) ?? null,
-    output: row.output ?? null,
-    evaluation: row.evaluation ?? null,
-    usage: (row.usage as Record<string, unknown> | null) ?? null,
-    costCents: num(row.cost_cents),
-    durationMs: row.duration_ms == null ? null : Number(row.duration_ms),
+    output,
+    evaluation: output.evaluation ?? null,
+    inputSummary: isObj(output.input_summary) ? output.input_summary : null,
+    usage: {
+      inputTokens: num(usage.input_tokens),
+      outputTokens: num(usage.output_tokens),
+      costCents: num(usage.cost_cents),
+      model: str(usage.model),
+      driver: str(usage.driver),
+      durationMs: usage.duration_ms == null ? null : Number(usage.duration_ms),
+    },
     error: str(row.error),
     createdAt: String(row.created_at),
   }

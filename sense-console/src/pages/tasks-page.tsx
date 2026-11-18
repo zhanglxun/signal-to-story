@@ -40,7 +40,7 @@ export function TasksPage() {
   if (query.isError) return <div className="space-y-6">{header}<Alert variant="destructive"><AlertTitle>无法读取任务</AlertTitle><AlertDescription>{(query.error as Error).message}</AlertDescription></Alert></div>
   if (!query.data) return <div className="space-y-6">{header}<Skeleton className="h-40 w-full" /><Skeleton className="h-40 w-full" /></div>
 
-  const { jobs, approvals, targets } = query.data
+  const { jobs, approvals, targets, usage } = query.data
   const groups = groupTasks(jobs, approvals)
   if (!jobs.length && !approvals.length) {
     return <div className="space-y-6">{header}<Empty><EmptyHeader><EmptyMedia variant="icon"><InboxIcon /></EmptyMedia><EmptyTitle>还没有 Agent 任务</EmptyTitle><EmptyDescription>用顶栏速记（⌘/Ctrl + K）选择“自动出稿到待审”，任务会出现在这里。</EmptyDescription></EmptyHeader></Empty></div>
@@ -78,19 +78,20 @@ export function TasksPage() {
                   </TableRow>
                 ))}
                 {group.jobs.map((job) => {
-                  const target = job.targetId ? targets[job.targetId] : undefined
+                  const target = job.target ? targets[job.target.id] : undefined
+                  const rounds = usage?.[job.id]?.rounds ?? 0
                   return (
                     <TableRow key={job.id}>
                       <TableCell>
-                        <Link className="font-medium hover:text-primary" to={`/tasks/${job.id}`}>{target ? `${target.title}` : job.jobType}</Link>
+                        <Link className="font-medium hover:text-primary" to={`/tasks/${job.id}`}>{target ? `${target.title}` : job.kind}</Link>
                         <p className="mt-1 max-w-sm truncate text-xs text-muted-foreground">
-                          {job.jobType === "content_draft" ? "出稿" : job.jobType}
+                          {job.kind === "content_draft" ? "出稿" : job.kind}
                           {target && ` · ${target.platform === "master" ? "母稿" : platformLabels[target.platform as keyof typeof platformLabels] ?? target.platform}`}
                           {job.error && ` · ${job.error}`}
                         </p>
                       </TableCell>
                       <TableCell><Badge variant={JOB_STATUS_VARIANT[job.status]}>{job.cancelRequestedAt && job.status === "running" ? "取消中" : JOB_STATUS_LABEL[job.status]}</Badge></TableCell>
-                      <TableCell className="hidden tabular-nums text-muted-foreground md:table-cell">{job.rounds}/{job.maxRounds}</TableCell>
+                      <TableCell className="hidden tabular-nums text-muted-foreground md:table-cell">{rounds}/{job.limits.maxRounds}</TableCell>
                       <TableCell className="hidden text-muted-foreground lg:table-cell">{timeFormat.format(new Date(job.updatedAt))}</TableCell>
                       <TableCell><Link to={`/tasks/${job.id}`} aria-label="查看任务"><ArrowUpRight className="size-4 text-muted-foreground" /></Link></TableCell>
                     </TableRow>

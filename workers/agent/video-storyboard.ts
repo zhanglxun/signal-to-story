@@ -2,7 +2,8 @@
  * `video_storyboard` job: outline + trusted video SOP → LLM → strict JSON (VideoPlanDraft) → zod + SOP precheck
  * → (rewrite up to max_rounds) → video_storyboard_proposals row + pending_review.
  * The agent never writes video_plans / video_shots; a human adopts the proposal via accept_video_storyboard_proposal.
- * Steps are durable (agent_job_steps), so a resumed job does not re-bill finished LLM calls.
+ * Steps are durable (agent_job_steps), so a resumed job does not re-bill finished LLM calls; limits come from
+ * payload.limits and totals from the recorded steps.
  */
 import type { SupabaseClient } from "@supabase/supabase-js"
 import { z } from "zod"
@@ -161,7 +162,9 @@ export function validateStoryboardOutput(text: string): StoryboardValidation {
 }
 
 export function createVideoStoryboardHandler(store: VideoStoryboardStore): JobHandler {
-  return async ({ job, backend, workerId, leaseSeconds, generator, signal }) => {
+  return async ({ job, backend, leaseSeconds, generator, signal }) => {
+    const epoch = job.leaseEpoch
+    const { maxRounds, maxHops, budgetCents } = job.limits
     const steps = await backend.listSteps(job.id)
     const find = (round: number, kind: HarnessStepKind) => steps.find((s) => s.round === round && s.stepKind === kind)
     const totals = () => ({
@@ -171,19 +174,17 @@ export function createVideoStoryboardHandler(store: VideoStoryboardStore): JobHa
       rounds: steps.reduce((max, s) => (s.stepKind === "generate" ? Math.max(max, s.round) : max), 0),
     })
     const record = async (step: HarnessStepRecord) => {
-      await backend.insertStep(step)
+      await backend.insertStep(step, epoch)
       steps.push(step)
-      const t = totals()
-      await backend.updateProgress(job.id, { rounds: t.rounds, hopsUsed: t.hops, costCents: t.cost, tokensUsed: t.tokens, driver: generator.driver, model: generator.model })
     }
     const finish = async (status: JobHandlerOutcome["status"], reason: string, proposalId: string | null = null, errorCode: string | null = null): Promise<JobHandlerOutcome> => {
       const t = totals()
-      await backend.complete(job.id, workerId, status, { termination_reason: reason, rounds_executed: t.rounds, cost_cents: t.cost, proposal_id: proposalId, prompt_version: VIDEO_STORYBOARD_PROMPT_VERSION },
+      await backend.complete(job.id, epoch, status, { termination_reason: reason, rounds_executed: t.rounds, cost_cents: t.cost, proposal_id: proposalId, prompt_version: VIDEO_STORYBOARD_PROMPT_VERSION },
         status === "pending_review" ? null : reason, errorCode)
       return { status, reason, roundsExecuted: t.rounds, costCents: t.cost, proposalId }
     }
     const checkLease = async () => {
-      const beat = await backend.heartbeat(job.id, workerId, leaseSeconds)
+      const beat = await backend.heartbeat(job.id, epoch, leaseSeconds)
       if (!beat.ok) throw new LeaseLostError()
       return beat.cancelRequested
     }
@@ -203,13 +204,13 @@ export function createVideoStoryboardHandler(store: VideoStoryboardStore): JobHa
 
     let feedback: string | null = null
     let previous: string | null = null
-    for (let round = 1; round <= job.maxRounds; round++) {
+    for (let round = 1; round <= maxRounds; round++) {
       if (await checkLease()) return finish("cancelled", "人工取消，已在步骤边界停止。", null, "cancelled")
       let gen = find(round, "generate")
       if (!gen) {
         const t = totals()
-        if (t.hops + 1 > job.maxHops) return finish("blocked_needs_human", `触发跳数上限 (max_hops=${job.maxHops})，转交人工。`, null, "max_hops")
-        if (t.cost > 0 && t.cost >= job.budgetCents) return finish("blocked_needs_human", `已达到预算上限 (${t.cost}/${job.budgetCents} 分)，转交人工。`, null, "budget")
+        if (t.hops + 1 > maxHops) return finish("blocked_needs_human", `触发跳数上限 (max_hops=${maxHops})，转交人工。`, null, "max_hops")
+        if (t.cost > 0 && t.cost >= budgetCents) return finish("blocked_needs_human", `已达到预算上限 (${t.cost}/${budgetCents} 分)，转交人工。`, null, "budget")
         const started = Date.now()
         const response = await generator.complete({ messages: buildStoryboardMessages({ payload: payload.data, knowledge, feedback, previous }), maxTokens: 6000, responseFormat: "json_object", signal })
         gen = { jobId: job.id, organizationId: job.organizationId, round, stepKind: "generate", status: "succeeded", driver: response.driver, model: response.model,
@@ -236,6 +237,6 @@ export function createVideoStoryboardHandler(store: VideoStoryboardStore): JobHa
       feedback = `上一轮输出未通过校验，请修正后重新输出完整 JSON：\n- ${evaluation.issues.join("\n- ")}`
       previous = text
     }
-    return finish("blocked_needs_human", `已达到最大轮数 (${job.maxRounds}) 仍未产出合规分镜，转交人工。`, null, "max_rounds")
+    return finish("blocked_needs_human", `已达到最大轮数 (${maxRounds}) 仍未产出合规分镜，转交人工。`, null, "max_rounds")
   }
 }

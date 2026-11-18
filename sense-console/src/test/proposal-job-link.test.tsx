@@ -3,7 +3,7 @@ import { render, screen } from "@testing-library/react"
 import { MemoryRouter } from "react-router"
 import { describe, expect, it, vi } from "vitest"
 
-vi.mock("@/services/agent-job-service", () => ({ getAgentJob: vi.fn().mockResolvedValue({ id: "j1", rounds: 3 }) }))
+vi.mock("@/services/agent-job-service", () => ({ listJobUsage: vi.fn().mockResolvedValue({ j1: { rounds: 3 } }) }))
 
 import { ProposalJobLink } from "@/components/content/proposal-job-link"
 

@@ -2,6 +2,7 @@
  * Shared fixtures for the harness end-to-end test and `npm run demo:harness`.
  * Everything runs against PGlite with the real migrations applied.
  */
+import { type JobUsage, mapAgentJobStep, summarizeJobUsage } from "../../../sense-console/src/contracts/agent-job"
 import { FakeLlmClient, type LlmRequest } from "../../../sense-console/src/harness/llm"
 import { seedOrganization, type SupabaseTestDb } from "../../../testing/db/pglite-harness"
 
@@ -97,4 +98,10 @@ export function demoEvaluatorAlwaysFail() {
 /** Evaluator that always passes. */
 export function demoEvaluatorAlwaysPass() {
   return new FakeLlmClient((req) => verdict(sourceIdFrom(req), true), { model: "fake-evaluator", driver: "fake:evaluator" })
+}
+
+/** Rounds / hops / cost per job, derived from agent_job_steps the same way the console does. */
+export async function readJobUsage(tx: { query<T>(sql: string, params?: unknown[]): Promise<{ rows: T[] }> }, jobIds: string[]): Promise<Record<string, JobUsage>> {
+  const rows = (await tx.query<Record<string, unknown>>("select * from public.agent_job_steps where job_id = any($1) order by seq", [jobIds])).rows
+  return Object.fromEntries(jobIds.map((id) => [id, summarizeJobUsage(rows.filter((r) => r.job_id === id).map(mapAgentJobStep))]))
 }

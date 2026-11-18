@@ -26,10 +26,11 @@ class BackendError(RuntimeError):
 
 
 class Backend(Protocol):
-    def claim(self, worker_id: str, job_types: List[str], lease_seconds: int) -> Optional[Dict[str, Any]]: ...
-    def heartbeat(self, job_id: str, worker_id: str, lease_seconds: int) -> Dict[str, Any]: ...
-    def complete(self, job_id: str, worker_id: str, status: str, result: Dict[str, Any], error: Optional[str], error_code: Optional[str]) -> None: ...
-    def fail(self, job_id: str, worker_id: str, error: str, retryable: bool, retry_delay_seconds: int, error_code: Optional[str]) -> None: ...
+    # lease_epoch: returned by claim; the database refuses writes from an older lease (a late node).
+    def claim(self, job_types: List[str], lease_seconds: int) -> Optional[Dict[str, Any]]: ...
+    def heartbeat(self, job_id: str, lease_epoch: int, lease_seconds: int) -> Dict[str, Any]: ...
+    def complete(self, job_id: str, lease_epoch: int, status: str, result: Dict[str, Any], error: Optional[str], error_code: Optional[str]) -> None: ...
+    def fail(self, job_id: str, lease_epoch: int, error: str, retryable: bool, retry_delay_seconds: int, error_code: Optional[str]) -> None: ...
     def get_plan(self, plan_id: str) -> Optional[Dict[str, Any]]: ...
     def list_shots(self, plan_id: str) -> List[Dict[str, Any]]: ...
     def get_asset(self, asset_id: int) -> Optional[Dict[str, Any]]: ...
@@ -80,19 +81,19 @@ class RestBackend:
     def _eq(value: Any) -> str:
         return "eq." + urllib.parse.quote(str(value), safe="")
 
-    def claim(self, worker_id, job_types, lease_seconds):
-        rows = self._rpc("claim_agent_job", {"p_worker_id": worker_id, "p_job_types": job_types, "p_lease_seconds": lease_seconds})
+    def claim(self, job_types, lease_seconds):
+        rows = self._rpc("claim_agent_job", {"p_job_types": job_types, "p_lease_seconds": lease_seconds})
         rows = rows if isinstance(rows, list) else ([rows] if rows else [])
         return rows[0] if rows else None
 
-    def heartbeat(self, job_id, worker_id, lease_seconds):
-        return self._rpc("heartbeat_agent_job", {"p_job_id": job_id, "p_worker_id": worker_id, "p_lease_seconds": lease_seconds}) or {"ok": False}
+    def heartbeat(self, job_id, lease_epoch, lease_seconds):
+        return self._rpc("heartbeat_agent_job", {"p_job_id": job_id, "p_lease_epoch": lease_epoch, "p_lease_seconds": lease_seconds}) or {"ok": False}
 
-    def complete(self, job_id, worker_id, status, result, error, error_code):
-        self._rpc("complete_agent_job", {"p_job_id": job_id, "p_worker_id": worker_id, "p_status": status, "p_result": result, "p_error": error, "p_error_code": error_code})
+    def complete(self, job_id, lease_epoch, status, result, error, error_code):
+        self._rpc("complete_agent_job", {"p_job_id": job_id, "p_lease_epoch": lease_epoch, "p_status": status, "p_result": result, "p_error": error, "p_error_code": error_code})
 
-    def fail(self, job_id, worker_id, error, retryable, retry_delay_seconds, error_code):
-        self._rpc("fail_agent_job", {"p_job_id": job_id, "p_worker_id": worker_id, "p_error": error[:4000], "p_retryable": retryable, "p_retry_delay_seconds": retry_delay_seconds, "p_error_code": error_code})
+    def fail(self, job_id, lease_epoch, error, retryable, retry_delay_seconds, error_code):
+        self._rpc("fail_agent_job", {"p_job_id": job_id, "p_lease_epoch": lease_epoch, "p_error": error[:4000], "p_retryable": retryable, "p_retry_delay_seconds": retry_delay_seconds, "p_error_code": error_code})
 
     def get_plan(self, plan_id):
         rows = self._request("GET", f"/rest/v1/video_plans?id={self._eq(plan_id)}&select=*")
@@ -160,10 +161,10 @@ class StdioBackend:
         if op.startswith("_"):
             raise AttributeError(op)
         names = {
-            "claim": ("worker_id", "job_types", "lease_seconds"),
-            "heartbeat": ("job_id", "worker_id", "lease_seconds"),
-            "complete": ("job_id", "worker_id", "status", "result", "error", "error_code"),
-            "fail": ("job_id", "worker_id", "error", "retryable", "retry_delay_seconds", "error_code"),
+            "claim": ("job_types", "lease_seconds"),
+            "heartbeat": ("job_id", "lease_epoch", "lease_seconds"),
+            "complete": ("job_id", "lease_epoch", "status", "result", "error", "error_code"),
+            "fail": ("job_id", "lease_epoch", "error", "retryable", "retry_delay_seconds", "error_code"),
             "get_plan": ("plan_id",), "list_shots": ("plan_id",), "get_asset": ("asset_id",),
             "update_shot": ("shot_id", "patch"), "update_plan": ("plan_id", "patch"),
             "insert_asset": ("row",), "insert_cost_entry": ("row",),

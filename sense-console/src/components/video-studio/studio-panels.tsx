@@ -245,7 +245,7 @@ export function CostLedgerPanel({ summary, entries, jobs }: { summary: VideoCost
         {jobs.length > 0 ? (
           <ul className="space-y-1 text-sm text-muted-foreground">
             {jobs.slice(0, 8).map((j) => (
-              <li key={j.id}>{videoJobTypeLabels[j.jobType as keyof typeof videoJobTypeLabels] ?? j.jobType} · {jobStatusLabels[j.status] ?? j.status}{j.errorCode ? ` (${j.errorCode})` : ""}</li>
+              <li key={j.id}>{videoJobTypeLabels[j.kind as keyof typeof videoJobTypeLabels] ?? j.kind} · {jobStatusLabels[j.status] ?? j.status}{j.errorCode ? ` (${j.errorCode})` : ""}</li>
             ))}
           </ul>
         ) : null}

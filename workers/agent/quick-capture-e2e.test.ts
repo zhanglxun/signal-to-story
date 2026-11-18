@@ -34,10 +34,10 @@ describe("quick capture -> auto draft -> pending_review (PGlite + fake LLM)", ()
     expect(results.every((r) => r.outcome?.status === "pending_review")).toBe(true)
 
     const seen = await db.asUser(ws.viewerId, async (tx) => {
-      const jobs = await tx.query<{ id: string; status: string; rounds: number; target_id: string }>(
-        "select id, status, rounds, target_id from public.agent_jobs where payload->>'intake_event_id'=$1", [capture.event_id])
+      const jobs = await tx.query<{ id: string; status: string; target_id: string }>(
+        "select id, status, payload->'target'->>'id' as target_id from public.agent_jobs where payload->>'intake_event_id'=$1", [capture.event_id])
       const steps = await tx.query<{ job_id: string; round: number; step_kind: string; status: string; evaluation: { criteria?: unknown[] } | null }>(
-        "select job_id, round, step_kind, status, evaluation from public.agent_job_steps where job_id = any($1) order by job_id, round, created_at", [jobs.rows.map((j) => j.id)])
+        "select job_id, (output->>'round')::int as round, case when kind = 'check' then output->>'stage' else kind end as step_kind, status, output->'evaluation' as evaluation from public.agent_job_steps where job_id = any($1) order by job_id, seq", [jobs.rows.map((j) => j.id)])
       const proposals = await tx.query<{ agent_job_id: string; document_id: string; status: string }>(
         "select agent_job_id, document_id, status from public.content_ai_proposals where agent_job_id = any($1)", [jobs.rows.map((j) => j.id)])
       return { jobs: jobs.rows, steps: steps.rows, proposals: proposals.rows }
@@ -70,7 +70,7 @@ describe("quick capture -> auto draft -> pending_review (PGlite + fake LLM)", ()
     const [result] = await drainQueue(db, { generator, evaluator: demoEvaluatorFailThenPass(), fetchSource: failing, logger: silent })
     expect(result.outcome?.status).toBe("pending_review")
     const fetchStep = await db.asPostgres((tx) =>
-      tx.query<{ status: string; error: string }>("select status, error from public.agent_job_steps where job_id=$1 and step_kind='fetch'", [capture.documents[0].job_id]))
+      tx.query<{ status: string; error: string }>("select status, error from public.agent_job_steps where job_id=$1 and kind='fetch'", [capture.documents[0].job_id]))
     expect(fetchStep.rows[0]).toMatchObject({ status: "failed" })
     expect(fetchStep.rows[0].error).toMatch(/blocked_address/)
     expect(generator.calls[0].messages[1].content).not.toContain(FAKE_ARTICLE.text)

@@ -115,7 +115,7 @@ describe("video studio schema (PGlite)", () => {
     expect(status).toBe("expired")
     await expect(enqueue(ws.ownerId, planId, "video_shot_render", shotIds[0], approval.id, "after-edit")).rejects.toThrow()
 
-    const claimed = await db.asServiceRole(async (tx) => (await tx.query("select * from public.claim_agent_job($1,$2,$3)", ["w", ["video_shot_render"], 60])).rows)
+    const claimed = await db.asServiceRole(async (tx) => (await tx.query("select * from public.claim_agent_job($1,$2)", [["video_shot_render"], 60])).rows)
     expect(claimed).toHaveLength(0)
     const jobs = await db.asPostgres(async (tx) => (await tx.query<{ id: string; status: string; error_code: string }>("select id, status, error_code from public.agent_jobs where id = any($1)", [[paid.id, free.id]])).rows)
     expect(jobs.find((j) => j.id === paid.id)).toMatchObject({ status: "failed", error_code: "stale_target" })
@@ -130,7 +130,7 @@ describe("video studio schema (PGlite)", () => {
     const approval = await requestApproval(ws.ownerId, planId)
     await decide(ws.ownerId, approval.id)
     const job = await enqueue(ws.ownerId, planId, "video_shot_render", shotIds[0], approval.id)
-    const claimed = await db.asServiceRole(async (tx) => (await tx.query<{ id: string }>("select * from public.claim_agent_job($1,$2,$3)", ["w2", ["video_shot_render"], 60])).rows)
+    const claimed = await db.asServiceRole(async (tx) => (await tx.query<{ id: string; lease_epoch: number }>("select * from public.claim_agent_job($1,$2)", [["video_shot_render"], 60])).rows)
     expect(claimed[0].id).toBe(job.id)
     await db.asServiceRole((tx) => tx.query("update public.video_shots set render_status='rendering' where id=$1", [shotIds[0]]))
     await expect(db.asUser(ws.ownerId, (tx) => tx.query("update public.video_shots set narration='锁定中' where id=$1", [shotIds[1]]))).rejects.toThrow(/锁定/)
@@ -140,7 +140,7 @@ describe("video studio schema (PGlite)", () => {
         [ws.organizationId, planId, shotIds[0], job.id]
       )
       await tx.query("update public.video_shots set render_status='rendered' where id=$1", [shotIds[0]])
-      await tx.query("select public.complete_agent_job($1,'w2','succeeded','{}'::jsonb,null,null)", [job.id])
+      await tx.query("select public.complete_agent_job($1,$2,'succeeded','{}'::jsonb,null,null)", [job.id, claimed[0].lease_epoch])
     })
     await expect(db.asServiceRole((tx) => tx.query(
       "insert into public.video_cost_entries(organization_id, plan_id, shot_id, agent_job_id, kind, provider, actual_cents) values ($1,$2,$3,$4,'shot_render','wanx',35)",
@@ -157,17 +157,19 @@ describe("video studio schema (PGlite)", () => {
   })
 
   it("storyboard proposals only become formal plans through human acceptance", async () => {
-    const job = await db.asUser(ws.memberId, async (tx) => (await tx.query<{ id: string; job_type: string }>(
+    const job = await db.asUser(ws.memberId, async (tx) => (await tx.query<{ id: string; kind: string }>(
       "select * from public.enqueue_video_storyboard_job($1,$2,$3)", [ws.organizationId, "一只猫在月球上开面包店的 30 秒故事。", { target_seconds: 20 }]
     )).rows[0])
-    expect(job.job_type).toBe("video_storyboard")
+    expect(job.kind).toBe("video_storyboard")
     await db.asServiceRole(async (tx) => {
-      await tx.query("select * from public.claim_agent_job('w3', array['video_storyboard'], 60)")
+      const c = await tx.query<{ lease_epoch: number }>("select * from public.claim_agent_job(array['video_storyboard'], 60)")
+      const epoch = c.rows[0].lease_epoch
+      await tx.query(`select public.record_agent_job_step($1,$2,'generate','succeeded','{"round":1}'::jsonb,'{"cost_cents":0.6,"driver":"fake","model":"fake-model"}'::jsonb)`, [job.id, epoch])
       await tx.query(
         "insert into public.video_storyboard_proposals(organization_id, agent_job_id, input_outline, proposal, model) values ($1,$2,'outline',$3,'fake')",
         [ws.organizationId, job.id, { schema_version: 1, title: "月球面包店", aspect_ratio: "9:16", target_seconds: 20, shots: [{ narration: "月球上飘来面包香！", target_duration_ms: 3000 }, { narration: "猫店长开张了。", motion_mode: "cloud_video_model" }] }]
       )
-      await tx.query("select public.complete_agent_job($1,'w3','pending_review','{}'::jsonb,null,null)", [job.id])
+      await tx.query("select public.complete_agent_job($1,$2,'pending_review','{}'::jsonb,null,null)", [job.id, epoch])
     })
     // Service role cannot accept, and cannot create plans.
     await expect(db.asServiceRole((tx) => tx.query("insert into public.video_plans(organization_id,title,created_by) values ($1,'x',$2)", [ws.organizationId, ws.ownerId]))).rejects.toThrow(/permission denied/)
@@ -179,7 +181,10 @@ describe("video studio schema (PGlite)", () => {
       plan: (await tx.query<{ revision: number; title: string }>("select revision, title from public.video_plans where id=$1", [planId])).rows[0],
       shots: (await tx.query<{ position: number; motion_mode: string }>("select position, motion_mode from public.video_shots where plan_id=$1 order by position", [planId])).rows,
       job: (await tx.query<{ status: string }>("select status from public.agent_jobs where id=$1", [job.id])).rows[0],
+      ledger: (await tx.query<{ provider: string; actual_cents: string; metadata: { model: string } }>("select provider, actual_cents, metadata from public.video_cost_entries where agent_job_id=$1", [job.id])).rows,
     }))
+    // the LLM cost of the storyboard comes from the job's steps (no job-level cost column any more)
+    expect(state.ledger.map((l) => [l.provider, Number(l.actual_cents), l.metadata.model])).toEqual([["fake", 0.6, "fake-model"]])
     expect(state.plan).toEqual({ revision: 1, title: "月球面包店" })
     expect(state.shots.map((s) => s.motion_mode)).toEqual(["local_ken_burns", "cloud_video_model"])
     expect(state.job.status).toBe("succeeded")

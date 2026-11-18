@@ -1,6 +1,6 @@
 import type { AgentJob } from "@/contracts/agent-job"
 import { getSupabaseClient } from "@/lib/supabase"
-import { listAgentJobs, listApprovalRequests } from "@/services/agent-job-service"
+import { listAgentJobs, listApprovalRequests, listJobUsage } from "@/services/agent-job-service"
 
 export interface JobTargetInfo {
   documentId: string
@@ -11,7 +11,7 @@ export interface JobTargetInfo {
 
 /** Titles for job targets (content documents), read through RLS. */
 export async function getJobTargets(jobs: readonly AgentJob[]): Promise<Record<string, JobTargetInfo>> {
-  const ids = [...new Set(jobs.filter((j) => j.targetType === "content_document" && j.targetId).map((j) => j.targetId!))]
+  const ids = [...new Set(jobs.filter((j) => j.target?.type === "content_document").map((j) => j.target!.id))]
   if (!ids.length) return {}
   const client = getSupabaseClient()
   if (!client) throw new Error("Supabase 未配置")
@@ -25,6 +25,6 @@ export async function getTaskCenter(organizationId: string) {
     listAgentJobs({ organizationId, limit: 200 }),
     listApprovalRequests({ organizationId, statuses: ["pending"], limit: 100 }),
   ])
-  const targets = await getJobTargets(jobs)
-  return { jobs, approvals, targets }
+  const [targets, usage] = await Promise.all([getJobTargets(jobs), listJobUsage(jobs.map((j) => j.id))])
+  return { jobs, approvals, targets, usage }
 }

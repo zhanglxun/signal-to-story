@@ -42,10 +42,10 @@ describe("video_storyboard worker (PGlite + fake LLM)", () => {
     expect(llm.calls[1].messages[1].content).toContain("motion_mode")
 
     const seen = await db.asUser(ws.viewerId, async (tx) => ({
-      steps: (await tx.query<{ round: number; step_kind: string; status: string }>("select round, step_kind, status from public.agent_job_steps where job_id=$1 order by round, created_at", [job.id])).rows,
+      steps: (await tx.query<{ round: number; step_kind: string; status: string }>("select (output->>'round')::int as round, case when kind = 'check' then output->>'stage' else kind end as step_kind, status from public.agent_job_steps where job_id=$1 order by seq", [job.id])).rows,
       proposals: (await tx.query<{ id: string; status: string; proposal: { shots: unknown[] } }>("select * from public.video_storyboard_proposals where agent_job_id=$1", [job.id])).rows,
       plans: (await tx.query("select id from public.video_plans where organization_id=$1", [ws.organizationId])).rows,
-      job: (await tx.query<{ status: string; cost_cents: string }>("select status, cost_cents from public.agent_jobs where id=$1", [job.id])).rows[0],
+      job: (await tx.query<{ status: string }>("select status from public.agent_jobs where id=$1", [job.id])).rows[0],
     }))
     expect(seen.steps.map((s) => `${s.round}:${s.step_kind}:${s.status}`)).toEqual([
       "0:context:succeeded", "1:generate:succeeded", "1:precheck:failed", "2:generate:succeeded", "2:precheck:succeeded", "2:persist:succeeded",

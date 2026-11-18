@@ -1,8 +1,13 @@
+import type { JobLimits, JobTarget } from "../contracts/agent-job"
 import type { LlmUsage } from "./llm"
 
 export type HarnessStepKind = "context" | "fetch" | "generate" | "precheck" | "evaluate" | "persist"
 
-/** Mirrors a row of public.agent_job_steps. (jobId, round, stepKind) is unique. */
+/**
+ * One durable step as the loop sees it. Stored in public.agent_job_steps as (seq, kind, output, usage):
+ * precheck / evaluate become kind 'check' with output.stage; round, digest, summary and evaluation live in
+ * output; model, driver, cost and duration live in usage. (jobId, round, stepKind) is unique per job.
+ */
 export interface HarnessStepRecord {
   jobId: string
   organizationId: string
@@ -21,20 +26,21 @@ export interface HarnessStepRecord {
   error?: string | null
 }
 
+export { DEFAULT_JOB_LIMITS, type JobLimits, type JobTarget, readJobLimits, readJobTarget } from "../contracts/agent-job"
+
 /** Subset of public.agent_jobs the loop controller needs. */
 export interface HarnessJob {
   id: string
   organizationId: string
-  jobType: string
+  workItemId: string | null
+  kind: string
   payload: Record<string, unknown>
-  targetType: string | null
-  targetId: string | null
-  targetRevision: number | null
+  target: JobTarget | null
+  approvalRequestId: string | null
   createdBy: string | null
-  budgetCents: number
-  tokenBudget: number | null
-  maxHops: number
-  maxRounds: number
+  limits: JobLimits
+  /** Lease generation returned by claim; every write must carry it. */
+  leaseEpoch: number
 }
 
 export interface HarnessProgress {
@@ -42,8 +48,6 @@ export interface HarnessProgress {
   hopsUsed: number
   costCents: number
   tokensUsed: number
-  driver?: string
-  model?: string
 }
 
 export type HarnessTerminalStatus = "pending_review" | "blocked_needs_human" | "failed" | "cancelled" | "succeeded"
@@ -69,7 +73,6 @@ export interface JobStore {
   listSteps(jobId: string): Promise<HarnessStepRecord[]>
   /** Insert; if (jobId, round, stepKind) already exists, keep the existing row. */
   recordStep(step: HarnessStepRecord): Promise<void>
-  updateProgress(jobId: string, progress: HarnessProgress): Promise<void>
   /** Extend the lease. ok=false means the lease was lost: stop without writing. */
   heartbeat(jobId: string): Promise<{ ok: boolean; cancelRequested: boolean }>
   /** Write content_ai_proposals (status succeeded) once per job. Returns the proposal id. */
@@ -79,7 +82,6 @@ export interface JobStore {
 
 export class InMemoryJobStore implements JobStore {
   readonly steps: HarnessStepRecord[] = []
-  readonly progress = new Map<string, HarnessProgress>()
   readonly proposals = new Map<string, { proposalId: string; input: SaveProposalInput }>()
   readonly outcomes = new Map<string, { status: HarnessTerminalStatus; result: Record<string, unknown>; error?: string | null; errorCode?: string | null }>()
   cancelRequested = false
@@ -91,9 +93,6 @@ export class InMemoryJobStore implements JobStore {
   async recordStep(step: HarnessStepRecord) {
     if (this.steps.some((s) => s.jobId === step.jobId && s.round === step.round && s.stepKind === step.stepKind)) return
     this.steps.push({ ...step })
-  }
-  async updateProgress(jobId: string, progress: HarnessProgress) {
-    this.progress.set(jobId, { ...progress })
   }
   async heartbeat() {
     return { ok: !this.leaseLost, cancelRequested: this.cancelRequested }

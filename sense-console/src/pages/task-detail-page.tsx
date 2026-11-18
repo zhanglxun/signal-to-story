@@ -10,8 +10,8 @@ import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Skeleton } from "@/components/ui/skeleton"
 import type { DraftEvaluationReport } from "@/contracts/agent-harness"
-import type { AgentJobStep } from "@/contracts/agent-job"
-import { groupStepsByRound, isTerminalJob, JOB_STATUS_LABEL, JOB_STATUS_VARIANT, stepTokens } from "@/lib/task-center"
+import { type AgentJobStep, summarizeJobUsage } from "@/contracts/agent-job"
+import { groupStepsByRound, isTerminalJob, JOB_STATUS_LABEL, JOB_STATUS_VARIANT, stepLabelKey, stepTokens } from "@/lib/task-center"
 import { cancelAgentJob, getAgentJob, listAgentJobSteps, resumeAgentJob } from "@/services/agent-job-service"
 import { getJobTargets } from "@/services/task-center-service"
 
@@ -34,11 +34,12 @@ function Checklist({ report }: { report: DraftEvaluationReport }) {
 function StepRow({ step }: { step: AgentJobStep }) {
   const report = step.evaluation as DraftEvaluationReport | null
   const tokens = stepTokens(step)
-  const meta = [step.model, tokens ? `${tokens} tokens` : null, step.costCents ? `${step.costCents} 分` : null, step.durationMs != null ? `${step.durationMs} ms` : null].filter(Boolean).join(" · ")
+  const u = step.usage
+  const meta = [u.model, tokens ? `${tokens} tokens` : null, u.costCents ? `${u.costCents} 分` : null, u.durationMs != null ? `${u.durationMs} ms` : null].filter(Boolean).join(" · ")
   return (
     <div className="border-l pl-4">
       <div className="flex flex-wrap items-center gap-2">
-        <span className="text-sm font-medium">{STEP_LABEL[step.stepKind] ?? step.stepKind}</span>
+        <span className="text-sm font-medium">{STEP_LABEL[stepLabelKey(step)] ?? stepLabelKey(step)}</span>
         <Badge variant={step.status === "succeeded" ? "secondary" : "destructive"}>{step.status === "succeeded" ? "通过" : "未通过"}</Badge>
         {report && typeof report.score === "number" && <span className="text-xs tabular-nums text-muted-foreground">得分 {report.score}</span>}
       </div>
@@ -59,7 +60,7 @@ export function TaskDetailPage() {
     refetchInterval: (q) => (q.state.data && !isTerminalJob(q.state.data.status) && q.state.data.status !== "pending_review" ? 5000 : false),
   })
   const steps = useQuery({ queryKey: ["agent-jobs", "steps", taskId], queryFn: () => listAgentJobSteps(taskId), refetchInterval: job.data?.status === "running" ? 5000 : false })
-  const target = useQuery({ queryKey: ["agent-jobs", "target", taskId], queryFn: () => getJobTargets(job.data ? [job.data] : []), enabled: Boolean(job.data?.targetId) })
+  const target = useQuery({ queryKey: ["agent-jobs", "target", taskId], queryFn: () => getJobTargets(job.data ? [job.data] : []), enabled: Boolean(job.data?.target) })
   const refresh = () => queryClient.invalidateQueries({ queryKey: ["agent-jobs"] })
   const cancel = useMutation({ mutationFn: () => cancelAgentJob(taskId), onSuccess: () => { toast.success("已请求取消"); void refresh() }, onError: (e) => toast.error((e as Error).message) })
   const resume = useMutation({ mutationFn: () => resumeAgentJob(taskId, { extraRounds: 1 }), onSuccess: () => { toast.success("已追加一轮并重新排队"); void refresh() }, onError: (e) => toast.error((e as Error).message) })
@@ -70,16 +71,17 @@ export function TaskDetailPage() {
   if (!job.data) return <div className="space-y-6">{back}<Alert><AlertTitle>任务不存在</AlertTitle><AlertDescription>任务可能属于其他组织，或已被删除。</AlertDescription></Alert></div>
 
   const j = job.data
-  const doc = j.targetId ? target.data?.[j.targetId] : undefined
+  const doc = j.target ? target.data?.[j.target.id] : undefined
   const proposalId = typeof j.result?.proposal_id === "string" ? j.result.proposal_id : null
   const rounds = groupStepsByRound(steps.data ?? [])
-  const evaluatedRounds = new Set((steps.data ?? []).filter((s) => s.stepKind === "evaluate" || s.stepKind === "precheck").map((s) => s.round)).size
+  // Progress and usage are derived from the steps (agent_jobs only keeps the limits, in payload.limits).
+  const usage = summarizeJobUsage(steps.data ?? [])
 
   return (
     <div className="space-y-6">
       {back}
       <PageHeader
-        eyebrow={`${j.jobType} · ${j.id.slice(0, 8)}`}
+        eyebrow={`${j.kind} · ${j.id.slice(0, 8)}`}
         title={doc?.title ?? "Agent 任务"}
         description={String(j.payload.instruction ?? "")}
         actions={
@@ -92,7 +94,7 @@ export function TaskDetailPage() {
       />
       <div className="flex flex-wrap gap-2 text-sm">
         <Badge variant={JOB_STATUS_VARIANT[j.status]}>{j.cancelRequestedAt && j.status === "running" ? "取消中" : JOB_STATUS_LABEL[j.status]}</Badge>
-        <span className="text-muted-foreground">轮次 {j.rounds}/{j.maxRounds} · 评估 {evaluatedRounds} 轮 · 跳数 {j.hopsUsed}/{j.maxHops} · Tokens {j.tokensUsed} · 成本 {j.costCents}/{j.budgetCents} 分 · 尝试 {j.attempts}/{j.maxAttempts}{j.model ? ` · ${j.driver ?? ""} ${j.model}` : ""}</span>
+        <span className="text-muted-foreground">轮次 {usage.rounds}/{j.limits.maxRounds} · 评估 {usage.evaluatedRounds} 轮 · 跳数 {usage.hops}/{j.limits.maxHops} · Tokens {usage.tokens} · 成本 {usage.costCents}/{j.limits.budgetCents} 分 · 尝试 {j.attempts}/{j.maxAttempts}{usage.model ? ` · ${usage.driver ?? ""} ${usage.model}` : ""}</span>
       </div>
       {j.error && <Alert variant={j.status === "failed" ? "destructive" : "default"}><AlertTitle>{j.status === "pending_review" ? "说明" : "停止原因"}{j.errorCode ? ` (${j.errorCode})` : ""}</AlertTitle><AlertDescription>{j.error}</AlertDescription></Alert>}
       {typeof j.result?.termination_reason === "string" && j.status === "pending_review" && <Alert><AlertTitle>结果</AlertTitle><AlertDescription>{j.result.termination_reason}</AlertDescription></Alert>}

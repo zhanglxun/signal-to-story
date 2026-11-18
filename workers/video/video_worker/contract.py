@@ -52,18 +52,25 @@ def _validator(defn: str):
 
 def _fallback_job_checks(job: Dict[str, Any]) -> List[str]:
     errors: List[str] = []
-    for key in ("id", "organization_id", "target_id"):
+    for key in ("id", "organization_id"):
         if not isinstance(job.get(key), str) or not _UUID.match(job[key]):
             errors.append(f"{key}: invalid uuid")
-    if job.get("job_type") not in RENDER_JOB_TYPES:
-        errors.append("job_type: unsupported")
-    if job.get("target_type") != "video_plan":
-        errors.append("target_type: must be video_plan")
-    if not isinstance(job.get("target_revision"), int) or job["target_revision"] < 1:
-        errors.append("target_revision: invalid")
+    if job.get("kind") not in RENDER_JOB_TYPES:
+        errors.append("kind: unsupported")
+    if not isinstance(job.get("lease_epoch"), int) or job["lease_epoch"] < 1:
+        errors.append("lease_epoch: invalid")
     payload = job.get("payload")
     if not isinstance(payload, dict) or payload.get("schema_version") != SCHEMA_VERSION:
         errors.append("payload.schema_version: must be 1")
+        return errors
+    target = payload.get("target")
+    if not isinstance(target, dict) or target.get("type") != "video_plan":
+        errors.append("payload/target/type: must be video_plan")
+    else:
+        if not isinstance(target.get("id"), str) or not _UUID.match(target["id"]):
+            errors.append("payload/target/id: invalid uuid")
+        if not isinstance(target.get("revision"), int) or target["revision"] < 1:
+            errors.append("payload/target/revision: invalid")
     return errors
 
 
@@ -77,10 +84,10 @@ def validate_job(job: Dict[str, Any]) -> Dict[str, Any]:
     if errors:
         raise ContractError("; ".join(errors[:6]))
     payload = job["payload"]
-    if job["job_type"] != "video_compose" and not payload.get("shot_id"):
+    if job["kind"] != "video_compose" and not payload.get("shot_id"):
         raise ContractError("payload.shot_id: required for shot jobs")
-    if payload.get("plan_id") != job["target_id"]:
-        raise ContractError("payload.plan_id must equal target_id")
+    if payload.get("plan_id") != payload["target"]["id"]:
+        raise ContractError("payload.plan_id must equal payload.target.id")
     return job
 
 
@@ -96,8 +103,11 @@ def validate_result(result: Dict[str, Any]) -> Dict[str, Any]:
 
 
 def job_from_row(row: Dict[str, Any]) -> Dict[str, Any]:
-    keys = ("id", "organization_id", "job_type", "target_type", "target_id", "target_revision", "approval_request_id", "created_by", "payload")
-    return {k: row.get(k) for k in keys}
+    keys = ("id", "organization_id", "kind", "lease_epoch", "created_by", "payload")
+    job = {k: row.get(k) for k in keys}
+    if job["lease_epoch"] is not None:
+        job["lease_epoch"] = int(job["lease_epoch"])  # bigint may arrive as a string
+    return job
 
 
 @dataclass(frozen=True)

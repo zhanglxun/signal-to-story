@@ -41,6 +41,8 @@ class JobRun:
         self.engine = engine
         self.job = job
         self.worker_id = worker_id
+        self.epoch = int(job["lease_epoch"])
+        self.target = job["payload"]["target"]
         self.lease = lease_seconds
         self.work = work_dir
         self.bucket = bucket
@@ -54,7 +56,7 @@ class JobRun:
 
     # ---- helpers
     def check_lease(self) -> None:
-        beat = self.backend.heartbeat(self.job["id"], self.worker_id, self.lease)
+        beat = self.backend.heartbeat(self.job["id"], self.epoch, self.lease)
         if not beat.get("ok"):
             raise LeaseLost()
         if beat.get("cancel_requested"):
@@ -91,11 +93,11 @@ class JobRun:
         })
 
     def load_plan(self) -> List[Dict[str, Any]]:
-        plan = self.backend.get_plan(self.job["target_id"])
+        plan = self.backend.get_plan(self.target["id"])
         if not plan or plan.get("organization_id") != self.job["organization_id"]:
             raise StaleTargetError("分镜计划不存在")
-        if int(plan["revision"]) != int(self.job["target_revision"]):
-            raise StaleTargetError(f"分镜计划已修改（任务 r{self.job['target_revision']}，当前 r{plan['revision']}）")
+        if int(plan["revision"]) != int(self.target["revision"]):
+            raise StaleTargetError(f"分镜计划已修改（任务 r{self.target['revision']}，当前 r{plan['revision']}）")
         self.plan = plan
         return self.backend.list_shots(plan["id"])
 
@@ -107,7 +109,7 @@ class JobRun:
 
     def recheck_revision(self) -> None:
         again = self.backend.get_plan(self.plan["id"])
-        if not again or int(again["revision"]) != int(self.job["target_revision"]):
+        if not again or int(again["revision"]) != int(self.target["revision"]):
             raise StaleTargetError("渲染开始前分镜被修改")
 
     def ensure_audio(self, shot: Dict[str, Any]) -> Optional[MediaResult]:
@@ -191,7 +193,7 @@ class JobRun:
     # ---- job types
     def run(self) -> Dict[str, Any]:
         shots = self.load_plan()
-        job_type = self.job["job_type"]
+        job_type = self.job["kind"]
         shot_id = self.job["payload"].get("shot_id")
         final_ms = None
         if job_type == "video_tts_preview":
@@ -234,7 +236,7 @@ class JobRun:
         if self.engine.dry_run and "dry-run: no paid provider was called" not in self.warnings:
             self.warnings.append("dry-run: no paid provider was called")
         return validate_result({
-            "schema_version": SCHEMA_VERSION, "job_type": job_type, "engine": self.engine.name, "dry_run": self.engine.dry_run,
+            "schema_version": SCHEMA_VERSION, "kind": job_type, "engine": self.engine.name, "dry_run": self.engine.dry_run,
             "plan_id": self.plan["id"], "plan_revision": int(self.plan["revision"]), "assets": self.assets, "cost_cents": round(self.cost, 4),
             "shots": self.shot_results, "final_duration_ms": final_ms, "warnings": self.warnings,
         })
@@ -243,17 +245,18 @@ class JobRun:
 def process_next_job(backend: Backend, engine, worker_id: str, job_types: Optional[List[str]] = None, lease_seconds: int = 300,
                      work_root: Optional[Path] = None, bucket: str = DEFAULT_BUCKET, logger=None, heartbeat_interval: Optional[float] = None) -> Optional[Dict[str, Any]]:
     """Claim and process at most one job. Returns a summary dict, or None when the queue is empty."""
-    row = backend.claim(worker_id, list(job_types or RENDER_JOB_TYPES), lease_seconds)
+    row = backend.claim(list(job_types or RENDER_JOB_TYPES), lease_seconds)
     if not row:
         return None
     job_id = row["id"]
-    _log(logger, "job claimed", job_id=job_id, job_type=row.get("job_type"), attempt=row.get("attempts"))
+    epoch = int(row.get("lease_epoch") or 0)  # every write below carries the lease generation claim returned
+    _log(logger, "job claimed", job_id=job_id, kind=row.get("kind"), attempt=row.get("attempts"), lease_epoch=epoch, worker_id=worker_id)
     stop = threading.Event()
 
     def beat():
         while not stop.wait(heartbeat_interval or max(5, lease_seconds // 3)):
             try:
-                backend.heartbeat(job_id, worker_id, lease_seconds)
+                backend.heartbeat(job_id, epoch, lease_seconds)
             except Exception as e:  # pragma: no cover - logged only
                 _log(logger, "heartbeat failed", job_id=job_id, error=str(e))
 
@@ -264,35 +267,35 @@ def process_next_job(backend: Backend, engine, worker_id: str, job_types: Option
         try:
             job = validate_job(job_from_row(row))
         except ContractError as e:
-            backend.fail(job_id, worker_id, f"任务契约无效: {e}", False, 0, "invalid_contract")
+            backend.fail(job_id, epoch, f"任务契约无效: {e}", False, 0, "invalid_contract")
             return {"job_id": job_id, "status": "failed", "error_code": "invalid_contract", "error": str(e)}
         if not job.get("created_by"):
-            backend.fail(job_id, worker_id, "任务缺少发起人，无法登记资产", False, 0, "invalid_contract")
+            backend.fail(job_id, epoch, "任务缺少发起人，无法登记资产", False, 0, "invalid_contract")
             return {"job_id": job_id, "status": "failed", "error_code": "invalid_contract"}
         run = JobRun(backend, engine, job, worker_id, lease_seconds, work, bucket, logger)
         try:
             result = run.run()
             run.check_lease()
-            backend.complete(job_id, worker_id, "succeeded", result, None, None)
+            backend.complete(job_id, epoch, "succeeded", result, None, None)
             _log(logger, "job succeeded", job_id=job_id, assets=len(result["assets"]), cost_cents=result["cost_cents"])
             return {"job_id": job_id, "status": "succeeded", "result": result}
         except LeaseLost:
             _log(logger, "lease lost; stopping without writes", job_id=job_id)
             return {"job_id": job_id, "status": "lease_lost"}
         except Cancelled:
-            backend.complete(job_id, worker_id, "cancelled", {"assets": run.assets}, "人工取消，已在步骤边界停止", "cancelled")
+            backend.complete(job_id, epoch, "cancelled", {"assets": run.assets}, "人工取消，已在步骤边界停止", "cancelled")
             return {"job_id": job_id, "status": "cancelled"}
         except StaleTargetError as e:
-            backend.complete(job_id, worker_id, "failed", {"termination_reason": str(e)}, str(e), "stale_target")
+            backend.complete(job_id, epoch, "failed", {"termination_reason": str(e)}, str(e), "stale_target")
             return {"job_id": job_id, "status": "failed", "error_code": "stale_target", "error": str(e)}
         except EngineError as e:
             # Paid (billable) failures are never retried automatically.
-            backend.fail(job_id, worker_id, str(e), e.retryable, 30, e.code)
+            backend.fail(job_id, epoch, str(e), e.retryable, 30, e.code)
             return {"job_id": job_id, "status": "failed" if not e.retryable else "retry", "error_code": e.code, "error": str(e), "billable": e.billable}
         except (BackendError, OSError) as e:
             billed = any(a.get("category") == "shot_clip" for a in run.assets) and run.cost > 0
             try:
-                backend.fail(job_id, worker_id, f"worker error: {e}"[:1000], not billed, 30, "worker_error")
+                backend.fail(job_id, epoch, f"worker error: {e}"[:1000], not billed, 30, "worker_error")
             except Exception:
                 pass
             return {"job_id": job_id, "status": "retry" if not billed else "failed", "error_code": "worker_error", "error": str(e)}

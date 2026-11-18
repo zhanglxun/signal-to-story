@@ -27,7 +27,7 @@ begin
  assert job.id=job2.id and job.status='queued','enqueue not idempotent';
  denied:=false; begin update public.agent_jobs set status='succeeded' where id=job.id; get diagnostics n=row_count; denied:=n=0; exception when insufficient_privilege then denied:=true; end;
  assert denied,'browser updated job directly';
- denied:=false; begin perform public.claim_agent_job('browser',array['content_draft'],60); exception when insufficient_privilege then denied:=true; end;
+ denied:=false; begin perform public.claim_agent_job(array['content_draft'],60); exception when insufficient_privilege then denied:=true; end;
  assert denied,'browser claimed job';
  -- Viewer cannot enqueue; outsider cannot see.
  perform set_config('request.jwt.claim.sub',viewer_id::text,true);
@@ -41,13 +41,22 @@ begin
  perform set_config('request.jwt.claim.sub','',true);
  perform set_config('request.jwt.claims','{"role":"service_role"}',true);
  set local role service_role;
- select * into claimed from public.claim_agent_job('w1',array['content_draft'],60);
- assert claimed.id=job.id and claimed.status='running' and claimed.attempts=1,'claim failed';
- assert not exists(select 1 from public.claim_agent_job('w2',array['content_draft'],60)),'double claim';
- assert (public.heartbeat_agent_job(job.id,'w2',60)->>'ok')::boolean=false,'foreign worker heartbeat accepted';
- perform public.complete_agent_job(job.id,'w1','pending_review',jsonb_build_object('proposal_id',null));
+ select * into claimed from public.claim_agent_job(array['content_draft'],60);
+ assert claimed.id=job.id and claimed.status='running' and claimed.attempts=1 and claimed.lease_epoch=1,'claim failed';
+ assert not exists(select 1 from public.claim_agent_job(array['content_draft'],60)),'double claim';
+ assert (public.heartbeat_agent_job(job.id,0,60)->>'ok')::boolean=false,'stale-epoch heartbeat accepted';
+ denied:=false; begin perform public.record_agent_job_step(job.id,0,'context'); exception when sqlstate 'P0002' then denied:=true; end;
+ assert denied,'stale-epoch step accepted';
+ perform public.record_agent_job_step(job.id,claimed.lease_epoch,'context','succeeded',jsonb_build_object('round',0));
+ denied:=false; begin insert into public.agent_job_steps(organization_id,job_id,seq,kind) values(org,job.id,9,'context'); exception when insufficient_privilege then denied:=true; end;
+ assert denied,'node inserted a step directly';
+ denied:=false; begin update public.agent_jobs set status='succeeded' where id=job.id; exception when insufficient_privilege then denied:=true; end;
+ assert denied,'node updated a job directly';
+ perform public.complete_agent_job(job.id,claimed.lease_epoch,'pending_review',jsonb_build_object('proposal_id',null));
+ reset role;
  denied:=false; begin update public.agent_jobs set status='running' where id=job.id; exception when check_violation then denied:=true; end;
  assert denied,'illegal transition pending_review -> running';
+ set local role service_role;
  -- Agent cannot write governance data or approve.
  denied:=false; begin insert into public.knowledge_entries(organization_id,slug,title,content,trust_level) values(org,'agent-kb','x','x','trusted'); exception when insufficient_privilege then denied:=true; end;
  assert denied,'agent wrote knowledge';
@@ -55,10 +64,15 @@ begin
  assert denied,'service role used human enqueue';
  reset role;
 
- -- Mandate: publish job without approval is refused even for service_role direct insert.
+ -- Mandate: a publish job without approval is refused for every writer (service_role cannot insert at all;
+ -- even the table owner is stopped by the trigger).
  set local role service_role;
- denied:=false; begin insert into public.agent_jobs(organization_id,job_type,idempotency_key,target_type,target_id,target_revision) values(org,'publish_external','p1','content_document',doc::text,1); exception when insufficient_privilege then denied:=true; end;
+ denied:=false; begin insert into public.agent_jobs(organization_id,kind,idempotency_key,payload) values(org,'publish_external','p1',jsonb_build_object('target',jsonb_build_object('type','content_document','id',doc::text,'revision',1))); exception when insufficient_privilege then denied:=true; end;
+ assert denied,'service role inserted a job directly';
+ reset role;
+ denied:=false; begin insert into public.agent_jobs(organization_id,kind,idempotency_key,payload) values(org,'publish_external','p1',jsonb_build_object('target',jsonb_build_object('type','content_document','id',doc::text,'revision',1))); exception when insufficient_privilege then denied:=true; end;
  assert denied,'publish job queued without approval';
+ set local role service_role;
  ap:=public.create_approval_request(org,'publish_external','content_document',doc::text,1,'publish v1','{}',null,job.id);
  assert ap.status='pending','approval not pending';
  denied:=false; begin perform public.decide_approval_request(ap.id,'approved',''); exception when insufficient_privilege then denied:=true; end;
@@ -76,9 +90,7 @@ begin
  perform set_config('request.jwt.claim.sub',owner_id::text,true);
  ap:=public.decide_approval_request(ap.id,'approved','ok');
  assert ap.status='approved' and ap.decided_by=owner_id,'owner approval failed';
- reset role;
- set local role service_role;
- insert into public.agent_jobs(organization_id,job_type,idempotency_key,target_type,target_id,target_revision,approval_request_id) values(org,'publish_external','p1','content_document',doc::text,1,ap.id);
+ perform public.enqueue_agent_job(org,'publish_external','p1','{}','content_document',doc::text,1,null,null,ap.id);
  reset role;
 
  -- Editing the document expires the approval; the queued publish job is parked on claim.
@@ -89,7 +101,7 @@ begin
  assert (select status from public.approval_requests where id=ap.id)='expired','revision change did not expire approval';
  perform set_config('request.jwt.claim.sub','',true);
  set local role service_role;
- assert not exists(select 1 from public.claim_agent_job('w1',array['publish_external'],60)),'stale publish job was claimed';
+ assert not exists(select 1 from public.claim_agent_job(array['publish_external'],60)),'stale publish job was claimed';
  assert (select status from public.agent_jobs where idempotency_key='p1' and organization_id=org)='blocked_needs_human','stale publish job not parked';
  reset role;
 
@@ -114,4 +126,4 @@ begin
  reset role;
 end $$;
 rollback;
-select 'PASS: enqueue idempotency, browser/agent write limits, claim exclusivity, state machine, mandate approval by permitted human only, revision expiry parks stale jobs, knowledge trust, tenant isolation' as result;
+select 'PASS: enqueue idempotency, browser/agent write limits, claim exclusivity, lease epoch, state machine, mandate approval by permitted human only, revision expiry parks stale jobs, knowledge trust, tenant isolation' as result;

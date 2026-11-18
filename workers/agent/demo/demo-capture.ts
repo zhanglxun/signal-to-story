@@ -5,7 +5,7 @@
  */
 import { createSupabaseTestDb } from "../../../testing/db/pglite-harness"
 import { drainQueue, fakeFetcher, quickCapture, seedCaptureWorkspace } from "./capture-scenario"
-import { demoEvaluatorFailThenPass, demoGenerator } from "./demo-scenario"
+import { demoEvaluatorFailThenPass, demoGenerator, readJobUsage } from "./demo-scenario"
 import type { WorkerLogger } from "../runner"
 
 const quiet: WorkerLogger = { info: () => undefined, warn: () => undefined, error: (m, d) => console.error("  !", m, d) }
@@ -49,15 +49,16 @@ async function main() {
   })
 
   const final = await db.asUser(ws.viewerId, async (tx) => {
-    const jobs = await tx.query<{ id: string; status: string; rounds: number; hops_used: number; cost_cents: string }>(
-      "select id, status, rounds, hops_used, cost_cents from public.agent_jobs where payload->>'intake_event_id'=$1", [capture.event_id])
+    const jobs = await tx.query<{ id: string; status: string }>(
+      "select id, status from public.agent_jobs where payload->>'intake_event_id'=$1", [capture.event_id])
+    const usage = await readJobUsage(tx, jobs.rows.map((j) => j.id))
     const proposals = await tx.query<{ id: string; agent_job_id: string }>("select id, agent_job_id from public.content_ai_proposals where agent_job_id = any($1)", [jobs.rows.map((j) => j.id)])
-    return { jobs: jobs.rows, proposals: proposals.rows }
+    return { jobs: jobs.rows, usage, proposals: proposals.rows }
   })
   console.log("\nresult:")
   for (const j of final.jobs) {
     const p = final.proposals.find((x) => x.agent_job_id === j.id)
-    console.log(`  job ${j.id.slice(0, 8)} status=${j.status} rounds=${j.rounds} hops=${j.hops_used} cost_cents=${j.cost_cents} proposal=${p?.id ?? "none"}`)
+    console.log(`  job ${j.id.slice(0, 8)} status=${j.status} rounds=${final.usage[j.id].rounds} hops=${final.usage[j.id].hops} cost_cents=${final.usage[j.id].costCents} proposal=${p?.id ?? "none"}`)
   }
   const ok = results.length === capture.documents.length && final.jobs.every((j) => j.status === "pending_review") && final.proposals.length === final.jobs.length && dup.duplicate
   console.log(`\n${ok ? "PASS" : "FAIL"}: ${final.proposals.length}/${final.jobs.length} pending_review proposals`)
