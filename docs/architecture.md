@@ -85,7 +85,7 @@ signal-to-story/
 │   │   ├── handlers/              content-draft、video-storyboard、fetch-source、chat-turn（新）
 │   │   ├── drivers/               LlmClient（cloud / cli）、SessionDriver（新）
 │   │   ├── backends/              JobStore 实现
-│   │   ├── delivery/              ← notify/，改成 outbox 投递器 + ChannelSender（R3）
+│   │   ├── delivery/              ← notify/，改成通知投递器（扫描 `notified_at` 为空的待办）+ ChannelSender（R3）
 │   │   ├── demo/                  ← 根目录散放的 demo-*、*-scenario【R1 已完成】
 │   │   └── Dockerfile             构建上下文为仓库根目录
 │   └── video/
@@ -124,16 +124,16 @@ signal-to-story/
 | 模块 | 所在层 | 代码位置 | 可以调用 | 主要的表（下一步细化） |
 |---|---|---|---|---|
 | 资讯收集 | L1/L2 | `sense-console/src/modules/intake`、`supabase/functions/intake-gateway`、`im-webhook` | RPC `record_intake_event` | intake_events、source_categories |
-| 看板 / 事项 | L1 | `sense-console/src/modules/board` | 视图 + RPC | work_items、work_item_board |
+| 看板 / 事项 | L1 | `sense-console/src/modules/board` | RLS + RPC | work_items（`status` 即看板列） |
 | 内容生产 | L1 | `sense-console/src/modules/content` | RLS + RPC | content_documents / revisions / proposals |
 | Chat | L1 → L0 → L5 | 界面 `modules/chat`；循环 `core/agent`；执行 `workers/agent/handlers/chat-turn` | 只写消息，由节点执行 | chat_sessions / messages |
 | Agent 循环 | L0 | `core/agent` | 什么都不依赖 | — |
 | CLI 桥接 | L5 | `workers/agent/drivers` | 只被 handler 调用 | agent_jobs、steps |
 | Harness | L0 | `core/harness` | 只依赖 `core/agent`、`core/contracts` | — |
-| 视频 | L1 + L5 | `modules/video`、`workers/video` | 与 agent 只通过 `agent_jobs` 交互 | video_plans / shots / cost |
-| 知识与记忆 | L1/L0 | `modules/library`、`core/harness/context-pack` | RLS | knowledge_entries、decision_memories |
-| 发布 / 读者站 | L1 | `modules/content`、`sense-site` | 发布 RPC；读者站只读视图 | content_results / versions |
-| IM 通知 | L5 | `workers/agent/delivery` | ChannelSender | outbox |
+| 视频 | L1 + L5 | `modules/video`、`workers/video` | 与 agent 只通过 `agent_jobs` 交互 | video_plans / shots |
+| 知识与记忆 | L1/L0 | `modules/library`、`core/harness/context-pack` | 读仓库 `knowledge-base/` 文件（MVP 不建表） | — |
+| 发布 / 读者站 | L1 | `modules/content`、`sense-site` | 发布 RPC；读者站只读已发布列 | content_documents（`published_*`） |
+| IM 通知 | L5 | `workers/agent/delivery` | ChannelSender | approval_requests / agent_jobs 的 `notified_at` |
 
 **禁止的调用方向**（用 ESLint `no-restricted-imports` 和各自的 tsconfig 强制执行）：
 

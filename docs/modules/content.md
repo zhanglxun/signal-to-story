@@ -41,6 +41,7 @@ approved 的最新版本 + 同平台账号 → planned → published / cancelled
 
 ## 4. 0.5 调整方向
 
-- 线索、选题、项目合并为看板上的「事项」（`work_items`），稿件挂在 `work_item_id` 下，表设计在 R5 确认。
-- 读者站的发布改为「成果」模型（`content_results` + 不可变版本 + `public_results` 视图），见 [site.md](site.md)。
+- 线索、选题、项目合并为看板上的「事项」（`work_items`），稿件挂在 `work_item_id` 下（定版见 [database.md](../database.md) 第 4 节）。
+- MVP 不存稿件历史版本（`content_revisions` 退役，`revision` 只作计数器）；审核历史写 `audit_events`；AI 直接写草稿（带 `base_revision` 防覆盖），`content_ai_proposals` 退役。
+- 发布信息并入 `content_documents` 的 `published_*` 列；外部平台人工发布后回填 `published_url`，外部发布三表退役。见 [site.md](site.md)。
 - 审核和发布的交互放进看板卡片的抽屉里。

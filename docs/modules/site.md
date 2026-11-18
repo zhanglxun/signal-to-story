@@ -31,4 +31,4 @@
 
 ## 6. 0.5 调整方向
 
-改为「成果」模型：`content_results`（slug、可见性、上线状态、当前版本指针）加 `content_result_versions`（不可变快照）；读者站只读 `public_results` 视图，读者角色对基础表没有 SELECT 权限。表设计在 R5 确认。
+改为直接读 `content_documents` 的已发布列（`published_title` `published_body` `published_at` `slug`）：发布 RPC 写入快照，改稿不影响线上；`anon` 只被授予这几列，RLS 只放行已发布的行。专题、收藏、资源首版不做。定版见 [database.md](../database.md) DB-D11。

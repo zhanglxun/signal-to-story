@@ -18,9 +18,9 @@
 | --- | --- | --- | --- |
 | `agent_jobs` | 任务队列：幂等键（组织内唯一）、租约、预算、轮次 / 跳数 | 只读；写只能经 RPC | 经 RPC 认领和完成 |
 | `agent_job_steps` | 每一步一行，`unique(job_id, round, step_kind)`，不可修改 | 只读 | 只能插入 |
-| `approval_requests` | 人工批准，绑定 `target_type / target_id / target_revision` | 只读；写只能经 RPC | 只能经 RPC 创建 pending |
-| `decision_memories` | 人工决定记忆；`platform` / `content_kind` 为空表示全局 | `content.manage` 可写 | 只读 |
-| `knowledge_entries` | 知识原文 Markdown + `trust_level` | 可写；设为 `trusted` 需要 `content.review` | 只读 |
+| `approval_requests` | 人工批准（`kind=approval`，绑定 `target_type / target_id / target_revision`）和 Agent 提问（`kind=question`） | 只读；写只能经 RPC | 只能经 RPC 创建 pending |
+| ~~`decision_memories`~~（MVP 不做，DB-D11） | 人工决定记忆；`platform` / `content_kind` 为空表示全局 | `content.manage` 可写 | 只读 |
+| ~~`knowledge_entries`~~（MVP 不做，worker 读 `knowledge-base/` 文件） | 知识原文 Markdown + `trust_level` | 可写；设为 `trusted` 需要 `content.review` | 只读 |
 | `content_ai_proposals.agent_job_id` | 提案追溯到任务 | 只读 | 写 |
 
 **任务状态机**：
@@ -43,6 +43,8 @@ running → 租约过期 / 可重试失败 → queued
 | `heartbeat_agent_job` / `complete_agent_job` / `fail_agent_job` | worker | 不是租约持有者时写入失败；只有标记为可重试且还有次数才重新排队 |
 | `create_approval_request` | 登录用户或 worker | 同一对象同一版本只保留一条 pending |
 | `decide_approval_request` | **只限登录的人** | worker（`service_role`）没有执行权限 |
+| `ask_question` | **只限 worker** | Agent 拿不准时提问：写一条 `kind=question` 的请求，任务转为 `blocked_needs_human` |
+| `answer_question` | **只限登录的人**（`content.manage`） | 回答后，提问的任务自动重新排队 |
 
 ## 4. Mandate 门禁（数据库强制）
 

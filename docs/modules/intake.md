@@ -36,7 +36,7 @@
 
 ## 5. 0.5 调整方向
 
-1. **统一入口层**：所有入口只做一件事，调用 `record_intake_event` 写一条不可变的 `intake_events` 记录（来源、来源内事件 id、来源内身份、内容、回复地址）。`signals / selections / intake_receipts / quick_captures` 合并或退役，表设计在 R5 确认。
+1. **统一入口层**：所有入口只做一件事，调用 `record_intake_event` 写一条不可变的 `intake_events` 记录（来源、连接、来源内事件 id、内容；发送者和回复地址在 `payload`）。`signals / selections / intake_receipts / quick_captures / im_channels` 退役或不做，定版见 [database.md](../database.md) 第 4.1 节。
 2. **起点授权**按来源允许名单判断，首版只有本人；名单之外的来源只产生「推断」类 trigger，进收件箱，不自动出稿。
-3. ~~IM 适配器只保留一份~~（R1 已完成：`supabase/functions/_shared/im`，`im-webhook` 与 `workers/agent/notify` 都引用它）。待审通知改走 outbox 投递，只在待审核、待答复、受阻三种情况推送。
+3. ~~IM 适配器只保留一份~~（R1 已完成：`supabase/functions/_shared/im`，`im-webhook` 与 `workers/agent/notify` 都引用它）。待审通知改为节点扫描 `notified_at` 为空的待办后投递（不建 outbox），只在待审核、待答复、受阻三种情况推送。
 4. 定时发现选题先用影子模式：只记录建议，不立项。

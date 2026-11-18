@@ -12,7 +12,8 @@
     "worker:agent": "tsx workers/agent/main.ts",
     "demo:harness": "tsx workers/agent/demo/demo-harness.ts",
     "demo:capture": "tsx workers/agent/demo/demo-capture.ts",
-    "demo:video": "tsx workers/agent/demo/demo-video-studio.ts"
+    "demo:video": "tsx workers/agent/demo/demo-video-studio.ts",
+    "audit:schema": "tsx testing/db/schema-audit/build.ts"
   },
   "dependencies": {
     "@supabase/supabase-js": "^2.57.4",
