@@ -6,15 +6,20 @@
 --   succeed without a valid approval — enforced by trigger for every writer, including service_role.
 -- content_publications already enforce an equivalent human gate (approved document + same revision +
 -- auth.uid() required); that existing flow is reused unchanged.
+-- 0.5: the same table also carries agent *questions* (kind = 'question'): the agent parks its job and asks;
+--   only a human answers via answer_question(), which re-queues the asking job.
 
 create table public.approval_requests (
  id uuid primary key default gen_random_uuid(),
  organization_id uuid not null references public.organizations(id) on delete cascade,
- action text not null check (action in ('publish_external','publish_site','paid_video_render','rotate_credentials','delete_project','change_org_permissions')),
- target_type text not null check (target_type ~ '^[a-z][a-z0-9_]{1,63}$'),
- target_id text not null check (char_length(target_id) between 1 and 128),
+ kind text not null default 'approval' check (kind in ('approval','question')),
+ action text check (action in ('publish_external','publish_site','paid_video_render','rotate_credentials','delete_project','change_org_permissions')),
+ target_type text check (target_type ~ '^[a-z][a-z0-9_]{1,63}$'),
+ target_id text check (char_length(target_id) between 1 and 128),
  target_revision integer check (target_revision is null or target_revision >= 1),
- status text not null default 'pending' check (status in ('pending','approved','rejected','expired')),
+ question jsonb check (question is null or (jsonb_typeof(question)='object' and pg_column_size(question) <= 16384)),
+ answer jsonb check (answer is null or (jsonb_typeof(answer)='object' and pg_column_size(answer) <= 16384)),
+ status text not null default 'pending' check (status in ('pending','approved','rejected','answered','expired')),
  summary text not null default '' check (char_length(summary) <= 2000),
  payload jsonb not null default '{}'::jsonb check (jsonb_typeof(payload)='object' and pg_column_size(payload) <= 65536),
  estimated_cost_cents integer check (estimated_cost_cents is null or estimated_cost_cents >= 0),
@@ -27,12 +32,20 @@ create table public.approval_requests (
  created_at timestamptz not null default now(),
  updated_at timestamptz not null default now(),
  unique (organization_id, id),
- foreign key (organization_id, requested_by_job) references public.agent_jobs(organization_id, id) on delete set null (requested_by_job)
+ foreign key (organization_id, requested_by_job) references public.agent_jobs(organization_id, id) on delete set null (requested_by_job),
+ constraint approval_requests_kind_shape check (
+  (kind = 'approval' and action is not null and target_type is not null and target_id is not null
+   and question is null and answer is null and status <> 'answered')
+  or (kind = 'question' and action is null and question is not null and (question ? 'title')
+   and status in ('pending','answered','expired') and (answer is not null) = (status = 'answered'))
+ )
 );
 comment on table public.approval_requests is 'Mandate 人工批准请求。只能通过 create_approval_request / decide_approval_request 写入。';
 
 create unique index approval_requests_one_pending on public.approval_requests
- (organization_id, action, target_type, target_id, coalesce(target_revision, 0)) where status = 'pending';
+ (organization_id, action, target_type, target_id, coalesce(target_revision, 0)) where status = 'pending' and kind = 'approval';
+create unique index approval_requests_one_open_question on public.approval_requests
+ (requested_by_job) where status = 'pending' and kind = 'question';
 create index approval_requests_org_status_idx on public.approval_requests (organization_id, status, created_at desc);
 create index approval_requests_target_idx on public.approval_requests (organization_id, target_type, target_id);
 create index approval_requests_job_idx on public.approval_requests (organization_id, requested_by_job);
@@ -102,20 +115,27 @@ create function private.guard_approval_request() returns trigger language plpgsq
 begin
  if tg_op = 'INSERT' then
   if new.status <> 'pending' then raise exception '新批准请求必须为 pending' using errcode='check_violation'; end if;
-  new.decided_by := null; new.decided_at := null; new.reason := ''; new.created_at := now(); new.updated_at := now();
+  new.decided_by := null; new.decided_at := null; new.reason := ''; new.answer := null; new.created_at := now(); new.updated_at := now();
   return new;
  end if;
- if new.organization_id is distinct from old.organization_id or new.action is distinct from old.action
+ if new.organization_id is distinct from old.organization_id or new.kind is distinct from old.kind
+  or new.question is distinct from old.question or new.action is distinct from old.action
   or new.target_type is distinct from old.target_type or new.target_id is distinct from old.target_id
   or new.target_revision is distinct from old.target_revision or new.payload is distinct from old.payload
   or new.requested_by is distinct from old.requested_by or new.created_at is distinct from old.created_at then
   raise exception '批准请求的目标与内容不可修改' using errcode='check_violation';
  end if;
  if new.status <> old.status then
-  if old.status = 'pending' and new.status in ('approved','rejected') then
+  if old.status = 'pending' and new.status in ('approved','rejected') and new.kind = 'approval' then
    if auth.uid() is null or new.decided_by is distinct from auth.uid()
     or not private.has_organization_permission(new.organization_id, private.approval_required_permission(new.action)) then
     raise exception '只有具备相应权限的人类成员可以批准或拒绝' using errcode='42501';
+   end if;
+   new.decided_at := now();
+  elsif old.status = 'pending' and new.status = 'answered' and new.kind = 'question' then
+   if auth.uid() is null or new.decided_by is distinct from auth.uid()
+    or not private.has_organization_permission(new.organization_id, 'content.manage') then
+    raise exception '只有具备创作权限的人类成员可以回答' using errcode='42501';
    end if;
    new.decided_at := now();
   elsif old.status in ('pending','approved') and new.status = 'expired' then
@@ -123,7 +143,8 @@ begin
   else
    raise exception '非法批准状态迁移: % -> %', old.status, new.status using errcode='check_violation';
   end if;
- elsif new.decided_by is distinct from old.decided_by or new.decided_at is distinct from old.decided_at then
+ elsif new.decided_by is distinct from old.decided_by or new.decided_at is distinct from old.decided_at
+  or new.answer is distinct from old.answer then
   raise exception '决定信息不可单独修改' using errcode='check_violation';
  end if;
  new.updated_at := now();
@@ -186,7 +207,7 @@ begin
  end if;
  if p_decision not in ('approved','rejected') then raise exception '无效的决定' using errcode='check_violation'; end if;
  select * into a from public.approval_requests where id = p_request_id for update;
- if not found or not private.has_organization_permission(a.organization_id, private.approval_required_permission(a.action)) then
+ if not found or a.kind <> 'approval' or not private.has_organization_permission(a.organization_id, private.approval_required_permission(a.action)) then
   raise exception '批准请求不存在或没有权限' using errcode='42501';
  end if;
  if a.status <> 'pending' then raise exception '该请求已处理（%）', a.status using errcode='check_violation'; end if;
@@ -206,13 +227,63 @@ end; $$;
 revoke all on function public.decide_approval_request(uuid,text,text) from public, anon, service_role;
 grant execute on function public.decide_approval_request(uuid,text,text) to authenticated;
 
+-- Agent question: the worker (service_role) asks on behalf of a running job and parks it as blocked_needs_human.
+-- question = {"title": text, "options": [text], "recommended": text?, "detail": text?}
+create function public.ask_question(p_job_id uuid, p_question jsonb)
+returns public.approval_requests language plpgsql security definer set search_path='' as $$
+declare j public.agent_jobs; a public.approval_requests;
+begin
+ if coalesce(auth.role(), '') <> 'service_role' then raise exception '只有执行节点可以提问' using errcode='42501'; end if;
+ if jsonb_typeof(p_question) is distinct from 'object' or coalesce(char_length(btrim(p_question->>'title')),0) not between 1 and 500
+  or (p_question ? 'options' and jsonb_typeof(p_question->'options') <> 'array') then
+  raise exception '问题格式无效' using errcode='check_violation';
+ end if;
+ select * into j from public.agent_jobs where id = p_job_id for update;
+ if not found or j.status <> 'running' then raise exception '只有运行中的任务可以提问' using errcode='check_violation'; end if;
+ select * into a from public.approval_requests where requested_by_job = j.id and kind = 'question' and status = 'pending';
+ if found then return a; end if;
+ insert into public.approval_requests(organization_id, kind, target_type, target_id, target_revision, question, summary, requested_by_job)
+ values (j.organization_id, 'question', j.target_type, j.target_id, j.target_revision, p_question, left(p_question->>'title', 2000), j.id)
+ returning * into a;
+ update public.agent_jobs set status = 'blocked_needs_human', error = '等待人工回答', error_code = 'needs_answer' where id = j.id;
+ return a;
+end; $$;
+revoke all on function public.ask_question(uuid,jsonb) from public, anon, authenticated;
+grant execute on function public.ask_question(uuid,jsonb) to service_role;
+
+-- Human answer. Not executable by service_role. Re-queues the asking job when it is still parked.
+create function public.answer_question(p_request_id uuid, p_answer jsonb)
+returns public.approval_requests language plpgsql security definer set search_path='' as $$
+declare a public.approval_requests;
+begin
+ if auth.uid() is null or coalesce(auth.role(),'') <> 'authenticated' then
+  raise exception '只有登录的人类成员可以回答' using errcode='42501';
+ end if;
+ if jsonb_typeof(p_answer) is distinct from 'object' or coalesce(char_length(btrim(p_answer->>'text')),0) not between 1 and 4000 then
+  raise exception '回答不能为空' using errcode='check_violation';
+ end if;
+ select * into a from public.approval_requests where id = p_request_id for update;
+ if not found or a.kind <> 'question' or not private.has_organization_permission(a.organization_id, 'content.manage') then
+  raise exception '问题不存在或没有权限' using errcode='42501';
+ end if;
+ if a.status <> 'pending' then raise exception '该问题已处理（%）', a.status using errcode='check_violation'; end if;
+ update public.approval_requests set status = 'answered', answer = p_answer, decided_by = auth.uid() where id = a.id returning * into a;
+ update public.agent_jobs set status = 'queued', run_after = now(), error = null, error_code = null
+ where id = a.requested_by_job and status = 'blocked_needs_human' and error_code = 'needs_answer';
+ insert into public.audit_events(organization_id, actor_user_id, action, target_type, target_id, metadata)
+ values (a.organization_id, auth.uid(), 'question.answered', 'approval_request', a.id::text, jsonb_build_object('job_id', a.requested_by_job));
+ return a;
+end; $$;
+revoke all on function public.answer_question(uuid,jsonb) from public, anon, service_role;
+grant execute on function public.answer_question(uuid,jsonb) to authenticated;
+
 -- Revision bump => earlier approvals for that document expire immediately.
 create function private.expire_stale_document_approvals() returns trigger
 language plpgsql security definer set search_path='' as $$
 begin
  if new.revision <> old.revision then
   update public.approval_requests set status = 'expired'
-  where organization_id = new.organization_id and status in ('pending','approved')
+  where organization_id = new.organization_id and kind = 'approval' and status in ('pending','approved')
    and ((target_type = 'content_document' and target_id = new.id::text)
      or (target_type = 'content_publication' and target_id in (select p.id::text from public.content_publications p where p.document_id = new.id)))
    and coalesce(target_revision, 0) < new.revision;

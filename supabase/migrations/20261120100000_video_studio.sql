@@ -26,7 +26,7 @@ create table public.video_plans (
  bgm_track text check (bgm_track is null or char_length(bgm_track) <= 300),
  status text not null default 'draft' check (status in ('draft','rendering','rendered','failed','archived')),
  revision integer not null default 1 check (revision >= 1),
- composed_video_asset_id bigint references public.assets(id) on delete set null,
+ composed_video_asset_id bigint,
  final_duration_ms integer check (final_duration_ms is null or final_duration_ms >= 0),
  error text check (error is null or char_length(error) <= 4000),
  source_proposal_id uuid,
@@ -35,6 +35,8 @@ create table public.video_plans (
  created_at timestamptz not null default now(),
  updated_at timestamptz not null default now(),
  unique (organization_id, id),
+ -- Composite asset FKs: an asset can only be referenced inside its own organization (assets_org_id_cloud_key).
+ foreign key (organization_id, composed_video_asset_id) references public.assets(organization_id, id) on delete set null (composed_video_asset_id),
  foreign key (organization_id, project_id) references public.content_projects(organization_id, id),
  foreign key (organization_id, source_document_id, source_document_revision)
   references public.content_revisions(organization_id, document_id, revision)
@@ -55,9 +57,9 @@ create table public.video_shots (
  sfx_description text not null default '' check (char_length(sfx_description) <= 500),
  target_duration_ms integer not null default 4000 check (target_duration_ms between 500 and 60000),
  actual_duration_ms integer check (actual_duration_ms is null or actual_duration_ms between 0 and 600000),
- keyframe_asset_id bigint references public.assets(id) on delete set null,
- audio_asset_id bigint references public.assets(id) on delete set null,
- video_asset_id bigint references public.assets(id) on delete set null,
+ keyframe_asset_id bigint,
+ audio_asset_id bigint,
+ video_asset_id bigint,
  render_status text not null default 'pending' check (render_status in ('pending','queued','rendering','rendered','failed')),
  estimated_cost_cents numeric(14,4) not null default 0 check (estimated_cost_cents >= 0),
  actual_cost_cents numeric(14,4) not null default 0 check (actual_cost_cents >= 0),
@@ -67,6 +69,9 @@ create table public.video_shots (
  updated_at timestamptz not null default now(),
  unique (organization_id, id),
  constraint video_shots_position_unique unique (plan_id, position) deferrable initially deferred,
+ foreign key (organization_id, keyframe_asset_id) references public.assets(organization_id, id) on delete set null (keyframe_asset_id),
+ foreign key (organization_id, audio_asset_id) references public.assets(organization_id, id) on delete set null (audio_asset_id),
+ foreign key (organization_id, video_asset_id) references public.assets(organization_id, id) on delete set null (video_asset_id),
  foreign key (organization_id, plan_id) references public.video_plans(organization_id, id) on delete cascade
 );
 comment on table public.video_shots is '分镜镜头。内容列由人编辑；render_status/资产引用/实际时长/成本由 worker 回写。';

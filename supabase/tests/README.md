@@ -28,7 +28,7 @@ await db.close()
 
 - 每个 `as*()` 是一个事务：`set local role …` + `request.jwt.claims`（与 PostgREST 每请求的行为一致），回调抛错即回滚。
 - `seedOrganization` 为每个角色建一个 auth 用户、profile、组织角色（可传 `permissions` 覆盖）和成员关系。
-- `createSupabaseTestDb({ upTo: "20261006141445_intake_remote_oauth.sql" })` 只应用到某个迁移，便于测试升级迁移。
+- `createSupabaseTestDb({ upTo: "20261030023526_site_entries_publish_guard.sql" })` 只应用到某个迁移，便于测试升级迁移。
 - 新增迁移不需要改 harness；若用到新的 Supabase 内置对象（如新的 extension、`vault`、`pgmq`），在 `supabase-shim.sql` 里补最小垫片，**不要改历史迁移**。
 
 ### 垫片内容（`supabase-shim.sql`）

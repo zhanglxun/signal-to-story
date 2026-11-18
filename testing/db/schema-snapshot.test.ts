@@ -3,7 +3,7 @@ import { describe, expect, it } from "vitest"
 
 import { diffSnapshots, parseSnapshotFile, renderDiffMarkdown, snapshotRepo } from "./schema-snapshot"
 
-const V1 = "20261006141445_intake_remote_oauth.sql"
+const V1 = "20261030023526_site_entries_publish_guard.sql" // last version in the live history
 
 describe("DB0 schema snapshot", () => {
   it("runs the read-only snapshot query on the repo migrations and finds the V1 tables", async () => {

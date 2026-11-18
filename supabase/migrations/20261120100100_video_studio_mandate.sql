@@ -137,7 +137,7 @@ create function private.expire_stale_video_plan_approvals() returns trigger lang
 begin
  if new.revision <> old.revision then
   update public.approval_requests set status = 'expired'
-  where organization_id = new.organization_id and status in ('pending','approved')
+  where organization_id = new.organization_id and kind = 'approval' and status in ('pending','approved')
    and target_type = 'video_plan' and target_id = new.id::text and coalesce(target_revision, 0) < new.revision;
  end if;
  return null;
