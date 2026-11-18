@@ -7,7 +7,9 @@ import { Textarea } from '@/components/ui/textarea'
 import { Badge } from '@/components/ui/badge'
 import { Alert, AlertDescription } from '@/components/ui/alert'
 import { canTransition, exportMarkdown, platforms, statusLabels, type ContentDocument, type DocumentStatus } from '@/contracts/content'
-import { documentHistory, reviewDocument, saveDocument, getAiProposals, generateDraft } from '@/services/content-service'
+import { documentHistory, reviewDocument, saveDocument, getAiProposals } from '@/services/content-service'
+import { enqueueContentDraftJob } from '@/services/agent-job-service'
+import { Link } from 'react-router'
 import { Field } from '@/components/content/content-common'
 import { downloadText, useContentAction } from '@/hooks/use-content-action'
 import { RememberDecisionField } from '@/components/decision-memory/remember-decision-field'
@@ -26,7 +28,10 @@ export function DocumentEditor({ document, canEdit, canReview, canPublish = fals
   const [instruction, setInstruction] = useState('根据项目 Brief 和当前稿件完善一份可审核的内容草案。')
   const { busy, run } = useContentAction()
   const history = useQuery({ queryKey: ['document-history', document.id], queryFn: () => documentHistory(document.id) })
-  const proposals = useQuery({ queryKey: ['document-history', document.id, 'ai'], queryFn: () => getAiProposals(document.id), refetchInterval: query => query.state.data?.some(p => p.status === 'running') ? 5000 : false })
+  // Drafting runs on the agent worker (queue mode); poll until the queued job's proposal shows up.
+  const [queuedJobId, setQueuedJobId] = useState<string | null>(null)
+  const proposals = useQuery({ queryKey: ['document-history', document.id, 'ai'], queryFn: () => getAiProposals(document.id), refetchInterval: query => query.state.data?.some(p => p.status === 'running') || (queuedJobId && !query.state.data?.some(p => p.agent_job_id === queuedJobId)) ? 5000 : false })
+  const waiting = Boolean(queuedJobId && !proposals.data?.some(p => p.agent_job_id === queuedJobId))
   const dirty = title !== base.title || body !== base.body
   const stale = base.revision !== document.revision || base.status !== document.status
   async function transition(status: DocumentStatus) {
@@ -63,8 +68,9 @@ export function DocumentEditor({ document, canEdit, canReview, canPublish = fals
     {!stale && <SitePublishPanel document={base} canRequest={canEdit} canPublish={canPublish} />}
     {canEdit && <Card><CardHeader><CardTitle>AI 创作提案</CardTitle></CardHeader><CardContent className="space-y-3">
       <Field label="创作要求"><Textarea value={instruction} maxLength={4000} onChange={e => setInstruction(e.target.value)} /></Field>
-      <Button variant="outline" disabled={busy || dirty || stale || !instruction.trim() || proposals.data?.some(p => p.status === 'running')} onClick={() => void run(async () => { try { await generateDraft(base.id, instruction) } finally { await proposals.refetch() } }, '草案已生成，请审阅后采纳')}>生成文字草案</Button>
-      <p className="text-xs text-muted-foreground">使用已保存的稿件与 Brief 生成提案。采纳后仍需保存版本并人工审核。</p>
+      <Button variant="outline" disabled={busy || dirty || stale || waiting || !instruction.trim() || proposals.data?.some(p => p.status === 'running')} onClick={() => void run(async () => { const job = await enqueueContentDraftJob({ documentId: base.id, instruction }); setQueuedJobId(job.jobId) }, '已交给 Agent 出稿，完成后提案会出现在下方')}>交给 Agent 出稿</Button>
+      {queuedJobId && <p className="text-sm">{waiting ? 'Agent 出稿中（生成 → 预检 → 评估），' : '本次出稿已完成，'}<Link className="underline" to={`/tasks/${queuedJobId}`}>查看任务进度</Link></p>}
+      <p className="text-xs text-muted-foreground">由本机 Agent 节点（worker）使用已保存的稿件与事项 Brief 出稿；节点未启动时任务会一直排队。采纳后仍需保存版本并人工审核。</p>
       {proposals.error && <p role="alert" className="text-sm">提案记录读取失败。</p>}
       {proposals.data?.map(p => <details className="rounded-lg border p-3" key={p.id}><summary className="cursor-pointer text-sm">{p.model} · 输入 v{p.input_revision} · {({ running: '生成中', succeeded: '待人工审阅', failed: '失败' })[p.status]} · {new Date(p.created_at).toLocaleString()}</summary>
         {p.error && <p className="mt-2 text-sm text-destructive">{p.error}</p>}{p.body && <><pre className="my-3 max-h-96 overflow-auto whitespace-pre-wrap text-sm">{p.body}</pre><Button variant="outline" disabled={busy || dirty || stale || p.input_revision !== base.revision} onClick={() => setBody(p.body!)}>采纳到编辑区</Button>{p.input_revision !== base.revision && <p className="text-xs text-muted-foreground">输入版本已过期，请复制需要的片段后手动合并。</p>}</>}

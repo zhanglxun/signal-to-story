@@ -82,15 +82,3 @@ export async function getAiProposals(documentId: string) {
   const { data, error } = await db().from('content_ai_proposals').select('*').eq('document_id', documentId).order('created_at', { ascending: false }).limit(20)
   fail(error); return (data ?? []) as AiProposal[]
 }
-export async function generateDraft(documentId: string, instruction: string) {
-  const { data, error } = await db().functions.invoke('content-draft', { body: { document_id: documentId, instruction } })
-  if (error) {
-    let message = '生成未完成，请稍后查看提案或检查模型配置。'
-    if (error.context instanceof Response) {
-      const detail = await error.context.json().catch(() => null)
-      if (typeof detail?.error === 'string') message = detail.error
-    }
-    throw new Error(message)
-  }
-  if (data?.error) throw new Error(data.error)
-}
