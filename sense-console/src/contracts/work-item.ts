@@ -131,3 +131,11 @@ export function titleFromInput(input: Pick<IntakeEvent, 'text' | 'url'>): string
   const title = line || input.url?.trim() || '未命名输入'
   return Array.from(title).slice(0, 200).join('')
 }
+
+/** 从收件箱 payload 中读取分类 ID（兼容 V1 回填与手动新建写入）。 */
+export function intakeEventCategoryId(event: Pick<IntakeEvent, 'payload'>): number | null {
+  const raw = event.payload?.category_id
+  if (typeof raw === 'number' && Number.isInteger(raw) && raw > 0) return raw
+  if (typeof raw === 'string' && /^\d+$/.test(raw)) return Number(raw)
+  return null
+}
