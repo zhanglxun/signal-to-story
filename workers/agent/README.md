@@ -3,7 +3,7 @@
 独立进程，消费 `public.agent_jobs`，执行「Context Pack → 生成 → 确定性预检 → 独立 LLM 评估 → 重写（≤ max_rounds）→ 提案 / 转人工」。设计与接口见 [docs/modules/harness.md](../../../docs/modules/harness.md)。
 
 - 只做 outbound 连接（Supabase HTTPS + 模型 API），没有监听端口。
-- 只使用 `service_role` 调受控 RPC 与少数表；不能批准、不能写知识库/决定记忆、不能改正式稿件、不能写发布记录（数据库拒绝）。
+- 只持有**公开 key + 节点令牌**（DB2c-2），所有读写都走 `node_*` RPC：只能认领本组织的任务、只能写自己正在执行的任务；不能批准、不能写知识库/决定记忆、不能改正式稿件、不能写发布记录（数据库拒绝）。不需要也不应该配置 `service_role`。
 - 产出写入 `content_ai_proposals`（`status=succeeded`、`agent_job_id`），任务置为 `pending_review`，由人工在现有提案采纳流程中处理。
 
 ## 运行
@@ -11,7 +11,8 @@
 ```bash
 # 在仓库根目录执行（根 package.json 提供运行时依赖与命令）
 npm install
-cp workers/agent/.env.example /secure/place/agent-worker.env   # 填真实值，勿提交
+# 先在控制台「本地 Agent → 执行节点」新建节点，令牌只显示一次
+cp workers/agent/.env.example /secure/place/agent-worker.env   # 填 SUPABASE_URL、SUPABASE_PUBLISHABLE_KEY、SENSE_NODE_TOKEN 与模型配置，勿提交
 set -a; source /secure/place/agent-worker.env; set +a
 npm run worker:agent
 ```
@@ -23,8 +24,8 @@ npm run worker:agent
 1. **云端容器（默认）**：`workers/agent/Dockerfile`（构建上下文为仓库根目录），环境变量由平台 Secret 注入。水平扩展＝多跑几个进程/副本（每个进程一次一个任务，`SKIP LOCKED` 保证不重复）。
 2. **个人电脑作为本地算力节点**：在本机直接 `npm run worker:agent`。适合复用本机已登录的 CLI（`SENSE_LLM_DRIVER=cli`）。只需出站网络、无需公网 IP。建议：
    - 用 `SENSE_WORKER_JOB_TYPES` 只认领需要本机能力的任务类型；
-   - `SENSE_WORKER_ID` 设成可识别的机器名，日志里能看出是谁执行的（任务表里的节点身份 `node_id` 随 `runner_nodes` 在 DB2c-2 接入）；
-   - service_role 密钥等同数据库最高权限，仅放在你自己控制的机器上。多租户 SaaS 场景下应改为按组织签发的受限 worker 凭证（尚未实现）。
+   - 每台机器一个节点（控制台里能看到在线状态，任务表 `node_id` 记录是谁在执行），`SENSE_WORKER_ID` 只用于日志；
+   - 机器丢了或令牌泄露：在控制台吊销该节点，令牌立即失效，正在跑的任务租约过期后重新排队。
 
 ## 驱动
 

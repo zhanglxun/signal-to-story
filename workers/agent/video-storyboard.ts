@@ -5,7 +5,6 @@
  * Steps are durable (agent_job_steps), so a resumed job does not re-bill finished LLM calls; limits come from
  * payload.limits and totals from the recorded steps.
  */
-import type { SupabaseClient } from "@supabase/supabase-js"
 import { z } from "zod"
 
 import {
@@ -31,9 +30,9 @@ export interface StoryboardKnowledge {
 
 export interface VideoStoryboardStore {
   /** Trusted video SOP / brand knowledge only (unreviewed knowledge never enters the system zone). */
-  loadTrustedVideoKnowledge(organizationId: string): Promise<StoryboardKnowledge[]>
+  loadTrustedVideoKnowledge(job: { organizationId: string; jobId: string }): Promise<StoryboardKnowledge[]>
   /** Insert once per job; return the existing id on replay. */
-  saveProposal(input: { organizationId: string; jobId: string; projectId: string | null; outline: string; proposal: VideoPlanDraft; model: string }): Promise<{ proposalId: string }>
+  saveProposal(input: { organizationId: string; jobId: string; leaseEpoch: number; projectId: string | null; outline: string; proposal: VideoPlanDraft; model: string }): Promise<{ proposalId: string }>
 }
 
 const knowledgeFilter = "slug = 'video-storyboard-sop' or 'video' = any(tags) or category = 'brand_voice'"
@@ -43,7 +42,7 @@ export class SqlVideoStoryboardStore implements VideoStoryboardStore {
   constructor(run: <T>(fn: (sql: SqlExecutor) => Promise<T>) => Promise<T>) {
     this.run = run
   }
-  loadTrustedVideoKnowledge(organizationId: string) {
+  loadTrustedVideoKnowledge({ organizationId }: { organizationId: string; jobId: string }) {
     return this.run(async (sql) =>
       (await sql.query<StoryboardKnowledge>(
         `select slug, title, content from public.knowledge_entries where organization_id = $1 and trust_level = 'trusted' and (${knowledgeFilter}) order by slug limit 10`,
@@ -61,38 +60,6 @@ export class SqlVideoStoryboardStore implements VideoStoryboardStore {
       )
       return { proposalId: r.rows[0].id }
     })
-  }
-}
-
-/** Production store (supabase-js + service_role). Not exercised against a live Supabase here; SQL path covered by PGlite. */
-export class SupabaseVideoStoryboardStore implements VideoStoryboardStore {
-  private readonly client: SupabaseClient
-  constructor(client: SupabaseClient) {
-    this.client = client
-  }
-  async loadTrustedVideoKnowledge(organizationId: string) {
-    const { data, error } = await this.client
-      .from("knowledge_entries")
-      .select("slug,title,content,tags,category")
-      .eq("organization_id", organizationId)
-      .eq("trust_level", "trusted")
-      .or("slug.eq.video-storyboard-sop,tags.cs.{video},category.eq.brand_voice")
-      .order("slug")
-      .limit(10)
-    if (error) throw new Error(`knowledge: ${error.message}`)
-    return (data ?? []) as StoryboardKnowledge[]
-  }
-  async saveProposal(input: Parameters<VideoStoryboardStore["saveProposal"]>[0]) {
-    const existing = await this.client.from("video_storyboard_proposals").select("id").eq("agent_job_id", input.jobId).maybeSingle()
-    if (existing.error) throw new Error(`proposal lookup: ${existing.error.message}`)
-    if (existing.data) return { proposalId: String((existing.data as { id: string }).id) }
-    const { data, error } = await this.client
-      .from("video_storyboard_proposals")
-      .insert({ organization_id: input.organizationId, agent_job_id: input.jobId, project_id: input.projectId, input_outline: input.outline, proposal: input.proposal, model: input.model })
-      .select("id")
-      .single()
-    if (error) throw new Error(`saveProposal: ${error.message}`)
-    return { proposalId: String((data as { id: string }).id) }
   }
 }
 
@@ -195,7 +162,7 @@ export function createVideoStoryboardHandler(store: VideoStoryboardStore): JobHa
     const persisted = steps.find((s) => s.stepKind === "persist")
     if (persisted) return finish("pending_review", "已从中断处恢复：提案此前已保存。", (persisted.output as { proposalId?: string })?.proposalId ?? null)
 
-    const knowledge = await store.loadTrustedVideoKnowledge(job.organizationId)
+    const knowledge = await store.loadTrustedVideoKnowledge({ organizationId: job.organizationId, jobId: job.id })
     if (!find(0, "context")) {
       await record({ jobId: job.id, organizationId: job.organizationId, round: 0, stepKind: "context", status: "succeeded",
         inputSummary: { trusted_knowledge: knowledge.map((k) => k.slug), outline_chars: payload.data.outline.length, prompt_version: VIDEO_STORYBOARD_PROMPT_VERSION },
@@ -230,7 +197,7 @@ export function createVideoStoryboardHandler(store: VideoStoryboardStore): JobHa
       if (evaluation.passed) {
         const draft = validateStoryboardOutput(text).draft as VideoPlanDraft
         if (await checkLease()) return finish("cancelled", "人工取消，已在步骤边界停止。", null, "cancelled")
-        const { proposalId } = await store.saveProposal({ organizationId: job.organizationId, jobId: job.id, projectId: payload.data.project_id ?? null, outline: payload.data.outline, proposal: draft, model: gen.model ?? generator.model })
+        const { proposalId } = await store.saveProposal({ organizationId: job.organizationId, jobId: job.id, leaseEpoch: job.leaseEpoch, projectId: payload.data.project_id ?? null, outline: payload.data.outline, proposal: draft, model: gen.model ?? generator.model })
         await record({ jobId: job.id, organizationId: job.organizationId, round, stepKind: "persist", status: "succeeded", output: { proposalId, shots: draft.shots.length }, costCents: 0, durationMs: 0 })
         return finish("pending_review", `第 ${round} 轮通过 Schema 与 SOP 校验，分镜提案待人工采纳。`, proposalId)
       }

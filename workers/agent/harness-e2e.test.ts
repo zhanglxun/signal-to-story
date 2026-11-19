@@ -157,6 +157,7 @@ describe("drivers", () => {
       return child
     }) as unknown as typeof spawn
     process.env.SUPABASE_SERVICE_ROLE_KEY = "must-not-leak"
+    process.env.SENSE_NODE_TOKEN = "stn_must-not-leak"
     try {
       const cli = new CliLlmClient({ cliKey: "codex-cli", spawnImpl: fakeSpawn })
       const res = await cli.complete({ messages: [{ role: "system", content: "SECRET_PROMPT_TEXT" }] })
@@ -167,8 +168,10 @@ describe("drivers", () => {
       expect(seen.args?.join(" ")).not.toContain("SECRET_PROMPT_TEXT")
       expect(seen.stdin).toContain("SECRET_PROMPT_TEXT")
       expect(seen.env).not.toHaveProperty("SUPABASE_SERVICE_ROLE_KEY")
+      expect(seen.env).not.toHaveProperty("SENSE_NODE_TOKEN")
     } finally {
       delete process.env.SUPABASE_SERVICE_ROLE_KEY
+      delete process.env.SENSE_NODE_TOKEN
     }
     expect(Object.keys(buildChildEnv({ PATH: "/bin", SENSE_LLM_API_KEY: "x", HOME: "/h" }))).toEqual(["PATH", "HOME"])
     expect(() => new CliLlmClient({ cliKey: "pi-cli" })).toThrow(/尚未验证/)

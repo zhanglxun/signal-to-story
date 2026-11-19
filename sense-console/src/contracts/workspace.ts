@@ -12,4 +12,6 @@ export type ContentWorkspace = {
   canManage: boolean
   canReview?: boolean
   canPublish?: boolean
+  /** organization.manage: execution nodes, storage, integrations. */
+  canManageOrganization?: boolean
 }

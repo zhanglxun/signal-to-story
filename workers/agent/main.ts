@@ -1,13 +1,13 @@
 /**
- * Agent Harness worker entry: `npm --prefix sense-console run worker:agent`.
+ * Agent Harness worker entry: `npm run worker:agent` (repo root).
  * Independent process; reads its own environment only (see .env.example). Outbound HTTPS only.
  */
 import { createClient } from "@supabase/supabase-js"
 
-import { SupabaseBackend } from "./backends/supabase-backend"
+import { NodeBackend, NodeVideoStoryboardStore, supabaseRpc } from "./backends/node-backend"
 import { buildLlmClientFromEnv, readWorkerConfig } from "./config"
 import { consoleLogger, runWorkerLoop } from "./runner"
-import { createVideoStoryboardHandler, SupabaseVideoStoryboardStore } from "./video-storyboard"
+import { createVideoStoryboardHandler } from "./video-storyboard"
 
 async function main() {
   const config = readWorkerConfig()
@@ -16,7 +16,9 @@ async function main() {
   const evaluator = buildLlmClientFromEnv("SENSE_EVAL_LLM") ?? generator
   if (evaluator === generator) consoleLogger.warn("evaluator uses the generator model; configure SENSE_EVAL_LLM_* for an independent evaluator")
 
-  const client = createClient(config.supabaseUrl, config.serviceRoleKey, { auth: { persistSession: false, autoRefreshToken: false } })
+  // Publishable key + node token only: the database resolves the node and scopes it to its organization.
+  const client = createClient(config.supabaseUrl, config.publishableKey, { auth: { persistSession: false, autoRefreshToken: false } })
+  const rpc = supabaseRpc(client)
   const controller = new AbortController()
   const stop = (signal: string) => {
     consoleLogger.info("shutdown requested", { signal })
@@ -26,7 +28,7 @@ async function main() {
   process.once("SIGTERM", () => stop("SIGTERM"))
 
   await runWorkerLoop({
-    backend: new SupabaseBackend(client),
+    backend: new NodeBackend(rpc, config.nodeToken),
     workerId: config.workerId,
     jobTypes: config.jobTypes,
     leaseSeconds: config.leaseSeconds,
@@ -34,7 +36,7 @@ async function main() {
     generator,
     evaluator,
     signal: controller.signal,
-    jobHandlers: { video_storyboard: createVideoStoryboardHandler(new SupabaseVideoStoryboardStore(client)) },
+    jobHandlers: { video_storyboard: createVideoStoryboardHandler(new NodeVideoStoryboardStore(rpc, config.nodeToken)) },
   })
 }
 

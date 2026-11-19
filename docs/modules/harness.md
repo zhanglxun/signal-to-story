@@ -68,6 +68,6 @@ running → 租约过期 / 可重试失败 → queued
 
 1. 循环拆成两层：`core/agent` 定义通用的会话、回合、停止条件和接口；harness 是其中一种「生成 → 预检 → 评估」形状的循环（architecture 6.3）。
 2. 执行模式分为 `harness / agent_session / chat / video`。`agent_session` 为每个事项开一个可写目录，凭证不进子进程。
-3. worker 改用受限的节点身份（`runner_nodes`，DB2c-2）；`lease_epoch` 已在 DB2c-1 加入，拒绝旧进程的迟到写入。
+3. ~~worker 改用受限的节点身份~~（DB2c-2 已完成）：agent worker 用控制台签发的节点令牌 + 公开 key 调 `node_*` RPC，不再持有 `service_role`；吊销即失效，只能认领本组织任务、只能写自己持有的任务（database.md 4.4、DB-D16）。视频 worker 留到 DB5。`lease_epoch` 已在 DB2c-1 加入，拒绝旧进程的迟到写入。
 4. 所有 CLI 调用都收进 `workers/agent/drivers`，删除 Vite 里的 spawn。
 5. 知识库种子：`knowledge-base/**/*.md` → `npm run kb:seed` 生成前端常量和 `supabase/seeds/knowledge_base.sql`，测试会校验两者同步。

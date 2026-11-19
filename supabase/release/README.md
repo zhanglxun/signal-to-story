@@ -3,8 +3,8 @@
 这里放的是**从迁移文件生成**的上线脚本，不要手改。改了迁移就重新生成：
 
 ```bash
-npx tsx testing/db/release.ts          # 生成 supabase/release/0.5.0-step1.sql、0.5.0-step2.sql
-npx vitest run testing/db/release.test.ts testing/db/release-step2.test.ts   # 在模拟线上状态的 PGlite 上演练
+npx tsx testing/db/release.ts          # 生成 supabase/release/0.5.0-step{1,2,3}.sql
+npx vitest run testing/db/release*.test.ts   # 在模拟线上状态的 PGlite 上演练
 ```
 
 背景见 [docs/database.md](../../docs/database.md) 第 8 节和 DB-D14：线上库同时作为开发、测试和正式环境，迁移分批推送。
@@ -148,3 +148,60 @@ npx vitest run testing/db/release.test.ts testing/db/release-step2.test.ts   # �
 - 本地控制台（`.env.local` 指向线上库）验证：任务中心的轮次、任务详情的 Tokens / 成本 / 模型现在从步骤推出，旧任务的数字应和执行前一致；事项卡片的状态会随任务变化（`done` / `dropped` 的卡不动）。
 - IM 通知：worker 主循环每 15 秒扫描一次待通知记录，发送成功才写 `notified_at`，失败下一轮重试。
 - **出问题怎么回退**：脚本失败会自动回滚，不需要处理。脚本已经成功但想撤销时，只能用第 2 步的备份恢复。
+
+---
+
+## 0.5.0 第 3 批（DB2c-2：执行节点身份）
+
+**做什么**：在一个事务里执行迁移 `20261124100000_runner_nodes`，任何一步失败都会整体回滚。
+
+1. 前置检查：迁移历史最后一条必须是 `20261123100000`；`runner_nodes` 还不存在。
+2. 新建 `runner_nodes`（节点令牌只存 sha256 哈希，浏览器读不到这一列）；`agent_jobs.node_id` 加外键。
+3. 新增 `create_runner_node` / `revoke_runner_node`（需要 `organization.manage`）和 12 个 `node_*` RPC（worker 用公开 key + 节点令牌调用）。
+4. 写入迁移历史。
+
+**不做什么**：不改已有数据、不删任何对象，原有带 `service_role` 的节点 RPC 全部保留（视频 worker 还在用）。**不需要停 worker**：正在运行的旧 worker 可以把手上的任务做完。脚本里没有密钥。
+
+### 给 Codex 的执行步骤
+
+> 执行人：Codex。需要项目的数据库连接，或 Supabase Dashboard 的 SQL Editor 权限。**不要在输出或日志里打印任何密钥、连接串、项目 ID 或节点令牌。**
+
+1. **备份**：这一批只新增对象、不改数据，可以不做数据备份；有 CLI 时可选 `supabase db dump -f backup-0.5.0-step3-schema.sql`，放在仓库外。
+
+2. **只读预检**：结果应为 `20261123100000`、`null`：
+
+   ```sql
+   select max(version) from supabase_migrations.schema_migrations;
+   select to_regclass('public.runner_nodes');
+   ```
+
+   结果不一致就**停止**，把结果发回来。
+
+3. **执行脚本**：二选一。
+   - SQL Editor：打开 `supabase/release/0.5.0-step3.sql`，**整份粘贴、一次运行**。
+   - psql：`psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -f supabase/release/0.5.0-step3.sql`。
+
+   出现任何报错都说明已经整体回滚，**不要分段重跑**，把报错原文发回来。
+
+4. **核对结果**：
+
+   ```sql
+   select max(version) from supabase_migrations.schema_migrations;               -- 20261124100000
+   select count(*) from public.runner_nodes;                                     -- 0
+   select count(*) from pg_proc p join pg_namespace n on n.oid = p.pronamespace
+    where n.nspname = 'public' and p.proname like 'node\_%';                      -- 12
+   select conname from pg_constraint where conname = 'agent_jobs_node_id_fkey';  -- 1 行
+   ```
+
+   把这些结果原样发回来。
+
+5. **不需要做的**：不部署 Edge Function，不执行 `supabase db push`，不修改函数的环境变量，**不要替用户创建节点**（令牌只能由用户在控制台生成并自己保存）。
+
+### 执行后（用户自己做）
+
+1. 本地控制台 →「本地 Agent」→「执行节点」→ 新建节点（如 `jarvis-mac`），复制只显示一次的令牌。
+2. 改 `workers/agent/.env.local`：删掉 `SUPABASE_SERVICE_ROLE_KEY`，加 `SUPABASE_PUBLISHABLE_KEY=`（与控制台相同的公开 key）和 `SENSE_NODE_TOKEN=`（刚复制的令牌）。
+3. 用 0.5.0 分支的代码重启 worker。控制台里节点状态应在几秒内变为「在线」，发起一次「交给 Agent 出稿」验证。
+4. 确认新 worker 正常后，可以到 Supabase Dashboard 轮换（重新生成）之前给 worker 用的那把 secret key——它已经不再需要。
+
+- **出问题怎么回退**：脚本失败会自动回滚。脚本成功但新 worker 有问题时，旧的 `service_role` 路径仍在，可以先用上一个提交的 worker 代码顶上。

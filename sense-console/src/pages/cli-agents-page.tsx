@@ -22,6 +22,8 @@ import {
   CardTitle,
 } from "@/components/ui/card"
 import { Input } from "@/components/ui/input"
+import { RunnerNodesCard } from "@/components/runner-nodes/runner-nodes-card"
+import { getContentWorkspace } from "@/services/content-workspace-service"
 import type { LocalAgentCliKey } from "@/contracts/agent-harness"
 import { LOCAL_AGENT_CLI_DRIVERS } from "@/services/agent-harness-service"
 import {
@@ -32,6 +34,8 @@ import {
 
 export function CliAgentsPage() {
   const queryClient = useQueryClient()
+  const workspace = useQuery({ queryKey: ["content-workspace"], queryFn: getContentWorkspace })
+  const organizationId = workspace.data?.organization?.id
   const bridgeQuery = useQuery({
     queryKey: ["local-bridge-status"],
     queryFn: getLocalBridgeStatus,
@@ -132,6 +136,8 @@ export function CliAgentsPage() {
           </div>
         }
       />
+
+      {organizationId && <RunnerNodesCard organizationId={organizationId} canManage={Boolean(workspace.data?.canManageOrganization)} />}
 
       <div className="grid gap-5 lg:grid-cols-2">
         {LOCAL_AGENT_CLI_DRIVERS.map((driver) => {

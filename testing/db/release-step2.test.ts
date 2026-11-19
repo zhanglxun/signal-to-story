@@ -2,7 +2,7 @@
 // Rehearse the generated step-2 release (DB2c-1) on a database shaped like live after step 1: repo migrations up to
 // 20261122100000, the CLI history table, and a few agent jobs / steps written in the old shape (the human tested
 // auto_draft live). After the script the structure must equal a fresh build of the repo head and the rows must
-// be carried over.
+// be carried over. (Step 2 is applied live; it must keep regenerating byte-identical. Step 3: release-step3.test.ts.)
 import { readFileSync } from "node:fs"
 import path from "node:path"
 import { describe, expect, it } from "vitest"
@@ -13,6 +13,7 @@ import { diffSnapshots, snapshotQuery, type SchemaSnapshot } from "./schema-snap
 
 const STEP2 = { ...RELEASES.step2, label: "test" }
 const STEP1_LAST = listMigrationFiles().filter((f) => f.slice(0, 14) <= RELEASES.step2.after).at(-1)!
+const STEP2_LAST = listMigrationFiles().filter((f) => f.slice(0, 14) <= RELEASES.step2.upTo).at(-1)!
 
 async function afterStep1() {
   const db = await createSupabaseTestDb({ upTo: STEP1_LAST })
@@ -53,7 +54,7 @@ describe("0.5 release step 2 (DB2c-1)", () => {
 
     const q = <T>(sql: string, params: unknown[] = []) => db.asPostgres(async (tx) => (await tx.query<T>(sql, params)).rows)
     const history = await q<{ version: string }>("select version from supabase_migrations.schema_migrations order by version")
-    expect(history.map((h) => h.version)).toEqual(listMigrationFiles().map((f) => f.slice(0, 14)))
+    expect(history.map((h) => h.version)).toEqual(listMigrationFiles().filter((f) => f <= STEP2_LAST).map((f) => f.slice(0, 14)))
     const jobs = await q<{ kind: string; status: string; work_item_id: string; payload: Record<string, unknown>; notified_at: string | null }>(
       "select kind, status, work_item_id, payload, notified_at from public.agent_jobs order by status")
     expect(jobs.map((j) => [j.kind, j.status, j.work_item_id])).toEqual([
@@ -72,7 +73,7 @@ describe("0.5 release step 2 (DB2c-1)", () => {
     expect(claimed).toEqual([{ lease_epoch: 1 }])
 
     const after = (await db.asPostgres((tx) => tx.query<{ snapshot: SchemaSnapshot }>(snapshotQuery()))).rows[0].snapshot
-    const fresh = await createSupabaseTestDb()
+    const fresh = await createSupabaseTestDb({ upTo: STEP2_LAST })
     const head = (await fresh.asPostgres((tx) => tx.query<{ snapshot: SchemaSnapshot }>(snapshotQuery()))).rows[0].snapshot
     await fresh.close()
     const diff = diffSnapshots(after, head)
@@ -99,7 +100,7 @@ describe("0.5 release step 2 (DB2c-1)", () => {
 
   it("contains only the step-2 migration, no legacy retirement, no backfill and no secrets", () => {
     const sql = buildRelease(STEP2)
-    expect(pendingMigrations(RELEASES.step2.after)).toEqual(["20261123100000_agent_jobs_mvp.sql"])
+    expect(pendingMigrations(RELEASES.step2.after, RELEASES.step2.upTo)).toEqual(["20261123100000_agent_jobs_mvp.sql"])
     expect(sql).toContain("-- >>> 20261123100000_agent_jobs_mvp.sql")
     expect(sql).not.toMatch(/drop table if exists public\.site_|backfill_v1/)
     expect(sql).not.toMatch(/service_role_key|sb_secret|password\s*=|supabase\.co/i)

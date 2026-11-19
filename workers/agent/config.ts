@@ -9,7 +9,10 @@ import { CloudLlmClient } from "./drivers/cloud-llm"
 /** Reads ONLY from the process environment (never from sense-console/.env.local). */
 export interface WorkerConfig {
   supabaseUrl: string
-  serviceRoleKey: string
+  /** Publishable (anon) key: the worker never holds service_role (DB2c-2). */
+  publishableKey: string
+  /** Revocable node token from the console (系统 → 执行节点); the credential for every node_* RPC. */
+  nodeToken: string
   workerId: string
   jobTypes: string[]
   leaseSeconds: number
@@ -22,10 +25,17 @@ function required(env: NodeJS.ProcessEnv, key: string): string {
   return value
 }
 
+function nodeToken(env: NodeJS.ProcessEnv): string {
+  const token = required(env, "SENSE_NODE_TOKEN")
+  if (!/^stn_[a-f0-9]{64}$/.test(token)) throw new Error("SENSE_NODE_TOKEN 格式不对：应为控制台「执行节点」生成的 stn_ 开头令牌")
+  return token
+}
+
 export function readWorkerConfig(env: NodeJS.ProcessEnv = process.env): WorkerConfig {
   return {
     supabaseUrl: required(env, "SUPABASE_URL"),
-    serviceRoleKey: required(env, "SUPABASE_SERVICE_ROLE_KEY"),
+    publishableKey: required(env, "SUPABASE_PUBLISHABLE_KEY"),
+    nodeToken: nodeToken(env),
     workerId: env.SENSE_WORKER_ID?.trim() || `${hostname()}-${process.pid}`,
     jobTypes: (env.SENSE_WORKER_JOB_TYPES ?? "content_draft,video_storyboard").split(",").map((s) => s.trim()).filter(Boolean),
     leaseSeconds: Number(env.SENSE_WORKER_LEASE_SECONDS ?? 120),

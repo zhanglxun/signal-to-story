@@ -127,7 +127,7 @@ export interface SeededOrganization {
 }
 
 const DEFAULT_ROLE_PERMISSIONS: Record<string, string[]> = {
-  owner: ["content.view", "content.manage", "content.review", "content.publish", "agent.dispatch", "account.manage"],
+  owner: ["content.view", "content.manage", "content.review", "content.publish", "agent.dispatch", "account.manage", "organization.manage"],
   admin: ["content.view", "content.manage", "content.review", "content.publish", "agent.dispatch"],
   member: ["content.view", "content.manage", "agent.dispatch"],
   viewer: ["content.view"],

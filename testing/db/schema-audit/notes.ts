@@ -191,20 +191,6 @@ const CREATED = { name: "created_at", type: "timestamptz", keys: "", note: "not 
 
 export const PLANNED_TABLES: PlannedTable[] = [
   {
-    name: "runner_nodes",
-    kind: "table",
-    purpose: "执行节点身份：受限、可吊销，取代 worker 持有 service_role",
-    fateNote: "DB2 新建（DB-D8：令牌 + Edge Function 代理）；MVP 去掉 allowed_job_types",
-    cols: [
-      ID, ORG,
-      { name: "name", type: "text", keys: "UQ(organization_id, name)", note: "", meaning: "节点名（例如某台电脑）" },
-      { name: "token_hash", type: "text", keys: "UQ", note: "sha256 hex", meaning: "节点令牌的哈希；明文只在创建时显示一次" },
-      { name: "revoked_at", type: "timestamptz", keys: "", note: "可空", meaning: "吊销时间；吊销后代理拒绝它的所有调用" },
-      { name: "last_seen_at", type: "timestamptz", keys: "", note: "可空", meaning: "最近一次心跳" },
-      CREATED,
-    ],
-  },
-  {
     name: "chat_sessions",
     kind: "table",
     purpose: "Chat 会话；可以挂在某张事项卡上，在卡上和 AI 对话",
@@ -682,7 +668,7 @@ export const TABLES: Record<string, TableNote> = {
       attempts: "已尝试次数（= 0 表示从未被认领）",
       max_attempts: "最多尝试次数",
       run_after: "最早可执行时间（重试退避）；认领按 run_after、created_at 先进先出",
-      node_id: "当前认领的节点（runner_nodes 在 DB2c-2 加入后补外键）",
+      node_id: "当前认领的节点（FK → runner_nodes，节点删除时置空；离开 running 后清空）",
       locked_until: "租约到期时间；过期可被其他节点重新认领",
       lease_epoch: "租约代数：每次认领 +1；心跳、步骤、完成、失败、提问都必须带当前值，旧节点的迟到写入被拒",
       cancel_requested_at: "人请求取消的时间；节点在下一步检查后停止",
@@ -706,6 +692,20 @@ export const TABLES: Record<string, TableNote> = {
       output: "输出；含 round、stage、input_digest、input_summary、evaluation",
       usage: "用量：input_tokens、output_tokens、cost_cents、model、driver、duration_ms",
       error: "错误信息",
+    },
+  },
+  runner_nodes: {
+    purpose: "执行节点身份：每台跑 worker 的电脑或容器一个可吊销令牌，取代 worker 持有 service_role",
+    fate: "新建",
+    fateNote: "DB2c-2 已建（20261124100000_runner_nodes）；DB-D16：令牌由数据库 node_* RPC 直接校验，不再经 Edge Function 代理；MVP 去掉 allowed_job_types",
+    cols: {
+      id: "主键",
+      organization_id: "所属组织；节点只能认领本组织的任务",
+      name: "节点名（例如某台电脑）；未吊销的节点在组织内不重名",
+      token_hash: "节点令牌的 sha256；明文只在创建时显示一次，浏览器读不到这一列",
+      revoked_at: "吊销时间；吊销后令牌的所有调用都被拒绝",
+      last_seen_at: "最近一次调用数据库的时间；两分钟内算在线",
+      created_at: "创建时间",
     },
   },
   approval_requests: {

@@ -30,7 +30,8 @@ services:
       dockerfile: workers/agent/Dockerfile
     environment:
       SUPABASE_URL: ${SUPABASE_URL:?SUPABASE_URL is required}
-      SUPABASE_SERVICE_ROLE_KEY: ${SUPABASE_SERVICE_ROLE_KEY:?SUPABASE_SERVICE_ROLE_KEY is required}
+      SUPABASE_PUBLISHABLE_KEY: ${SUPABASE_PUBLISHABLE_KEY:?SUPABASE_PUBLISHABLE_KEY is required}
+      SENSE_NODE_TOKEN: ${SENSE_NODE_TOKEN:?SENSE_NODE_TOKEN is required (console → 执行节点)}
       SENSE_WORKER_ID: ${SENSE_WORKER_ID:-agent-worker-1}
       SENSE_WORKER_JOB_TYPES: ${SENSE_WORKER_JOB_TYPES:-content_draft,video_storyboard}
       SENSE_WORKER_LEASE_SECONDS: ${SENSE_WORKER_LEASE_SECONDS:-120}

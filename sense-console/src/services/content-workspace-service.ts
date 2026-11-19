@@ -53,5 +53,6 @@ export async function getContentWorkspace(): Promise<ContentWorkspace> {
     canManage: Boolean(roleDefinition?.permissions?.includes("content.manage")),
     canReview: Boolean(roleDefinition?.permissions?.includes("content.review")),
     canPublish: Boolean(roleDefinition?.permissions?.includes("content.publish")),
+    canManageOrganization: Boolean(roleDefinition?.permissions?.includes("organization.manage")),
   }
 }

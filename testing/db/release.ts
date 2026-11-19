@@ -3,7 +3,7 @@
  * to the repo head (docs/database.md §8.1). The script is generated from the migration files, so the SQL
  * that the tests rehearse is exactly the SQL that runs live.
  *
- *   npx tsx testing/db/release.ts            → supabase/release/0.5.0-step1.sql and 0.5.0-step2.sql
+ *   npx tsx testing/db/release.ts            → supabase/release/0.5.0-step{1,2,3}.sql
  *
  * Shape: preflight assertions → [retire legacy live-only objects] → pending migrations in order →
  * migration history rows → [V1 backfill (idempotent)] → commit. Any failure rolls everything back.
@@ -67,6 +67,7 @@ export const RELEASES = {
   },
   step2: {
     after: "20261122100000",
+    upTo: "20261123100000",
     label: "0.5.0 step 2 (DB2c-1)",
     file: "0.5.0-step2.sql",
     retireLegacySite: false,
@@ -77,6 +78,15 @@ export const RELEASES = {
       `  select count(*) into n from public.agent_jobs where status = 'running' and locked_until > now();`,
       `  if n > 0 then raise exception 'preflight: % agent job(s) hold a live lease; stop every worker and wait for the leases to expire', n; end if;`,
     ],
+  },
+  step3: {
+    after: "20261123100000",
+    label: "0.5.0 step 3 (DB2c-2)",
+    file: "0.5.0-step3.sql",
+    retireLegacySite: false,
+    backfillV1: false,
+    // Additive: the service_role node RPCs stay, so a running old-style worker is not cut off mid-job.
+    appliedWhen: "to_regclass('public.runner_nodes') is not null",
   },
 } satisfies Record<string, ReleaseSpec>
 

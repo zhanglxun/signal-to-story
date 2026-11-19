@@ -29,6 +29,8 @@ export function ConfirmDeleteDialog({
   mutationFn,
   invalidateKeys,
   successMessage,
+  confirmLabel = "确认删除",
+  pendingLabel = "删除中…",
 }: {
   trigger: ReactElement
   title: string
@@ -36,6 +38,9 @@ export function ConfirmDeleteDialog({
   mutationFn: () => Promise<unknown>
   invalidateKeys: readonly (readonly unknown[])[]
   successMessage: string
+  /** For destructive actions that are not deletes (e.g. revoking a token). */
+  confirmLabel?: string
+  pendingLabel?: string
 }) {
   const queryClient = useQueryClient()
   const [open, setOpen] = useState(false)
@@ -62,7 +67,7 @@ export function ConfirmDeleteDialog({
         <AlertDialogFooter>
           <AlertDialogCancel disabled={mutation.isPending}>取消</AlertDialogCancel>
           <AlertDialogAction variant="destructive" disabled={mutation.isPending} onClick={() => mutation.mutate()}>
-            {mutation.isPending ? "删除中…" : "确认删除"}
+            {mutation.isPending ? pendingLabel : confirmLabel}
           </AlertDialogAction>
         </AlertDialogFooter>
       </AlertDialogContent>

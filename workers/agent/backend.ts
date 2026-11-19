@@ -26,8 +26,8 @@ export interface ClaimedJobRow {
 
 /**
  * Everything the worker needs from the database. Two implementations:
- *  - SupabaseBackend (production; supabase-js + service_role over HTTPS, outbound only)
- *  - SqlBackend (PGlite / any `query(sql, params)` executor; used by tests and the local demo)
+ *  - NodeBackend (production; node_* RPCs with a node token + publishable key over HTTPS, outbound only; DB2c-2)
+ *  - SqlBackend (service_role SQL on PGlite; used by older tests and the local demos)
  * Every write after claim passes the lease epoch claim returned; the database refuses a stale epoch.
  */
 export interface AgentQueueBackend {
