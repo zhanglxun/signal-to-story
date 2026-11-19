@@ -262,7 +262,7 @@ erDiagram
 
 仓库这一侧已验证：前 13 个迁移得到 25 张 public 表；按 2026-11-16 的快照，线上应多出旧 `site_*` 十张。
 
-DB1～DB5 都只在仓库和 PGlite 上进行，可以和 R2（抽出 core）、R3（Chat）交错推进。建议顺序：DB1 → DB2 → R2 → DB3 + R3 → R4 看板（依赖 DB2 的视图）→ DB4 → DB5。
+DB1～DB5 都只在仓库和 PGlite 上进行，可以和 R2（并入 workers/agent）、R3（Chat）交错推进。建议顺序：DB1 → DB2 → R2 → DB3 + R3 → R4 看板（依赖 DB2 的视图）→ DB4 → DB5。
 
 ## 8.1 上线脚本形态（为「一把执行」准备）
 

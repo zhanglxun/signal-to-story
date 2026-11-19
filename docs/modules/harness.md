@@ -6,8 +6,8 @@
 
 | 部分 | 当前位置 | 目标位置 |
 | --- | --- | --- |
-| 契约 | `sense-console/src/contracts/agent-*.ts` | `core/contracts`（R2） |
-| 循环纯函数 | `sense-console/src/harness/*` | `core/harness`，并新增 `core/agent`（R2/R3） |
+| 契约 | `sense-console/src/contracts/agent-*.ts` | `workers/agent/loop/`（R2；前端依赖先盘点，见 architecture 6.2） |
+| 循环纯函数 | `sense-console/src/harness/*` | `workers/agent/loop/`，R3 在其中新建统一 Agent 循环（R2/R3） |
 | worker | `workers/agent/*` | 已就位 |
 | 数据库 | `supabase/migrations/20261115100000/100100/100200`，DB2c-1 精简 `20261123100000` | 已就位 |
 | 入队入口 | Edge Function `supabase/functions/content-draft`（`mode: "queue"`） | 不变 |
@@ -66,7 +66,7 @@ running → 租约过期 / 可重试失败 → queued
 
 ## 6. 0.5 调整方向
 
-1. 循环拆成两层：`core/agent` 定义通用的会话、回合、停止条件和接口；harness 是其中一种「生成 → 预检 → 评估」形状的循环（architecture 6.3）。
+1. 循环拆成两层：`workers/agent/loop` 定义通用的会话、回合、停止条件和接口；harness 是其中一种「生成 → 预检 → 评估」形状的循环（architecture 6.3）。执行面同时有 HTTP 与队列两个入口，共用同一套 handler（architecture 6.5）。
 2. 执行模式分为 `harness / agent_session / chat / video`。`agent_session` 为每个事项开一个可写目录，凭证不进子进程。
 3. ~~worker 改用受限的节点身份~~（DB2c-2 已完成）：agent worker 用控制台签发的节点令牌 + 公开 key 调 `node_*` RPC，不再持有 `service_role`；吊销即失效，只能认领本组织任务、只能写自己持有的任务（database.md 4.4、DB-D16）。视频 worker 留到 DB5。`lease_epoch` 已在 DB2c-1 加入，拒绝旧进程的迟到写入。
 4. 所有 CLI 调用都收进 `workers/agent/drivers`，删除 Vite 里的 spawn。
