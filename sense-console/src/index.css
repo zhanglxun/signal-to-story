@@ -143,3 +143,72 @@
     cursor: pointer;
   }
 }
+
+/* Editorial Markdown reading typography inside sense-console (semantic tokens only). */
+@layer components {
+  .console-prose {
+    @apply text-[0.9375rem] leading-[1.8] text-foreground/90;
+    overflow-wrap: anywhere;
+  }
+  .console-prose > * + * {
+    @apply mt-4;
+  }
+  .console-prose h1,
+  .console-prose h2,
+  .console-prose h3,
+  .console-prose h4 {
+    @apply font-heading font-semibold tracking-tight text-foreground;
+  }
+  .console-prose h1 {
+    @apply mt-7 text-xl;
+  }
+  .console-prose h2 {
+    @apply mt-7 border-b border-border pb-1.5 text-lg;
+  }
+  .console-prose h3 {
+    @apply mt-6 text-base;
+  }
+  .console-prose h4 {
+    @apply mt-5 text-sm;
+  }
+  .console-prose a {
+    @apply font-medium text-foreground underline decoration-foreground/30 underline-offset-4 hover:decoration-foreground;
+  }
+  .console-prose ul {
+    @apply list-disc pl-6;
+  }
+  .console-prose ol {
+    @apply list-decimal pl-6;
+  }
+  .console-prose li + li {
+    @apply mt-1.5;
+  }
+  .console-prose blockquote {
+    @apply border-l-2 border-foreground/25 pl-4 text-muted-foreground;
+  }
+  .console-prose code {
+    @apply rounded-sm bg-muted px-1.5 py-0.5 font-mono text-[0.875em];
+  }
+  .console-prose pre {
+    @apply overflow-x-auto rounded-lg bg-muted p-4 text-xs leading-relaxed;
+  }
+  .console-prose pre code {
+    @apply bg-transparent p-0;
+  }
+  .console-prose img {
+    @apply h-auto max-w-full rounded-lg border border-border;
+  }
+  .console-prose hr {
+    @apply my-6 border-border;
+  }
+  .console-prose table {
+    @apply block w-full overflow-x-auto text-sm;
+  }
+  .console-prose th,
+  .console-prose td {
+    @apply border border-border px-3 py-2 text-left;
+  }
+  .console-prose th {
+    @apply bg-muted/50 font-medium;
+  }
+}

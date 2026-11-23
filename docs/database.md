@@ -242,17 +242,17 @@ erDiagram
 | --- | --- | --- | --- |
 | **DB0 对账**（2026-11-17 完成） | 只读导出线上 schema 和迁移历史（不含数据），与仓库前 13 个迁移逐对象比对 | 结论见 1.2 | 只读 |
 | **DB1 基线整理**（2026-11-17 完成） | 迁移历史对齐线上（A4）；在未上线迁移里原地修正 B1、B5。`quick_captures`、本地 `site_*` 这类要被替换的部分，等 DB2/DB4 的替代物就位后再删，保证每一步门禁都是绿的 | 根目录全部测试 + 三个 demo 通过 | 否 |
-| **DB2a 核心表**（2026-11-18 完成） | 迁移 `20261115090000_mvp_core`：`work_items`、`intake_events` + `record_intake_event`、`content_documents.work_item_id`、回填函数 `private.backfill_v1()`（V1 → 0.5，可重复执行）；旧表暂不删 | `mvp-core-db.test.ts`：幂等、权限、原始输入不可改、回填可追溯且第二次执行为 0 | 否 |
-| **DB2b 入口与调用方**（2026-11-18 完成） | 速记、外部收录、IM 共用 `private.capture_core`：只收录 → 收件箱；自动出稿 → 同一事务建事项 + 稿件 + 任务；`accept_intake` 保留 V1 输入契约；`im_channels` 删除，回复地址进 `payload.reply_to`；`promote_intake_event` 一步把输入转成事项；稿件 `project_id` 改可空、新稿件只挂 `work_item_id`；worker、Edge Function、控制台（收件箱 + 事项页）全部改用新表。AI 写草稿 RPC 并入 DB2c | 全部门禁 | 否 |
-| **DB2c-1 执行精简**（2026-11-18 完成，上线脚本第 2 批） | `agent_jobs` / `agent_job_steps` 按 4.4 精简；`lease_epoch`；串行与卡片状态同步；`notified_at` 通知；worker、视频 worker、控制台同步改 | `agent-jobs-mvp-db.test.ts`（串行、状态同步、payload 形状、门禁、迁移搬运）、`release-step2.test.ts`、全部门禁 | 第 2 批由 Codex 执行 |
-| **DB2c-2 节点身份**（2026-11-19 完成，上线脚本第 3 批） | `runner_nodes` + `agent_jobs.node_id` 外键；节点令牌由数据库 `node_*` RPC 校验（DB-D16），agent worker 不再持有 `service_role`；控制台「执行节点」；视频 worker 留到 DB5 | `runner-nodes-db.test.ts`（吊销、跨组织、只写自己持有的任务、通知范围）、`node-backend.test.ts`、`release-step3.test.ts`、全部门禁 | 第 3 批由 Codex 执行 |
-| **DB2c-3 AI 直接写草稿** | `write_document_draft(base_revision)`；退役 `content_ai_proposals`，审核走稿件本身 | 人改过就拒绝写入 | 否 |
-| **退役迁移**（DB2 收尾，代码不再引用旧表后） | 调用 `private.backfill_v1()`，校验行数守恒，删除旧表；`content_documents.work_item_id` 改必填、删 `project_id` | 行数守恒断言 | 否 |
-| **DB3 Chat** | `chat_sessions` `chat_messages` + chat 回合 | 浏览器无法伪造 assistant 消息 | 否 |
-| **DB4 发布与读者站** | 发布 RPC 写 `published_*`；`anon` 列授权；sense-site 改读 `content_documents`；删除本地 `site_*` 迁移和外部发布三表的代码 | 未批准读不到；下线后读不到；改稿不影响已发布内容 | 否 |
-| **DB5 视频精简** | `video_plans` 改挂 `work_item_id`；删除分镜提案和成本账本；AI 直接写草稿分镜 | 现有视频测试改写后通过 | 否 |
-| **DB6 生成上线脚本** | 把 0.5 迁移集、回填、删除 17 张旧表和 `intake_oauth` RPC 拼成一个脚本（见 8.1）；在导入了线上结构的隔离库上完整演练 | 演练通过；所有代码不再引用旧表 | 否 |
-| **DB7 上线** | 先部署 0.5 控制台和 Edge Function → 备份 → Codex 执行上线脚本 | 脚本内置的对账断言全部通过 | **是，执行前由你批准** |
+| **DB2a 核心表**（2026-11-18 完成，第 1 批） | 迁移 `20261115090000_mvp_core`：`work_items`、`intake_events` + `record_intake_event`、`content_documents.work_item_id`、回填函数 `private.backfill_v1()`（V1 → 0.5，可重复执行）；旧表暂不删 | `mvp-core-db.test.ts`：幂等、权限、原始输入不可改、回填可追溯且第二次执行为 0 | 已执行第 1 批（线上已到位） |
+| **DB2b 入口与调用方**（2026-11-18 完成，第 1 批） | 速记、外部收录、IM 共用 `private.capture_core`：只收录 → 收件箱；自动出稿 → 同一事务建事项 + 稿件 + 任务；`accept_intake` 保留 V1 输入契约；`im_channels` 删除，回复地址进 `payload.reply_to`；`promote_intake_event` 一步把输入转成事项；稿件 `project_id` 改可空、新稿件只挂 `work_item_id`；worker、Edge Function、控制台（收件箱 + 事项页）全部改用新表。AI 写草稿 RPC 并入 DB2c | 全部门禁 | 已执行第 1 批（线上已到位） |
+| **DB2c-1 执行精简**（2026-11-18 完成，第 2 批） | `agent_jobs` / `agent_job_steps` 按 4.4 精简；`lease_epoch`；串行与卡片状态同步；`notified_at` 通知；worker、视频 worker、控制台同步改 | `agent-jobs-mvp-db.test.ts`（串行、状态同步、payload 形状、门禁、迁移搬运）、`release-step2.test.ts`、全部门禁 | 已执行第 2 批（Codex 已推送线上） |
+| **DB2c-2 节点身份**（2026-11-19 完成，第 3 批） | `runner_nodes` + `agent_jobs.node_id` 外键；节点令牌由数据库 `node_*` RPC 校验（DB-D16），agent worker 不再持有 `service_role`；控制台「执行节点」；视频 worker 留到 DB5 | `runner-nodes-db.test.ts`（吊销、跨组织、只写自己持有的任务、通知范围）、`node-backend.test.ts`、`release-step3.test.ts`、全部门禁 | 已执行第 3 批（2026-11-21 Codex 核对通过：`max=20261124100000`、`runner_nodes=0`、`node_*=12`、`agent_jobs_node_id_fkey` 存在） |
+| **DB2c-3 AI 直接写草稿**（2026-11-22 完成，第 4 批） | `write_document_draft(base_revision)` + `node_write_document_draft`；审核通过触发器自动完成出稿任务；退役 `content_ai_proposals` 与 `node_save_proposal` | `ai-direct-draft-db.test.ts`、`release-step4.test.ts`、全部门禁（人改过就拒绝写入） | 已执行第 4 批（2026-11-23 核对通过：`max=20261125100000`、`content_ai_proposals` 已删、`node_*=12`，真实出稿一次跑通） |
+| **退役迁移**（2026-11-26 完成，最终批次） | 迁移 `20261126100300_retire_v1`：最后一次 `private.backfill_v1()` + 对账（任一 V1 行找不到去向就整体回滚）；删除 V1 收集 6 表、内容 4 表、知识 2 表与 `intake_oauth`、`backfill_v1`；`content_documents.work_item_id` 改必填、删 `project_id`；审核历史改写 `audit_events` | `release-step5.test.ts`（带 V1 数据演练、对账失败回滚、结构等于仓库）、`mvp-core-db.test.ts`（回填在退役前的库上） | 待执行最终批次 |
+| **DB3 Chat**（2026-11-26 完成，最终批次） | 迁移 `20261126100200_chat`：`chat_sessions` `chat_messages`；`send_chat_message`（只能写 user，可选同事务入队 `chat_turn`）、`node_append_chat_message`（只有持有 `chat_turn` 任务的节点能写 assistant）；`seq` 在会话行锁下分配 | `release-step5.test.ts`；回合循环与 HTTP 入口随 R3 | 待执行最终批次 |
+| **DB4 发布与读者站**（2026-11-26 完成，最终批次） | 迁移 `20261126100000_publish_on_documents`：`published_*` 7 列 + `slug`；`publish_document` / `unpublish_document` / `set_document_published_url`（Mandate 绑定版本，MD001/MD002）；触发器禁止直接写发布列；`anon` 只授予发布列 + RLS `published_at is not null`；删除本地 `site_*` 12 表与外部发布 3 表；sense-site 改读 `content_documents`，专题 / 资源 / 读者账号 / 收藏下线 | `publish-document-db.test.ts`、sense-site `site-permissions.test.ts`（未批准读不到、下线读不到、改稿不影响已发布） | 待执行最终批次 |
+| **DB5 视频精简**（2026-11-26 完成，最终批次） | 迁移 `20261126100100_video_mvp`：`video_plans` 挂 `work_item_id`、去 `source_proposal_id`；镜头去成本列；删除分镜提案、成本账本、成本视图；`approval_requests.estimated_cost_cents` 并入 `payload`；`write_video_draft` / `node_write_video_draft`（AI 直接写草稿计划，按任务幂等）；分镜知识改读仓库文件 | `video-studio-db.test.ts`、`video-storyboard.test.ts`、`video-studio-e2e.test.ts`（含 Python dry-run） | 待执行最终批次 |
+| **DB6 生成上线脚本**（2026-11-26 完成） | 按 DB-D17 生成最终批次 `supabase/release/0.5.0-step5.sql`（4 个迁移，单事务，前置检查 + 对账） | `release-step5.test.ts` | 否 |
+| **DB7 上线** | 停 worker → 备份 → Codex 执行 `0.5.0-step5.sql` → 部署 0.5 控制台、读者站 → 用新代码重启 worker；手册见 `supabase/release/README.md` 第 5 批 | 脚本内置的对账断言全部通过 | **是，执行前由你批准** |
 
 **DB0 怎么做**（本机没有 Supabase CLI、psql 和 docker，也不应把数据库密码或访问令牌交给 Agent，所以由人在控制台执行一次只读查询）：
 
@@ -364,3 +364,4 @@ DB1～DB5 都只在仓库和 PGlite 上进行，可以和 R2（并入 workers/ag
 | DB-D14 | 2026-11-18 | **线上库就是唯一环境**（开发、测试、正式共用，目前只有你在用）。迁移改为**分批推送**：每批由 `testing/db/release.ts` 从迁移生成一个单事务脚本，先在模拟线上状态的 PGlite 上演练，再由 Codex 执行（手册见 `supabase/release/README.md`）。推上线的迁移从此只能追加；取代 DB-D6、DB-D7 里「只上线一次」的部分，第 8.1 节的脚本形态不变 |
 | DB-D15 | 2026-11-18 | DB2c 拆成三步：**DB2c-1** 任务表精简（本批，`lease_epoch`、串行、卡片状态同步、`notified_at` 通知）、**DB2c-2** `runner_nodes` + 节点网关、**DB2c-3** AI 直接写草稿并退役 `content_ai_proposals`。上限检查移到节点内的风险已接受（4.4） |
 | DB-D16 | 2026-11-19 | 节点令牌**由数据库直接校验**：worker 用公开 key 调 `node_*` RPC，令牌作参数，RPC 内比对 sha256；不建 Edge Function 代理（少一跳、规则全在库内、PGlite 可测）。这些 RPC 对 anon 开放，没有有效令牌什么也做不了。视频 worker 要读写对象存储，留到 DB5 再切 |
+| DB-D17 | 2026-11-26 | DB2c-3 之后的全部数据库工作（DB4、DB5、DB3 建表、V1 退役）**合并为一个最终批次** `0.5.0-step5.sql`，代码先在仓库改完、PGlite 演练通过后一次上线，不再逐步推送。知识库与决定记忆不建表（worker 读 `knowledge-base/` 文件，控制台只读展示，决定记忆功能下线）。读者站只保留文章（专题、资源、读者注册、收藏下线）。视频 worker 切换节点令牌留待后续 |

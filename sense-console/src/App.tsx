@@ -11,9 +11,7 @@ import { CharactersPage } from "@/pages/characters-page"
 import { ChatAssistantPage } from "@/pages/chat-assistant-page"
 import { CliAgentsPage } from "@/pages/cli-agents-page"
 import { ContentOverviewPage } from "@/pages/content-overview-page"
-import { DecisionMemoriesPage } from "@/pages/decision-memories-page"
 import { KnowledgeBasePage } from "@/pages/knowledge-base-page"
-import { PublishingPage } from "@/pages/publishing-page"
 import { ForbiddenPage } from "@/pages/forbidden-page"
 import { ForgotPasswordPage } from "@/pages/forgot-password-page"
 import { IntegrationsPage } from "@/pages/integrations-page"
@@ -59,8 +57,6 @@ export default function App() {
           <Route path="/topics/:topicId" element={<Navigate to="/work-items" replace />} />
           <Route path="/content/reviews" element={<ContentOverviewPage mode="reviews" />} />
           <Route path="/production/flow" element={<ContentOverviewPage mode="pipeline" />} />
-          <Route path="/publishing/channels" element={<PublishingPage mode="channels" />} />
-          <Route path="/publishing/plans" element={<PublishingPage />} />
           <Route path="/analytics" element={<ContentOverviewPage mode="analytics" />} />
           <Route path="/intake" element={<IntakePage />} />
           <Route path="/intake/prompts" element={<PromptExamplesPage />} />
@@ -73,7 +69,6 @@ export default function App() {
           <Route path="/video/characters" element={<CharactersPage />} />
           <Route path="/video/scenes" element={<ScenesPage />} />
           <Route path="/video/canvas" element={<CanvasPage />} />
-          <Route path="/content/memories" element={<DecisionMemoriesPage />} />
           <Route path="/content/knowledge" element={<KnowledgeBasePage />} />
           <Route path="/assets" element={<AssetsPage />} />
           <Route path="/assets/:assetId" element={<AssetDetailPage />} />

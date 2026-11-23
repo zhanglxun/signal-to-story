@@ -31,7 +31,7 @@ class ProcessorTest(unittest.TestCase):
     def run_one(self, engine=None):
         return process_next_job(self.db, engine or self.engine, "w1", lease_seconds=60, work_root=self.dir, heartbeat_interval=30)
 
-    def test_shot_render_writes_assets_state_and_ledger(self):
+    def test_shot_render_writes_assets_and_state(self):
         pid = self.db.add_plan(2)
         shot = self.db.plan_shots(pid)[0]
         self.db.shots[shot["id"]]["render_status"] = "queued"
@@ -47,8 +47,8 @@ class ProcessorTest(unittest.TestCase):
         self.assertEqual(cats, ["keyframe", "shot_clip", "voiceover"])
         self.assertTrue(all(a["asset_type"] == "video_studio" and a["created_by"] for a in self.db.assets.values()))
         self.assertTrue(all(a["cloud_url"].startswith("supabase://video-studio/") for a in self.db.assets.values()))
-        self.assertEqual(sorted(e["kind"] for e in self.db.ledger), ["shot_render", "tts"])
         result = self.db.jobs[jid]["result"]
+        self.assertEqual(result["cost_cents"], 0)  # dry-run: no paid provider; no ledger table (cost lives in the result)
         self.assertEqual(result["shots"][0]["render_ms"], s["actual_duration_ms"] + 300)  # Audio-First
         self.assertTrue(result["dry_run"])
 

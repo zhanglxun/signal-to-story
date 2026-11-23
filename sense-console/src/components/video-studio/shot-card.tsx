@@ -85,7 +85,6 @@ export function ShotCard(props: ShotCardProps) {
             <span>目标 {(shot.targetDurationMs / 1000).toFixed(1)}s</span>
             {shot.actualDurationMs != null ? <span>· 旁白 {(shot.actualDurationMs / 1000).toFixed(1)}s</span> : null}
           </div>
-          <p className="text-xs text-muted-foreground">估算 {formatCents(shot.estimatedCostCents)} · 实际 {formatCents(shot.actualCostCents)}</p>
           {shot.error ? <p className="text-xs text-destructive">{shot.error}</p> : null}
         </div>
 

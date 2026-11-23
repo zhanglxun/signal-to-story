@@ -36,19 +36,31 @@ describe("agent worker on a node token (DB2c-2)", () => {
     const generator = demoGenerator()
     const result = await processNextJob({ backend, workerId: "node-1", generator, evaluator: demoEvaluatorFailThenPass(), logger: silent })
     expect(result.outcome?.status).toBe("pending_review")
+    expect(result.outcome?.writtenRevision).toBe(2)
 
     const seen = await db.asPostgres(async (tx) => ({
-      job: (await tx.query<{ status: string; lease_epoch: string }>("select status, lease_epoch::text from public.agent_jobs where id=$1", [job.id])).rows[0],
+      job: (await tx.query<{ status: string; lease_epoch: string; result: Record<string, unknown> }>("select status, lease_epoch::text, result from public.agent_jobs where id=$1", [job.id])).rows[0],
       steps: (await tx.query<{ kind: string }>("select kind from public.agent_job_steps where job_id=$1 order by seq", [job.id])).rows.map((r) => r.kind),
-      proposals: (await tx.query<{ agent_job_id: string; prompt_version: string }>("select agent_job_id, prompt_version from public.content_ai_proposals where document_id=$1", [ws.documentId])).rows,
+      doc: (await tx.query<{ revision: number; status: string; body: string }>("select revision, status, body from public.content_documents where id=$1", [ws.documentId])).rows[0],
       node: (await tx.query<{ last_seen_at: string | null }>("select last_seen_at from public.runner_nodes where id=$1", [node.id])).rows[0],
     }))
-    expect(seen.job).toEqual({ status: "pending_review", lease_epoch: "1" })
+    expect(seen.job).toMatchObject({ status: "pending_review", lease_epoch: "1", result: { written_revision: 2, written_document_id: ws.documentId } })
     expect(seen.steps).toEqual(["context", "generate", "check", "check", "generate", "check", "check", "persist"])
-    expect(seen.proposals).toEqual([{ agent_job_id: job.id, prompt_version: "harness-v1" }])
+    expect(seen.doc.revision).toBe(2)
+    expect(seen.doc.status).toBe("draft")
+    expect(seen.doc.body).toContain("光遗传学是一种用光控制特定神经元活动的研究工具")
     expect(seen.node.last_seen_at).not.toBeNull()
-    // The Context Pack came through node_draft_context: trusted knowledge and the card's source are in.
-    expect(generator.calls[0].messages[0].content).toContain("克制、专业、讲真话")
+    // The Context Pack came through node_draft_context: trusted repository knowledge and the card source are in.
+    expect(generator.calls[0].messages[0].content).toContain("默认品牌语调与审稿红线")
+
+    // Human reviews and approves v2 -> the content_draft job transitions to succeeded.
+    await db.asUser(ws.ownerId, async (tx) => {
+      await tx.query("update public.content_documents set status='in_review' where id=$1", [ws.documentId])
+      await tx.query("update public.content_documents set status='approved', review_note='OK' where id=$1", [ws.documentId])
+    })
+    const approvedJob = await db.asPostgres(async (tx) => (await tx.query<{ status: string; result: Record<string, unknown> }>("select status, result from public.agent_jobs where id=$1", [job.id])).rows[0])
+    expect(approvedJob.status).toBe("succeeded")
+    expect(approvedJob.result).toMatchObject({ approved_revision: 2 })
   })
 
   it("a revoked node cannot claim; the job waits for another node", async () => {

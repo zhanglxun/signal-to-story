@@ -35,6 +35,7 @@ export interface HarnessJob {
   workItemId: string | null
   kind: string
   payload: Record<string, unknown>
+  result?: Record<string, unknown> | null
   target: JobTarget | null
   approvalRequestId: string | null
   createdBy: string | null
@@ -52,21 +53,30 @@ export interface HarnessProgress {
 
 export type HarnessTerminalStatus = "pending_review" | "blocked_needs_human" | "failed" | "cancelled" | "succeeded"
 
-export interface SaveProposalInput {
+export interface WriteDraftInput {
   job: HarnessJob
   documentId: string
-  inputRevision: number
+  baseRevision: number
+  title?: string | null
   body: string
-  model: string
-  instruction: string
-  inputBrief: string
-  usage: LlmUsage
-  promptVersion: string
+}
+
+export interface WriteDraftResult {
+  documentId: string
+  revision: number
+  alreadyWritten?: boolean
+}
+
+export class StaleRevisionError extends Error {
+  constructor(message = "稿件在出稿期间已被人工修改，拒绝覆盖") {
+    super(message)
+    this.name = "StaleRevisionError"
+  }
 }
 
 /**
  * Persistence port for the loop controller. The worker implements it on Supabase
- * (service_role); tests use InMemoryJobStore or the PGlite-backed store.
+ * (node_* RPCs); tests use InMemoryJobStore or the PGlite-backed store.
  * Every method must be idempotent so a crashed job can resume from its last step.
  */
 export interface JobStore {
@@ -75,14 +85,15 @@ export interface JobStore {
   recordStep(step: HarnessStepRecord): Promise<void>
   /** Extend the lease. ok=false means the lease was lost: stop without writing. */
   heartbeat(jobId: string): Promise<{ ok: boolean; cancelRequested: boolean }>
-  /** Write content_ai_proposals (status succeeded) once per job. Returns the proposal id. */
-  saveProposal(input: SaveProposalInput): Promise<{ proposalId: string }>
+  /** Write directly to content_documents with base_revision optimistic concurrency. */
+  writeDraft(input: WriteDraftInput): Promise<WriteDraftResult>
   finish(jobId: string, outcome: { status: HarnessTerminalStatus; result: Record<string, unknown>; error?: string | null; errorCode?: string | null }): Promise<void>
 }
 
 export class InMemoryJobStore implements JobStore {
   readonly steps: HarnessStepRecord[] = []
-  readonly proposals = new Map<string, { proposalId: string; input: SaveProposalInput }>()
+  readonly drafts = new Map<string, { documentId: string; revision: number; input: WriteDraftInput }>()
+  readonly documentRevisions = new Map<string, number>()
   readonly outcomes = new Map<string, { status: HarnessTerminalStatus; result: Record<string, unknown>; error?: string | null; errorCode?: string | null }>()
   cancelRequested = false
   leaseLost = false
@@ -97,12 +108,17 @@ export class InMemoryJobStore implements JobStore {
   async heartbeat() {
     return { ok: !this.leaseLost, cancelRequested: this.cancelRequested }
   }
-  async saveProposal(input: SaveProposalInput) {
-    const existing = this.proposals.get(input.job.id)
-    if (existing) return { proposalId: existing.proposalId }
-    const proposalId = `proposal-${this.proposals.size + 1}`
-    this.proposals.set(input.job.id, { proposalId, input })
-    return { proposalId }
+  async writeDraft(input: WriteDraftInput): Promise<WriteDraftResult> {
+    const existing = this.drafts.get(input.job.id)
+    if (existing) return { documentId: existing.documentId, revision: existing.revision, alreadyWritten: true }
+    const currentRevision = this.documentRevisions.get(input.documentId) ?? input.baseRevision
+    if (currentRevision !== input.baseRevision) {
+      throw new StaleRevisionError(`stale_revision: 稿件已从 v${input.baseRevision} 变为 v${currentRevision}，拒绝覆盖人工修改`)
+    }
+    const revision = input.baseRevision + 1
+    this.documentRevisions.set(input.documentId, revision)
+    this.drafts.set(input.job.id, { documentId: input.documentId, revision, input })
+    return { documentId: input.documentId, revision, alreadyWritten: false }
   }
   async finish(jobId: string, outcome: { status: HarnessTerminalStatus; result: Record<string, unknown>; error?: string | null; errorCode?: string | null }) {
     this.outcomes.set(jobId, outcome)

@@ -1,41 +1,20 @@
 // Built-in sample snapshots for local demo mode only (VITE_SITE_DEMO=1 or no Supabase configured).
 // Every page shows a visible "演示数据" badge while these are in use. These are illustrative
 // samples, not real published content, metrics or authors.
-import type {
-  SiteCategory,
-  SiteEntry,
-  SiteEntryBody,
-  SiteInfo,
-  SiteResource,
-  SiteTopic,
-} from "@/contracts/site"
+import type { SiteEntry, SiteEntryBody, SiteInfo } from "@/contracts/site"
 
 export const demoSite: SiteInfo = {
-  id: "demo-site",
-  slug: "signal-to-story",
   name: "星火工厂 · Signal to Story",
   description: "企业 AI 实战、AI 知识科普、工具与工作流、故事与创意。以下为本地演示快照。",
-  base_url: "",
 }
-
-export const demoCategories: SiteCategory[] = [
-  { id: "cat-enterprise", slug: "enterprise-ai", name: "企业 AI 实战", description: "真实业务里的 AI 落地方法与复盘。", sort_order: 10 },
-  { id: "cat-basics", slug: "ai-basics", name: "AI 知识科普", description: "把概念讲清楚，不夸大，不神化。", sort_order: 20 },
-  { id: "cat-workflow", slug: "tools-workflow", name: "工具与工作流", description: "可复用的工具组合与操作步骤。", sort_order: 30 },
-  { id: "cat-story", slug: "story-creative", name: "故事与创意", description: "用故事解释技术与人的关系。", sort_order: 40 },
-  // Enabled but without published entries: must not take a homepage slot.
-  { id: "cat-empty", slug: "empty-category", name: "暂无内容的分类", description: "", sort_order: 50 },
-]
 
 type DemoEntry = SiteEntry & { status: "online" | "offline"; body: SiteEntryBody }
 
 const day = (n: number) => new Date(Date.UTC(2026, 10, 14 - n, 2, 0, 0)).toISOString()
 
-function entry(partial: Omit<DemoEntry, "current_release_id" | "current_version" | "updated_at" | "cover_url" | "cover_alt"> & Partial<DemoEntry>): DemoEntry {
+function entry(partial: Omit<DemoEntry, "revision" | "cover_url" | "cover_alt"> & Partial<DemoEntry>): DemoEntry {
   return {
-    current_release_id: `rel-${partial.id}`,
-    current_version: 1,
-    updated_at: partial.published_at,
+    revision: 1,
     cover_url: "",
     cover_alt: "",
     ...partial,
@@ -48,10 +27,7 @@ export const demoEntries: DemoEntry[] = [
     slug: "why-enterprise-agents-stall",
     title: "企业 AI Agent 落地卡住的三个真实原因",
     summary: "不是模型不够强，而是任务边界、数据权限和人工门禁没有设计清楚。本文拆解三个常见卡点与对应的最小改法。",
-    category_id: "cat-enterprise",
     format: "article",
-    column_key: "analysis",
-    access_level: "public",
     published_at: day(0),
     status: "online",
     body: {
@@ -86,10 +62,7 @@ Agent 产出的是**提案**，不是结论。把“批准”按钮留给人，�
     slug: "rag-in-plain-words",
     title: "用一张表讲清楚 RAG：检索增强生成到底增强了什么",
     summary: "RAG 不是让模型“记住”你的资料，而是在回答前先查资料。本文用对比表解释它能解决和不能解决的问题。",
-    category_id: "cat-basics",
     format: "tutorial",
-    column_key: "how_to",
-    access_level: "public",
     published_at: day(1),
     status: "online",
     body: {
@@ -125,10 +98,7 @@ Agent 产出的是**提案**，不是结论。把“批准”按钮留给人，�
     slug: "three-minute-content-pipeline",
     title: "三分钟看懂：从一条线索到一篇待审稿件",
     summary: "演示视频：线索收录、选题立项、AI 草案与人工审核如何串成一条可追溯的流水线。",
-    category_id: "cat-workflow",
     format: "video",
-    column_key: "how_to",
-    access_level: "public",
     published_at: day(2),
     status: "online",
     body: {
@@ -155,10 +125,7 @@ Agent 产出的是**提案**，不是结论。把“批准”按钮留给人，�
     slug: "ai-cost-ledger-template",
     title: "给 AI 任务记一本成本账：字段设计与复盘方法",
     summary: "注册读者专享：一套可直接套用的 AI 任务成本账字段，以及每周复盘时该看的三个指标。",
-    category_id: "cat-enterprise",
     format: "tutorial",
-    column_key: "case",
-    access_level: "registered",
     published_at: day(3),
     status: "online",
     body: {
@@ -186,10 +153,7 @@ Agent 产出的是**提案**，不是结论。把“批准”按钮留给人，�
     slug: "the-lighthouse-keeper-and-the-model",
     title: "守灯人与模型：一个关于“人类门禁”的小故事",
     summary: "灯塔可以自动亮起，但决定船只能否靠岸的，仍然是守灯人。一个讲给非技术同事听的故事。",
-    category_id: "cat-story",
     format: "article",
-    column_key: null,
-    access_level: "public",
     published_at: day(4),
     status: "online",
     body: {
@@ -213,10 +177,7 @@ Agent 产出的是**提案**，不是结论。把“批准”按钮留给人，�
     slug: "prompt-review-checklist",
     title: "提示词上线前的十项检查清单",
     summary: "注册读者专享：从指令数据分离到输出格式校验，十项可以逐条打勾的检查。",
-    category_id: "cat-workflow",
     format: "tutorial",
-    column_key: "how_to",
-    access_level: "registered",
     published_at: day(5),
     status: "online",
     body: {
@@ -241,10 +202,7 @@ Agent 产出的是**提案**，不是结论。把“批准”按钮留给人，�
     slug: "agent-vocabulary-for-managers",
     title: "给管理者的 Agent 词汇表：12 个词就够了",
     summary: "Context、Tool、Proposal、Mandate……用一句话解释一个词，帮助团队在同一套语言里讨论 AI 项目。",
-    category_id: "cat-basics",
     format: "article",
-    column_key: "news",
-    access_level: "public",
     published_at: day(6),
     status: "online",
     body: {
@@ -264,58 +222,9 @@ Agent 产出的是**提案**，不是结论。把“批准”按钮留给人，�
     slug: "withdrawn-entry",
     title: "已下线的示例内容",
     summary: "此条目已下线，不应出现在任何列表中。",
-    category_id: "cat-basics",
     format: "article",
-    column_key: null,
-    access_level: "public",
     published_at: day(7),
     status: "offline",
     body: { markdown: "下线内容正文（不可见）", media: [], source_refs: [] },
   }),
-]
-
-export const demoTopics: (Omit<SiteTopic, "entry_count"> & { entryIds: string[] })[] = [
-  {
-    id: "t-agent-path",
-    slug: "enterprise-agent-path",
-    title: "企业 Agent 入门路径",
-    description: "从概念、边界到成本账，按顺序读完即可开始第一个真实试点。",
-    cover_url: "",
-    cover_alt: "",
-    sort_order: 10,
-    entryIds: ["e-agent-vocabulary", "e-agent-failures", "e-cost-ledger", "e-offline"],
-  },
-  {
-    id: "t-workflow",
-    slug: "content-workflow",
-    title: "AI 内容工作流",
-    description: "从线索到发布，一条可追溯、有人类门禁的内容流水线。",
-    cover_url: "",
-    cover_alt: "",
-    sort_order: 20,
-    entryIds: ["e-workflow-video", "e-prompt-checklist", "e-story-lighthouse"],
-  },
-]
-
-export const demoResources: SiteResource[] = [
-  {
-    id: "r-checklist",
-    entry_id: "e-prompt-checklist",
-    title: "提示词上线检查清单（可打印）",
-    description: "与《提示词上线前的十项检查清单》配套的打印版。",
-    file_name: "prompt-checklist-demo.txt",
-    mime_type: "text/plain",
-    size_bytes: 2048,
-    access_level: "registered",
-  },
-  {
-    id: "r-glossary",
-    entry_id: null,
-    title: "Agent 词汇表速查卡",
-    description: "12 个关键词的一页速查。",
-    file_name: "agent-glossary-demo.txt",
-    mime_type: "text/plain",
-    size_bytes: 1024,
-    access_level: "public",
-  },
 ]

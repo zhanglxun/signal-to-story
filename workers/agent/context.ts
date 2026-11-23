@@ -26,7 +26,8 @@ export function assembleDraftContext(job: HarnessJob, rows: DraftContextRows, fe
   const instruction = String(job.payload.instruction ?? "").trim()
   if (!instruction) throw new Error("任务缺少创作要求 (payload.instruction)")
   const queuedRevision = job.target?.revision ?? null
-  if (queuedRevision != null && rows.document.revision !== queuedRevision) {
+  const alreadyWritten = typeof job.result?.written_revision === "number"
+  if (queuedRevision != null && !alreadyWritten && rows.document.revision !== queuedRevision) {
     // The human edited the document after queueing; drafting against stale text is pointless.
     throw new StaleTargetError(`稿件已从 v${queuedRevision} 变为 v${rows.document.revision}，请重新发起生成`)
   }

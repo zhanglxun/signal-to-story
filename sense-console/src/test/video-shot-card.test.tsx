@@ -9,7 +9,7 @@ import type { VideoShot } from "@/contracts/video-studio"
 const shot: VideoShot = {
   id: "s1", planId: "p1", position: 1, shotSize: "medium", cameraMotion: "zoom_in", motionMode: "local_ken_burns", visualPrompt: "月球面包店",
   narration: "月球上飘来面包香", voice: null, sfxDescription: "", targetDurationMs: 4000, actualDurationMs: null, keyframeAssetId: null,
-  audioAssetId: null, videoAssetId: null, renderStatus: "pending", estimatedCostCents: 0, actualCostCents: 0, error: null,
+  audioAssetId: null, videoAssetId: null, renderStatus: "pending", error: null,
 }
 
 function setup(overrides: Partial<ShotCardProps> = {}) {

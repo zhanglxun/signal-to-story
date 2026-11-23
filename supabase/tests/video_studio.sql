@@ -33,7 +33,7 @@ begin
  denied:=false; begin perform public.enqueue_video_job(plan,'video_shot_render',s2); exception when insufficient_privilege then denied:=true; end;
  assert denied, 'paid cloud render queued without approval';
  ap:=public.request_video_render_approval(plan);
- assert ap.status='pending' and ap.estimated_cost_cents=35, 'approval estimate';
+ assert ap.status='pending' and (ap.payload->>'estimated_cost_cents')::int=35, 'approval estimate';
  denied:=false; begin perform public.decide_approval_request(ap.id,'approved',''); exception when insufficient_privilege then denied:=true; end;
  assert denied, 'member without agent.approve approved';
  perform set_config('request.jwt.claims', json_build_object('sub',owner_id,'role','authenticated')::text, true);

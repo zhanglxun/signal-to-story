@@ -17,12 +17,12 @@ export function EntryCover({ entry, className = "" }: { entry: SiteEntry; classN
   )
 }
 
-export function EntryCard({ entry, categoryName }: { entry: SiteEntry; categoryName?: string }) {
+export function EntryCard({ entry }: { entry: SiteEntry }) {
   return (
     <article className="group relative flex flex-col overflow-hidden rounded-xl border bg-card transition-colors hover:border-foreground/25">
       <EntryCover entry={entry} />
       <div className="flex flex-1 flex-col gap-2.5 p-4">
-        <EntryBadges entry={entry} categoryName={categoryName} />
+        <EntryBadges entry={entry} />
         <h3 className="text-base leading-snug font-semibold">
           <Link to={`/content/${entry.slug}`} className="after:absolute after:inset-0 focus-visible:outline-none">
             {entry.title}
@@ -37,11 +37,11 @@ export function EntryCard({ entry, categoryName }: { entry: SiteEntry; categoryN
   )
 }
 
-export function EntryGrid({ entries, categories }: { entries: SiteEntry[]; categories?: Map<string, string> }) {
+export function EntryGrid({ entries }: { entries: SiteEntry[] }) {
   return (
     <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
       {entries.map((entry) => (
-        <EntryCard key={entry.id} entry={entry} categoryName={entry.category_id ? categories?.get(entry.category_id) : undefined} />
+        <EntryCard key={entry.id} entry={entry} />
       ))}
     </div>
   )

@@ -21,7 +21,7 @@ afterEach(async () => {
 })
 
 describe("quick capture -> auto draft -> pending_review (PGlite + fake LLM)", () => {
-  it("one link produces evaluated pending_review proposals for every document", async () => {
+  it("one link writes evaluated v2 drafts directly into every document", async () => {
     const capture = await quickCapture(db, ws.ownerId, {
       organizationId: ws.organizationId, url: "https://example.com/optogenetics", note: "从因果研究工具的角度讲，别写成读心术",
       intent: "auto_draft", platforms: ["wechat_official"], key: "e2e-capture-0001",
@@ -34,17 +34,17 @@ describe("quick capture -> auto draft -> pending_review (PGlite + fake LLM)", ()
     expect(results.every((r) => r.outcome?.status === "pending_review")).toBe(true)
 
     const seen = await db.asUser(ws.viewerId, async (tx) => {
-      const jobs = await tx.query<{ id: string; status: string; target_id: string }>(
-        "select id, status, payload->'target'->>'id' as target_id from public.agent_jobs where payload->>'intake_event_id'=$1", [capture.event_id])
+      const jobs = await tx.query<{ id: string; status: string; target_id: string; result: Record<string, unknown> }>(
+        "select id, status, payload->'target'->>'id' as target_id, result from public.agent_jobs where payload->>'intake_event_id'=$1", [capture.event_id])
       const steps = await tx.query<{ job_id: string; round: number; step_kind: string; status: string; evaluation: { criteria?: unknown[] } | null }>(
         "select job_id, (output->>'round')::int as round, case when kind = 'check' then output->>'stage' else kind end as step_kind, status, output->'evaluation' as evaluation from public.agent_job_steps where job_id = any($1) order by job_id, seq", [jobs.rows.map((j) => j.id)])
-      const proposals = await tx.query<{ agent_job_id: string; document_id: string; status: string }>(
-        "select agent_job_id, document_id, status from public.content_ai_proposals where agent_job_id = any($1)", [jobs.rows.map((j) => j.id)])
-      return { jobs: jobs.rows, steps: steps.rows, proposals: proposals.rows }
+      const docs = await tx.query<{ id: string; platform: string; revision: number; status: string; body: string }>(
+        "select id, platform, revision, status, body from public.content_documents where work_item_id=$1", [capture.work_item_id])
+      return { jobs: jobs.rows, steps: steps.rows, docs: docs.rows }
     })
-    expect(seen.jobs.every((j) => j.status === "pending_review")).toBe(true)
-    expect(seen.proposals).toHaveLength(2)
-    expect(seen.proposals.every((p) => p.status === "succeeded")).toBe(true)
+    expect(seen.jobs.every((j) => j.status === "pending_review" && j.result?.written_revision === 2)).toBe(true)
+    expect(seen.docs).toHaveLength(2)
+    expect(seen.docs.every((d) => d.revision === 2 && d.status === "draft" && d.body.length > 50)).toBe(true)
     for (const job of seen.jobs) {
       const kinds = seen.steps.filter((s) => s.job_id === job.id).map((s) => `${s.round}:${s.step_kind}:${s.status}`)
       expect(kinds).toContain("0:fetch:succeeded")

@@ -11,9 +11,8 @@ import { Card, CardContent } from "@/components/ui/card"
 import { Empty, EmptyContent, EmptyDescription, EmptyHeader, EmptyMedia, EmptyTitle } from "@/components/ui/empty"
 import { NativeSelect, NativeSelectOption } from "@/components/ui/native-select"
 import { Skeleton } from "@/components/ui/skeleton"
-import { PublishPlanPanel } from "@/components/video-studio/publish-plan-panel"
 import { ShotCard } from "@/components/video-studio/shot-card"
-import { ApprovalPanel, CostLedgerPanel, type OutlineInput, OutlineSheet, ProposalPanel, TimelinePanel } from "@/components/video-studio/studio-panels"
+import { ApprovalPanel, EstimatePanel, type OutlineInput, OutlineSheet, StoryboardJobsPanel, TimelinePanel } from "@/components/video-studio/studio-panels"
 import {
   estimateShotCostCents,
   estimateVideoJob,
@@ -25,28 +24,21 @@ import {
 import { useAuth } from "@/features/auth/auth-context"
 import { decideApprovalRequest } from "@/services/agent-job-service"
 import { getImageAssetOptions } from "@/services/asset-service"
-import { videoPublishEligibility } from "@/lib/video-publish-plan"
-import { listChannels, listDocuments, planPublication } from "@/services/content-service"
 import { getContentWorkspace } from "@/services/content-workspace-service"
 import {
-  acceptStoryboardProposal,
   addVideoShot,
   currentApproval,
   deleteVideoShot,
   enqueueStoryboardJob,
   enqueueVideoJob,
   getCanApproveVideoRender,
-  getPlanCostSummary,
   getVideoAssetUrls,
   listPlanApprovals,
-  listPlanCostEntries,
   listPlanJobs,
   listStoryboardJobs,
-  listStoryboardProposals,
   listVideoPlans,
   listVideoShots,
   moveShotOrder,
-  rejectStoryboardProposal,
   reorderVideoShots,
   requestVideoRenderApproval,
   updateVideoShot,
@@ -78,7 +70,6 @@ export function StoryboardsPage() {
     queryKey: [KEY, "storyboard-jobs", organizationId], queryFn: () => listStoryboardJobs(organizationId!), enabled,
     refetchInterval: (q) => (q.state.data?.some((j) => ACTIVE.has(j.status)) ? 4000 : false),
   })
-  const proposals = useQuery({ queryKey: [KEY, "proposals", organizationId, storyboardJobs.dataUpdatedAt], queryFn: () => listStoryboardProposals(organizationId!), enabled })
 
   const planId = selectedPlanId ?? plans.data?.[0]?.id ?? null
   const plan = plans.data?.find((p) => p.id === planId) ?? null
@@ -90,8 +81,6 @@ export function StoryboardsPage() {
   const tick = jobs.dataUpdatedAt
   const shots = useQuery({ queryKey: [KEY, "shots", planId, tick], queryFn: () => listVideoShots(planId!), enabled: planEnabled })
   const approvals = useQuery({ queryKey: [KEY, "approvals", planId, plan?.revision], queryFn: () => listPlanApprovals(planId!), enabled: planEnabled })
-  const summary = useQuery({ queryKey: [KEY, "summary", planId, tick, plan?.revision], queryFn: () => getPlanCostSummary(planId!), enabled: planEnabled })
-  const entries = useQuery({ queryKey: [KEY, "entries", planId, tick], queryFn: () => listPlanCostEntries(planId!), enabled: planEnabled })
 
   const shotList = useMemo(() => shots.data ?? [], [shots.data])
   const assetIds = useMemo(() => [
@@ -101,8 +90,6 @@ export function StoryboardsPage() {
   const media = useQuery({ queryKey: [KEY, "media", assetIds.join(",")], queryFn: () => getVideoAssetUrls(assetIds), enabled: assetIds.length > 0, staleTime: 5 * 60_000 })
   const keyframeOptions = useQuery({ queryKey: [KEY, "keyframe-options", organizationId], queryFn: () => getImageAssetOptions(organizationId!), enabled })
 
-  const docs = useQuery({ queryKey: [KEY, "publish-docs", organizationId], queryFn: () => listDocuments(organizationId!), enabled: enabled && Boolean(plan?.composedVideoAssetId) })
-  const channelList = useQuery({ queryKey: [KEY, "publish-channels", organizationId], queryFn: () => listChannels(organizationId!), enabled: enabled && Boolean(plan?.composedVideoAssetId) })
 
   const refresh = () => queryClient.invalidateQueries({ queryKey: [KEY] })
   const run = useMutation({
@@ -144,14 +131,14 @@ export function StoryboardsPage() {
     act(async () => {
       await enqueueStoryboardJob({ organizationId, outline: input.outline, aspectRatio: input.aspectRatio, targetSeconds: input.targetSeconds, style: input.style, defaultVoice: input.defaultVoice })
       setOutlineOpen(false)
-    }, "拆解任务已排队，Agent 完成后会在此显示提案")
+    }, "拆解任务已排队，Agent 完成后会直接生成分镜草稿")
   }
 
   const header = (
     <PageHeader
       eyebrow="Video studio"
       title="分镜工作台"
-      description="大纲拆解为分镜提案，采纳后逐镜编辑台词、音色与运镜；付费渲染需人工批准，本地运镜与试听免费。"
+      description="Agent 把大纲拆解为分镜草稿，你逐镜编辑台词、音色与运镜；付费渲染需人工批准，本地运镜与试听免费。"
       actions={canManage ? <Button onClick={() => setOutlineOpen(true)}><WandSparklesIcon />从大纲开始</Button> : undefined}
     />
   )
@@ -167,13 +154,12 @@ export function StoryboardsPage() {
       {header}
       <OutlineSheet open={outlineOpen} onOpenChange={setOutlineOpen} onSubmit={onOutline} busy={run.isPending} />
 
-      <ProposalPanel
-        proposals={proposals.data ?? []}
+      <StoryboardJobsPanel
         jobs={storyboardJobs.data ?? []}
-        canManage={canManage}
-        busy={run.isPending}
-        onAccept={(id) => act(async () => setSelectedPlanId(await acceptStoryboardProposal(id)), "已采纳为正式分镜")}
-        onReject={(id, reason) => act(() => rejectStoryboardProposal(id, reason), "已退回提案")}
+        onOpenPlan={(id) => {
+          setSelectedPlanId(id)
+          void queryClient.invalidateQueries({ queryKey: [KEY, "plans"] })
+        }}
       />
 
       {!plan ? (
@@ -261,17 +247,7 @@ export function StoryboardsPage() {
             onCompose={() => enqueue("video_compose", null, "全片合成")}
           />
 
-          <PublishPlanPanel
-            eligibility={videoPublishEligibility({ projectId: plan.projectId, composedVideoAssetId: plan.composedVideoAssetId, documents: docs.data ?? [], channels: channelList.data ?? [] })}
-            canPublish={Boolean(workspace.data?.canPublish)}
-            busy={run.isPending}
-            onPlan={({ documentId, channelId, scheduledAt }) => {
-              const document = docs.data?.find((d) => d.id === documentId)
-              if (document) act(() => planPublication(document, channelId, scheduledAt, plan.composedVideoAssetId), "已加入发布计划，可在发布管理中查看")
-            }}
-          />
-
-          <CostLedgerPanel summary={summary.data ?? null} entries={entries.data ?? []} jobs={jobs.data ?? []} />
+          <EstimatePanel estimate={estimateVideoJob("video_compose", shotList, plan.ttsProvider)} shots={shotList} jobs={jobs.data ?? []} />
         </>
       )}
     </div>

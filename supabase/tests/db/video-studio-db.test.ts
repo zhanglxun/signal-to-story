@@ -27,7 +27,7 @@ const enqueue = (userId: string, planId: string, jobType: string, shotId: string
 const requestApproval = (userId: string, planId: string, rerender: string[] = []) =>
   db.asUser(userId, async (tx) =>
     (await tx.query<{ id: string; status: string; estimated_cost_cents: number; target_revision: number }>(
-      "select * from public.request_video_render_approval($1,$2)", [planId, rerender]
+      "select id, status, target_revision, (payload->>'estimated_cost_cents')::int as estimated_cost_cents from public.request_video_render_approval($1,$2)", [planId, rerender]
     )).rows[0]
   )
 
@@ -124,10 +124,11 @@ describe("video studio schema (PGlite)", () => {
     expect(shots.map((s) => s.render_status)).toEqual(["failed", "pending"])
   })
 
-  it("locks shot edits while rendering and sums the cost ledger", async () => {
+  it("locks shot edits while rendering; the approved estimate lives in the approval payload", async () => {
     await cancelQueued()
     const { planId, shotIds } = await createPlanWithShots(db, ws, [{ motion_mode: "cloud_video_model" }, {}])
     const approval = await requestApproval(ws.ownerId, planId)
+    expect(approval.estimated_cost_cents).toBe(35)
     await decide(ws.ownerId, approval.id)
     const job = await enqueue(ws.ownerId, planId, "video_shot_render", shotIds[0], approval.id)
     const claimed = await db.asServiceRole(async (tx) => (await tx.query<{ id: string; lease_epoch: number }>("select * from public.claim_agent_job($1,$2)", [["video_shot_render"], 60])).rows)
@@ -135,60 +136,47 @@ describe("video studio schema (PGlite)", () => {
     await db.asServiceRole((tx) => tx.query("update public.video_shots set render_status='rendering' where id=$1", [shotIds[0]]))
     await expect(db.asUser(ws.ownerId, (tx) => tx.query("update public.video_shots set narration='锁定中' where id=$1", [shotIds[1]]))).rejects.toThrow(/锁定/)
     await db.asServiceRole(async (tx) => {
-      await tx.query(
-        "insert into public.video_cost_entries(organization_id, plan_id, shot_id, agent_job_id, kind, provider, estimated_cents, actual_cents) values ($1,$2,$3,$4,'shot_render','wanx',35,35)",
-        [ws.organizationId, planId, shotIds[0], job.id]
-      )
       await tx.query("update public.video_shots set render_status='rendered' where id=$1", [shotIds[0]])
-      await tx.query("select public.complete_agent_job($1,$2,'succeeded','{}'::jsonb,null,null)", [job.id, claimed[0].lease_epoch])
+      await tx.query(`select public.complete_agent_job($1,$2,'succeeded','{"cost_cents":35}'::jsonb,null,null)`, [job.id, claimed[0].lease_epoch])
     })
-    await expect(db.asServiceRole((tx) => tx.query(
-      "insert into public.video_cost_entries(organization_id, plan_id, shot_id, agent_job_id, kind, provider, actual_cents) values ($1,$2,$3,$4,'shot_render','wanx',35)",
-      [ws.organizationId, planId, shotIds[0], job.id]
-    ))).rejects.toThrow(/duplicate|unique/)
-    const summary = await db.asUser(ws.viewerId, async (tx) => (await tx.query<{ estimated_cents: string; actual_cents: string; rendered_count: number }>("select * from public.video_plan_cost_summary where plan_id=$1", [planId])).rows[0])
-    expect(Number(summary.estimated_cents)).toBe(35)
-    expect(Number(summary.actual_cents)).toBe(35)
-    expect(summary.rendered_count).toBe(1)
-    const shot = await db.asUser(ws.viewerId, async (tx) => (await tx.query<{ actual_cost_cents: string }>("select actual_cost_cents from public.video_shots where id=$1", [shotIds[0]])).rows[0])
-    expect(Number(shot.actual_cost_cents)).toBe(35)
+    // No ledger: the actual cost is in the job result; the shot carries only render state.
+    const view = await db.asUser(ws.viewerId, async (tx) => ({
+      job: (await tx.query<{ cost: string }>("select result->>'cost_cents' as cost from public.agent_jobs where id=$1", [job.id])).rows[0],
+      shot: (await tx.query<Record<string, unknown>>("select * from public.video_shots where id=$1", [shotIds[0]])).rows[0],
+    }))
+    expect(Number(view.job.cost)).toBe(35)
+    expect(view.shot.render_status).toBe("rendered")
+    expect(view.shot).not.toHaveProperty("actual_cost_cents")
     // Unlocked again.
     await db.asUser(ws.ownerId, (tx) => tx.query("update public.video_shots set narration='解锁' where id=$1", [shotIds[1]]))
   })
 
-  it("storyboard proposals only become formal plans through human acceptance", async () => {
-    const job = await db.asUser(ws.memberId, async (tx) => (await tx.query<{ id: string; kind: string }>(
-      "select * from public.enqueue_video_storyboard_job($1,$2,$3)", [ws.organizationId, "一只猫在月球上开面包店的 30 秒故事。", { target_seconds: 20 }]
+  it("the storyboard job writes a draft plan directly, once, on its own card", async () => {
+    const card = await db.asUser(ws.memberId, async (tx) => (await tx.query<{ id: string }>("insert into public.work_items(organization_id,kind,title) values ($1,'video','月球面包店') returning id", [ws.organizationId])).rows[0].id)
+    const job = await db.asUser(ws.memberId, async (tx) => (await tx.query<{ id: string; kind: string; work_item_id: string }>(
+      "select * from public.enqueue_video_storyboard_job($1,$2,$3,$4)", [ws.organizationId, "一只猫在月球上开面包店的 30 秒故事。", { target_seconds: 20 }, card]
     )).rows[0])
-    expect(job.kind).toBe("video_storyboard")
-    await db.asServiceRole(async (tx) => {
-      const c = await tx.query<{ lease_epoch: number }>("select * from public.claim_agent_job(array['video_storyboard'], 60)")
-      const epoch = c.rows[0].lease_epoch
-      await tx.query(`select public.record_agent_job_step($1,$2,'generate','succeeded','{"round":1}'::jsonb,'{"cost_cents":0.6,"driver":"fake","model":"fake-model"}'::jsonb)`, [job.id, epoch])
-      await tx.query(
-        "insert into public.video_storyboard_proposals(organization_id, agent_job_id, input_outline, proposal, model) values ($1,$2,'outline',$3,'fake')",
-        [ws.organizationId, job.id, { schema_version: 1, title: "月球面包店", aspect_ratio: "9:16", target_seconds: 20, shots: [{ narration: "月球上飘来面包香！", target_duration_ms: 3000 }, { narration: "猫店长开张了。", motion_mode: "cloud_video_model" }] }]
-      )
-      await tx.query("select public.complete_agent_job($1,$2,'pending_review','{}'::jsonb,null,null)", [job.id, epoch])
-    })
-    // Service role cannot accept, and cannot create plans.
+    expect(job).toMatchObject({ kind: "video_storyboard", work_item_id: card })
+    const draft = { schema_version: 1, title: "月球面包店", aspect_ratio: "9:16", target_seconds: 20, shots: [{ narration: "月球上飘来面包香！", target_duration_ms: 3000 }, { narration: "猫店长开张了。", motion_mode: "cloud_video_model" }] }
+    // Service role still cannot insert plans directly; it can only go through write_video_draft for a running job.
     await expect(db.asServiceRole((tx) => tx.query("insert into public.video_plans(organization_id,title,created_by) values ($1,'x',$2)", [ws.organizationId, ws.ownerId]))).rejects.toThrow(/permission denied/)
-    const proposal = await db.asUser(ws.viewerId, async (tx) => (await tx.query<{ id: string; status: string }>("select id, status from public.video_storyboard_proposals where agent_job_id=$1", [job.id])).rows[0])
-    expect(proposal.status).toBe("pending")
-    await expect(db.asUser(ws.viewerId, (tx) => tx.query("select public.accept_video_storyboard_proposal($1)", [proposal.id]))).rejects.toThrow(/没有权限/)
-    const planId = await db.asUser(ws.memberId, async (tx) => (await tx.query<{ id: string }>("select public.accept_video_storyboard_proposal($1) as id", [proposal.id])).rows[0].id)
-    const state = await db.asPostgres(async (tx) => ({
-      plan: (await tx.query<{ revision: number; title: string }>("select revision, title from public.video_plans where id=$1", [planId])).rows[0],
+    await expect(db.asServiceRole((tx) => tx.query("select public.write_video_draft($1,1,$2)", [job.id, draft]))).rejects.toThrow(/未在运行/)
+    const epoch = await db.asServiceRole(async (tx) => (await tx.query<{ lease_epoch: number }>("select * from public.claim_agent_job(array['video_storyboard'], 60)")).rows[0].lease_epoch)
+    await expect(db.asServiceRole((tx) => tx.query("select public.write_video_draft($1,$2,$3)", [job.id, Number(epoch) + 1, draft]))).rejects.toThrow(/租约/)
+    const planId = await db.asServiceRole(async (tx) => (await tx.query<{ id: string }>("select public.write_video_draft($1,$2,$3) as id", [job.id, epoch, draft])).rows[0].id)
+    const again = await db.asServiceRole(async (tx) => {
+      const epoch = (await tx.query<{ lease_epoch: number }>("select lease_epoch from public.agent_jobs where id=$1", [job.id])).rows[0].lease_epoch
+      return (await tx.query<{ id: string }>("select public.write_video_draft($1,$2,$3) as id", [job.id, epoch, draft])).rows[0].id
+    })
+    expect(again).toBe(planId) // idempotent per job
+    const state = await db.asUser(ws.viewerId, async (tx) => ({
+      plan: (await tx.query<{ revision: number; title: string; status: string; work_item_id: string; created_by: string }>("select revision, title, status, work_item_id, created_by from public.video_plans where id=$1", [planId])).rows[0],
       shots: (await tx.query<{ position: number; motion_mode: string }>("select position, motion_mode from public.video_shots where plan_id=$1 order by position", [planId])).rows,
-      job: (await tx.query<{ status: string }>("select status from public.agent_jobs where id=$1", [job.id])).rows[0],
-      ledger: (await tx.query<{ provider: string; actual_cents: string; metadata: { model: string } }>("select provider, actual_cents, metadata from public.video_cost_entries where agent_job_id=$1", [job.id])).rows,
+      job: (await tx.query<{ plan_id: string }>("select result->>'plan_id' as plan_id from public.agent_jobs where id=$1", [job.id])).rows[0],
     }))
-    // the LLM cost of the storyboard comes from the job's steps (no job-level cost column any more)
-    expect(state.ledger.map((l) => [l.provider, Number(l.actual_cents), l.metadata.model])).toEqual([["fake", 0.6, "fake-model"]])
-    expect(state.plan).toEqual({ revision: 1, title: "月球面包店" })
+    expect(state.plan).toEqual({ revision: 1, title: "月球面包店", status: "draft", work_item_id: card, created_by: ws.memberId })
     expect(state.shots.map((s) => s.motion_mode)).toEqual(["local_ken_burns", "cloud_video_model"])
-    expect(state.job.status).toBe("succeeded")
-    await expect(db.asUser(ws.memberId, (tx) => tx.query("select public.accept_video_storyboard_proposal($1)", [proposal.id]))).rejects.toThrow(/已处理/)
+    expect(state.job.plan_id).toBe(planId)
   })
 
   it("SQL acceptance script passes", async () => {

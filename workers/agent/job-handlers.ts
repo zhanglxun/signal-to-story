@@ -17,7 +17,8 @@ export interface JobHandlerOutcome {
   reason: string
   roundsExecuted: number
   costCents: number
-  proposalId: string | null
+  /** Draft plan written by a video_storyboard job. */
+  planId?: string | null
 }
 
 /**

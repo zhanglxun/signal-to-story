@@ -9,7 +9,8 @@ describe("schema audit page data", () => {
     expect(data.missing).toEqual([])
     const tables = data.categories.flatMap((c) => c.tables)
     expect(tables.find((t) => t.name === "approval_requests")?.columns.map((c) => c.name)).toContain("question")
-    expect(tables.filter((t) => t.draft).map((t) => t.name)).toContain("chat_sessions")
+    expect(tables.find((t) => t.name === "chat_sessions")?.draft).toBeFalsy()
+    expect(tables.map((t) => t.name)).not.toContain("signals")
     expect(tables.find((t) => t.name === "runner_nodes")?.draft).toBeFalsy()
   })
 

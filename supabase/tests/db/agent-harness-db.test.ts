@@ -23,8 +23,8 @@ async function expectDenied(promise: Promise<unknown>, pattern?: RegExp) {
 
 async function createDocument(userId: string, organizationId: string) {
   return db.asUser(userId, async (tx) => {
-    const p = await tx.query<{ id: string }>("insert into public.content_projects(organization_id,title) values($1,'P') returning id", [organizationId])
-    const d = await tx.query<{ id: string }>("insert into public.content_documents(organization_id,project_id,platform,title,body) values($1,$2,'x','T','B') returning id", [organizationId, p.rows[0].id])
+    const p = await tx.query<{ id: string }>("insert into public.work_items(organization_id,title) values($1,'P') returning id", [organizationId])
+    const d = await tx.query<{ id: string }>("insert into public.content_documents(organization_id,work_item_id,platform,title,body) values($1,$2,'x','T','B') returning id", [organizationId, p.rows[0].id])
     return d.rows[0].id
   })
 }
@@ -59,7 +59,7 @@ describe("PGlite harness applies the full migration history", () => {
     expect(db.appliedMigrations).toContain("20261115100200_approval_requests_mandate.sql")
   })
 
-  it.each(["cloud_content_mvp.sql", "intake_gateway.sql", "agent_harness_kernel.sql"])("SQL acceptance script %s passes", async (file) => {
+  it.each(["intake_gateway.sql", "agent_harness_kernel.sql"])("SQL acceptance script %s passes", async (file) => {
     await expect(runSqlAcceptanceScript(db, file)).resolves.toBeDefined()
   })
 })
@@ -79,8 +79,11 @@ describe("agent_jobs RLS and queue RPCs", () => {
 
   it("never hands the same job to two concurrent workers", async () => {
     const org = await seedOrganization(db, { members: [{ role: "owner" }] })
-    const doc = await createDocument(org.members.owner, org.organizationId)
-    for (let i = 0; i < 5; i++) await enqueue(org.members.owner, org.organizationId, doc, `conc-${i}`)
+    // One card per job: a card runs at most one non-chat job at a time (agent_jobs_one_running_per_item).
+    for (let i = 0; i < 5; i++) {
+      const doc = await createDocument(org.members.owner, org.organizationId)
+      await enqueue(org.members.owner, org.organizationId, doc, `conc-${i}`)
+    }
     const claims = await Promise.all(
       Array.from({ length: 8 }, () =>
         db.asServiceRole((tx) => tx.query<{ id: string; organization_id: string }>("select id, organization_id from public.claim_agent_job(array['content_draft'], 60)"))
@@ -221,39 +224,5 @@ describe("Mandate approvals", () => {
     expect(job.rows[0]).toMatchObject({ status: "blocked_needs_human", error_code: "mandate_invalid" })
     // and an expired approval cannot be re-approved
     await expectDenied(db.asUser(org.members.owner, (tx) => tx.query("select public.decide_approval_request($1,'approved','again')", [approvalId])), /已处理/)
-  })
-
-  it("keeps the existing human publication gate: service_role cannot record publications", async () => {
-    const { org, doc } = await setup()
-    const channel = await db.asUser(org.members.owner, (tx) => tx.query<{ id: string }>("insert into public.publishing_channels(organization_id,platform,name) values($1,'x','acct') returning id", [org.organizationId]))
-    await expectDenied(
-      db.asServiceRole((tx) => tx.query("insert into public.content_publications(organization_id,document_id,revision,channel_id,scheduled_at) values($1,$2,1,$3,now())", [org.organizationId, doc, channel.rows[0].id])),
-      /登录|permission/
-    )
-  })
-})
-
-describe("knowledge_entries and decision_memories", () => {
-  it("keeps imports unreviewed, needs a reviewer to trust, and agents are read-only", async () => {
-    const org = await seedOrganization(db, { members: [{ role: "owner" }, { role: "member" }] })
-    const inserted = await db.asUser(org.members.member, (tx) =>
-      tx.query<{ id: string; trust_level: string }>("insert into public.knowledge_entries(organization_id,slug,title,content,trust_level) values($1,'note','N','<b>raw</b>','unreviewed') returning id, trust_level", [org.organizationId])
-    )
-    expect(inserted.rows[0].trust_level).toBe("unreviewed")
-    await expectDenied(db.asUser(org.members.member, (tx) => tx.query("insert into public.knowledge_entries(organization_id,slug,title,content,trust_level) values($1,'sneaky','S','x','trusted')", [org.organizationId])), /审核者/)
-    await db.asUser(org.members.owner, (tx) => tx.query("update public.knowledge_entries set trust_level='trusted' where id=$1", [inserted.rows[0].id]))
-    const trusted = await db.asServiceRole((tx) => tx.query<{ trust_level: string; reviewed_by: string }>("select trust_level, reviewed_by from public.knowledge_entries where id=$1", [inserted.rows[0].id]))
-    expect(trusted.rows[0]).toMatchObject({ trust_level: "trusted", reviewed_by: org.members.owner })
-    await expectDenied(db.asServiceRole((tx) => tx.query("update public.knowledge_entries set content='agent edit' where id=$1", [inserted.rows[0].id])), /permission denied/)
-    await expectDenied(db.asServiceRole((tx) => tx.query("insert into public.decision_memories(organization_id,kind,summary,created_by) values($1,'style_rule','x',$2)", [org.organizationId, org.members.owner])), /permission denied/)
-  })
-
-  it("seed SQL loads repository knowledge as trusted for every organization", async () => {
-    const { readFileSync } = await import("node:fs")
-    const { GENERATED_SQL } = await import("../../../sense-console/scripts/knowledge-seed")
-    await db.db.exec(readFileSync(GENERATED_SQL, "utf8"))
-    const rows = await db.asPostgres((tx) => tx.query<{ n: number }>("select count(*)::int n from public.knowledge_entries where slug='text-content-sop' and trust_level='trusted' and source_path like 'knowledge-base/%'"))
-    const orgs = await db.asPostgres((tx) => tx.query<{ n: number }>("select count(*)::int n from public.organizations"))
-    expect(rows.rows[0].n).toBe(orgs.rows[0].n)
   })
 })

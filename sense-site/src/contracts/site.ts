@@ -1,12 +1,7 @@
-// Reader-facing contracts. These mirror the safe column sets exposed by
-// supabase/migrations/20261116100000_create_site_publishing.sql.
-// Nothing here carries back-office identifiers (organization, source document).
-
-export const accessLevels = {
-  public: "公开",
-  registered: "注册可读",
-} as const
-export type AccessLevel = keyof typeof accessLevels
+// Reader-facing contracts. These mirror the published columns that anon may read on
+// public.content_documents (supabase/migrations/20261126100000_publish_on_documents.sql):
+// id, slug, published_revision, published_title, published_body, published_meta, published_at.
+// Nothing here carries back-office state (drafts, review notes, authors).
 
 export const entryFormats = {
   article: "文章",
@@ -17,28 +12,9 @@ export const entryFormats = {
 } as const
 export type EntryFormat = keyof typeof entryFormats
 
-export const entryColumns = {
-  news: "资讯",
-  analysis: "分析",
-  how_to: "实操",
-  case: "案例",
-} as const
-export type EntryColumn = keyof typeof entryColumns
-
 export type SiteInfo = {
-  id: string
-  slug: string
   name: string
   description: string
-  base_url: string
-}
-
-export type SiteCategory = {
-  id: string
-  slug: string
-  name: string
-  description: string
-  sort_order: number
 }
 
 /** Safe card metadata; never contains the body. */
@@ -47,16 +23,12 @@ export type SiteEntry = {
   slug: string
   title: string
   summary: string
-  category_id: string | null
   format: EntryFormat
-  column_key: EntryColumn | null
   cover_url: string
   cover_alt: string
-  access_level: AccessLevel
-  current_release_id: string
-  current_version: number
+  /** The approved document revision this snapshot was copied from. */
+  revision: number
   published_at: string
-  updated_at: string
 }
 
 export type SiteMedia = {
@@ -74,53 +46,13 @@ export type SiteEntryBody = {
   source_refs: SourceRef[]
 }
 
-/** Body is null when the reader is not allowed to read it (locked) — never a partial body. */
-export type EntryReadResult =
-  | { state: "readable"; body: SiteEntryBody }
-  | { state: "locked"; reason: "login_required" | "verification_required" }
-
-export type SiteTopic = {
-  id: string
-  slug: string
-  title: string
-  description: string
-  cover_url: string
-  cover_alt: string
-  sort_order: number
-  entry_count: number
-}
-
-export type SiteResource = {
-  id: string
-  entry_id: string | null
-  title: string
-  description: string
-  file_name: string
-  mime_type: string
-  size_bytes: number | null
-  access_level: AccessLevel
-}
-
-export type ResourceDownload =
-  | { state: "granted"; url: string; expiresInSeconds: number }
-  | { state: "denied"; reason: "login_required" | "verification_required" | "unavailable" }
-
 export type EntryQuery = {
-  category?: string
   format?: EntryFormat
-  column?: EntryColumn
   keyword?: string
   cursor?: string | null
   limit?: number
 }
 export type EntryPage = { items: SiteEntry[]; nextCursor: string | null }
-
-export type ReaderSession = {
-  userId: string
-  email: string
-  displayName: string
-  verified: boolean
-}
 
 export const DEFAULT_PAGE_SIZE = 12
 export const MAX_PAGE_SIZE = 50

@@ -20,8 +20,8 @@ begin
  -- Member enqueues a draft job (idempotent).
  perform set_config('request.jwt.claim.sub',member_id::text,true);
  set local role authenticated;
- insert into public.content_projects(organization_id,title) values(org,'Kernel test') returning id into project;
- insert into public.content_documents(organization_id,project_id,platform,title,body) values(org,project,'x','Doc','Body') returning id into doc;
+ insert into public.work_items(organization_id,title) values(org,'Kernel test') returning id into project;
+ insert into public.content_documents(organization_id,work_item_id,platform,title,body) values(org,project,'x','Doc','Body') returning id into doc;
  job:=public.enqueue_agent_job(org,'content_draft','k1',jsonb_build_object('instruction','write'),'content_document',doc::text,1);
  job2:=public.enqueue_agent_job(org,'content_draft','k1',jsonb_build_object('instruction','write'),'content_document',doc::text,1);
  assert job.id=job2.id and job.status='queued','enqueue not idempotent';
@@ -58,8 +58,6 @@ begin
  assert denied,'illegal transition pending_review -> running';
  set local role service_role;
  -- Agent cannot write governance data or approve.
- denied:=false; begin insert into public.knowledge_entries(organization_id,slug,title,content,trust_level) values(org,'agent-kb','x','x','trusted'); exception when insufficient_privilege then denied:=true; end;
- assert denied,'agent wrote knowledge';
  denied:=false; begin perform public.enqueue_agent_job(org,'publish_external','p0','{}','content_document',doc::text,1); exception when insufficient_privilege then denied:=true; end;
  assert denied,'service role used human enqueue';
  reset role;
@@ -105,25 +103,14 @@ begin
  assert (select status from public.agent_jobs where idempotency_key='p1' and organization_id=org)='blocked_needs_human','stale publish job not parked';
  reset role;
 
- -- Knowledge trust: member import stays unreviewed; only reviewer can trust; edits drop trust.
- perform set_config('request.jwt.claim.sub',member_id::text,true);
- set local role authenticated;
- insert into public.knowledge_entries(organization_id,slug,title,content) values(org,'imported','Imported','<script>x</script> raw') returning id into ke;
- assert (select trust_level='unreviewed' and content like '<script>%' from public.knowledge_entries where id=ke),'import not stored verbatim/unreviewed';
- denied:=false; begin update public.knowledge_entries set trust_level='trusted' where id=ke; exception when insufficient_privilege then denied:=true; end;
- assert denied,'member trusted knowledge';
- perform set_config('request.jwt.claim.sub',owner_id::text,true);
- update public.knowledge_entries set trust_level='trusted' where id=ke;
- assert (select trust_level='trusted' and reviewed_by=owner_id from public.knowledge_entries where id=ke),'reviewer could not trust';
- perform set_config('request.jwt.claim.sub',member_id::text,true);
- update public.knowledge_entries set content='edited' where id=ke;
- assert (select trust_level='unreviewed' and reviewed_by is null from public.knowledge_entries where id=ke),'edit kept trust';
  perform set_config('request.jwt.claim.sub',outsider::text,true);
- assert (select count(*) from public.knowledge_entries where organization_id=org)=0,'knowledge leaked across tenants';
+ set local role authenticated;
+ assert (select count(*) from public.agent_jobs where organization_id=org)=0,'jobs leaked across tenants';
+ reset role;
  set local role anon;
  denied:=false; begin perform 1 from public.agent_jobs; exception when insufficient_privilege then denied:=true; end;
  assert denied,'anonymous job access';
  reset role;
 end $$;
 rollback;
-select 'PASS: enqueue idempotency, browser/agent write limits, claim exclusivity, lease epoch, state machine, mandate approval by permitted human only, revision expiry parks stale jobs, knowledge trust, tenant isolation' as result;
+select 'PASS: enqueue idempotency, browser/agent write limits, claim exclusivity, lease epoch, state machine, mandate approval by permitted human only, revision expiry parks stale jobs, tenant isolation' as result;

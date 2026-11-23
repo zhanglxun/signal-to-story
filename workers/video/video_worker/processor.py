@@ -1,4 +1,4 @@
-"""Claim one video_* job, run it through an engine, write assets / shot state / ledger, complete or fail."""
+"""Claim one video_* job, run it through an engine, write assets / shot state, complete or fail (cost goes into the job result)."""
 
 from __future__ import annotations
 
@@ -11,7 +11,7 @@ from pathlib import Path
 from typing import Any, Callable, Dict, List, Optional
 
 from .backend import Backend, BackendError
-from .contract import SCHEMA_VERSION, RENDER_JOB_TYPES, ContractError, align_shot_duration, job_from_row, validate_job, validate_result
+from .contract import SCHEMA_VERSION, RENDER_JOB_TYPES, ContractError, align_shot_duration, estimate_shot_cost_cents, job_from_row, validate_job, validate_result
 from .engines import EngineError, MediaResult, ShotSpec
 
 DEFAULT_BUCKET = "video-studio"
@@ -85,12 +85,12 @@ class JobRun:
         return asset_id
 
     def ledger(self, kind: str, shot_id: Optional[str], media: MediaResult, estimated: float) -> None:
+        # No cost ledger table in the MVP (docs/database.md R6): the actual cost is summed into result.cost_cents
+        # and each charge is logged; the human-approved estimate lives on the approval request.
         self.cost += media.cost_cents
-        self.backend.insert_cost_entry({
-            "organization_id": self.job["organization_id"], "plan_id": self.plan["id"], "shot_id": shot_id, "agent_job_id": self.job["id"], "kind": kind,
-            "provider": media.provider[:64], "estimated_cents": estimated, "actual_cents": media.cost_cents,
-            "metadata": {"engine": self.engine.name, "dry_run": self.engine.dry_run, "placeholder": media.placeholder},
-        })
+        if media.cost_cents or estimated:
+            _log(self.logger, "cost", job_id=self.job["id"], kind=kind, shot_id=shot_id, provider=media.provider[:64],
+                 estimated_cents=estimated, actual_cents=media.cost_cents)
 
     def load_plan(self) -> List[Dict[str, Any]]:
         plan = self.backend.get_plan(self.target["id"])
@@ -169,7 +169,8 @@ class JobRun:
         spec = self.spec(shot, audio.duration_ms if audio else None)
         keyframe = self.keyframe_for(shot, spec)
         self.check_lease()
-        estimated = float(shot.get("estimated_cost_cents") or 0)
+        estimated = estimate_shot_cost_cents(shot["motion_mode"], int(shot["target_duration_ms"]), shot.get("actual_duration_ms"), shot.get("narration") or "",
+                                             self.plan.get("tts_provider") or "edge_tts", include_tts=False, include_video=True)
         clip = self.engine.render_shot(spec, keyframe, self.work / f"shot_{spec.position:02d}")
         asset_id = self.store(clip, "shot_clip", shot["id"], f"镜头 {shot['position']}")
         self.ledger("shot_render", shot["id"], clip, estimated if shot["motion_mode"] == "cloud_video_model" else 0.0)

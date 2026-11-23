@@ -1,26 +1,141 @@
-import { useQuery } from '@tanstack/react-query'
-import { Link } from 'react-router'
-import { Card, CardHeader, CardTitle, CardContent } from '@/components/ui/card'
-import { Button } from '@/components/ui/button'
-import { platforms, type ContentDocument, type Platform } from '@/contracts/content'
-import type { WorkItem } from '@/contracts/work-item'
-import { buildTextHandoff, textHandoffMarkdown } from '@/contracts/content-handoff'
-import { listChannels } from '@/services/content-service'
-import { downloadText } from '@/hooks/use-content-action'
+import { useState } from "react"
+import { ChevronDownIcon, CopyIcon } from "lucide-react"
+import { toast } from "sonner"
 
-export function TextHandoff({ item, documents }: { item: WorkItem; documents: ContentDocument[] }) {
-  const channels = useQuery({ queryKey: ['cloud-content', item.organization_id, 'handoff-channels'], queryFn: () => listChannels(item.organization_id) })
-  const handoff = buildTextHandoff(item, documents, channels.data ?? [])
-  return <Card><CardHeader><CardTitle>文字发布演练与交接</CardTitle></CardHeader><CardContent className="space-y-3">
-    <p className="text-sm text-muted-foreground">检查已保存版本并导出演练包。不会发送帖子、代替人工审核或产生发布量与阅读量。</p>
-    {channels.isLoading ? <p>正在核对渠道…</p> : channels.error ? <p role="alert">渠道读取失败，请刷新重试。</p> : <>
-      {!handoff.checks.length && <p className="text-sm">先从母稿创建平台版本。</p>}
-      {handoff.checks.map(c => <p className="text-sm" key={c.document_id}>{platforms[c.platform as Platform]} · v{c.revision}：{c.next_action}{!c.channel_ids.length && ' · 真实账号待配置'}</p>)}
-      <details className="rounded-lg border p-3"><summary className="cursor-pointer text-sm font-medium">查看演练内容（可复制）</summary><pre className="mt-3 max-h-96 overflow-auto whitespace-pre-wrap text-sm">{textHandoffMarkdown(item, documents, channels.data ?? [])}</pre></details>
-      <div className="flex flex-wrap gap-2"><Button variant="outline" disabled={!documents.length} onClick={() => downloadText(`text-rehearsal-${item.id}.md`, textHandoffMarkdown(item, documents, channels.data ?? []))}>导出文字演练包</Button>
-        <Button variant="outline" disabled={!documents.length} onClick={() => downloadText(`text-handoff-${item.id}.json`, JSON.stringify(handoff, null, 2), 'application/json')}>导出流程交接 JSON</Button>
-        <Link className="self-center text-sm underline" to="/publishing/channels">配置发布账号</Link></div>
-    </>}
-    <p className="text-xs text-muted-foreground">正式发布后 24 / 48 小时复盘；实际发布时间回填后，发布记录会显示对应时间。没有数据时保留空值。</p>
-  </CardContent></Card>
+import { Button } from "@/components/ui/button"
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
+import {
+  Collapsible,
+  CollapsibleContent,
+  CollapsibleTrigger,
+} from "@/components/ui/collapsible"
+import { platforms, type ContentDocument, type Platform } from "@/contracts/content"
+import {
+  buildTextHandoff,
+  textHandoffMarkdown,
+} from "@/contracts/content-handoff"
+import type { WorkItem } from "@/contracts/work-item"
+import { downloadText } from "@/hooks/use-content-action"
+
+export function TextHandoff({
+  item,
+  documents,
+  embedded = false,
+}: {
+  item: WorkItem
+  documents: ContentDocument[]
+  embedded?: boolean
+}) {
+  const [open, setOpen] = useState(false)
+  const handoff = buildTextHandoff(item, documents)
+  const rehearsalMarkdown = textHandoffMarkdown(item, documents)
+
+  async function copyRehearsal() {
+    try {
+      await navigator.clipboard.writeText(rehearsalMarkdown)
+      toast.success("已复制演练包内容")
+    } catch {
+      toast.error("无法访问剪贴板，请使用导出功能")
+    }
+  }
+
+  const content = (
+    <div className="space-y-3">
+      <p className="text-sm text-muted-foreground">
+        检查已保存版本并导出演练包。不会发送帖子、代替人工审核或产生发布量与阅读量。
+      </p>
+      {(
+        <>
+          {!handoff.checks.length && (
+            <p className="text-sm text-muted-foreground">
+              先从母稿创建平台版本，即可生成对应渠道的演练包与交接清单。
+            </p>
+          )}
+          {handoff.checks.map((c) => (
+            <p className="text-sm" key={c.document_id}>
+              {platforms[c.platform as Platform]} · v{c.revision}：
+              {c.next_action}
+            </p>
+          ))}
+          <Collapsible
+            open={open}
+            onOpenChange={setOpen}
+            className="rounded-lg border p-3"
+          >
+            <div className="flex items-center justify-between gap-2">
+              <CollapsibleTrigger
+                render={
+                  <button
+                    type="button"
+                    className="inline-flex items-center gap-1.5 text-sm font-medium hover:underline"
+                  />
+                }
+              >
+                <ChevronDownIcon
+                  className={`size-4 transition-transform ${open ? "rotate-180" : ""}`}
+                />
+                查看演练内容（可复制）
+              </CollapsibleTrigger>
+              <Button
+                type="button"
+                variant="ghost"
+                size="sm"
+                disabled={!documents.length}
+                onClick={() => void copyRehearsal()}
+              >
+                <CopyIcon className="size-3.5" />
+                复制
+              </Button>
+            </div>
+            <CollapsibleContent>
+              <pre className="mt-3 max-h-96 overflow-auto whitespace-pre-wrap text-sm">
+                {rehearsalMarkdown}
+              </pre>
+            </CollapsibleContent>
+          </Collapsible>
+          <div className="flex flex-wrap items-center gap-2">
+            <Button
+              variant="outline"
+              disabled={!documents.length}
+              onClick={() =>
+                downloadText(
+                  `text-rehearsal-${item.id}.md`,
+                  rehearsalMarkdown
+                )
+              }
+            >
+              导出文字演练包
+            </Button>
+            <Button
+              variant="outline"
+              disabled={!documents.length}
+              onClick={() =>
+                downloadText(
+                  `text-handoff-${item.id}.json`,
+                  JSON.stringify(handoff, null, 2),
+                  "application/json"
+                )
+              }
+            >
+              导出流程交接 JSON
+            </Button>
+          </div>
+        </>
+      )}
+      <p className="text-xs text-muted-foreground">
+        人工发布到外部平台后，在稿件上回填发布链接即可；系统不抓取阅读数据。
+      </p>
+    </div>
+  )
+
+  if (embedded) return content
+
+  return (
+    <Card>
+      <CardHeader>
+        <CardTitle>文字发布演练与交接</CardTitle>
+      </CardHeader>
+      <CardContent>{content}</CardContent>
+    </Card>
+  )
 }

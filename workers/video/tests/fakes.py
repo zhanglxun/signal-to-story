@@ -17,7 +17,7 @@ def new_id():
 class MemoryBackend:
     def __init__(self, store_dir: Path):
         self.store_dir = store_dir
-        self.jobs, self.plans, self.shots, self.assets, self.ledger, self.calls = {}, {}, {}, {}, [], []
+        self.jobs, self.plans, self.shots, self.assets, self.calls = {}, {}, {}, {}, []
         self.cancel = False
         self.lease_ok = True
 
@@ -30,7 +30,7 @@ class MemoryBackend:
             sid = new_id()
             self.shots[sid] = {"id": sid, "plan_id": pid, "position": i + 1, "motion_mode": motion if i == 0 else "local_ken_burns", "camera_motion": "zoom_in",
                                "visual_prompt": "画面", "narration": f"第{i + 1}句旁白内容", "voice": None, "target_duration_ms": 3000, "actual_duration_ms": None,
-                               "keyframe_asset_id": None, "audio_asset_id": None, "video_asset_id": None, "render_status": "pending", "estimated_cost_cents": 35 if (i == 0 and motion != "local_ken_burns") else 0}
+                               "keyframe_asset_id": None, "audio_asset_id": None, "video_asset_id": None, "render_status": "pending"}
         return pid
 
     def add_job(self, job_type, plan_id, shot_id=None, revision=None, **over):
@@ -100,9 +100,6 @@ class MemoryBackend:
         aid = len(self.assets) + 1
         self.assets[aid] = {"id": aid, **row}
         return aid
-
-    def insert_cost_entry(self, row):
-        self.ledger.append(row)
 
     def upload(self, bucket, path, local_file, content_type):
         dest = self.store_dir / bucket / path

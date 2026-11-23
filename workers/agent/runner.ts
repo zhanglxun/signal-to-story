@@ -1,4 +1,4 @@
-import type { HarnessJob, JobStore } from "../../sense-console/src/harness/job-store"
+import { type HarnessJob, type JobStore, StaleRevisionError } from "../../sense-console/src/harness/job-store"
 import { LlmCallError, type LlmClient } from "../../sense-console/src/harness/llm"
 import { type HarnessEvent, type HarnessRunOutcome, LeaseLostError, runHarnessJob } from "../../sense-console/src/harness/loop-controller"
 import { type AgentQueueBackend, toHarnessJob } from "./backend"
@@ -52,7 +52,7 @@ export function createJobStore(backend: AgentQueueBackend, leaseEpoch: number, l
     listSteps: (jobId) => backend.listSteps(jobId),
     recordStep: (step) => backend.insertStep(step, leaseEpoch),
     heartbeat: (jobId) => backend.heartbeat(jobId, leaseEpoch, leaseSeconds),
-    saveProposal: (input) => backend.saveProposal(input),
+    writeDraft: (input) => backend.writeDraft(input),
     finish: (jobId, outcome) => backend.complete(jobId, leaseEpoch, outcome.status, outcome.result, outcome.error ?? null, outcome.errorCode ?? null),
   }
 }
@@ -92,7 +92,7 @@ export async function processNextJob(options: WorkerOptions): Promise<ProcessRes
     const handler = options.jobHandlers?.[job.kind]
     if (handler) {
       const handlerOutcome = await handler({ job, claimed, backend, leaseSeconds: lease, generator: options.generator, signal: options.signal })
-      log.info("job finished", { job_id: job.id, status: handlerOutcome.status, rounds: handlerOutcome.roundsExecuted, proposal_id: handlerOutcome.proposalId })
+      log.info("job finished", { job_id: job.id, status: handlerOutcome.status, rounds: handlerOutcome.roundsExecuted, plan_id: handlerOutcome.planId ?? null })
       return { processed: true, jobId: job.id, handlerOutcome }
     }
     if (job.kind !== "content_draft") {
@@ -111,7 +111,7 @@ export async function processNextJob(options: WorkerOptions): Promise<ProcessRes
       signal: options.signal,
       onEvent: (event) => options.onEvent?.(job, event),
     })
-    log.info("job finished", { job_id: job.id, status: outcome.status, rounds: outcome.roundsExecuted, proposal_id: outcome.proposalId })
+    log.info("job finished", { job_id: job.id, status: outcome.status, rounds: outcome.roundsExecuted, written_revision: outcome.writtenRevision })
     return { processed: true, jobId: job.id, outcome }
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error)
@@ -119,7 +119,7 @@ export async function processNextJob(options: WorkerOptions): Promise<ProcessRes
       log.warn("lease lost; stopping without writes", { job_id: job.id })
     } else if (options.signal?.aborted) {
       log.warn("shutdown during job; lease will expire and the job resumes from its last step", { job_id: job.id })
-    } else if (error instanceof StaleTargetError) {
+    } else if (error instanceof StaleTargetError || error instanceof StaleRevisionError) {
       await backend.complete(job.id, epoch, "failed", { termination_reason: message }, message, "stale_target")
     } else if (error instanceof LlmCallError) {
       // Billable failures are never retried automatically (same rule as content-draft).

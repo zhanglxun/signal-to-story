@@ -1,7 +1,7 @@
 /**
- * P3 acceptance demo (no network, no Supabase): `npm --prefix sense-console run demo:capture`
+ * P3 acceptance demo (no network, no Supabase): `npm run demo:capture`
  * PGlite + every migration -> quick_capture(auto_draft, link + note, 1 platform)
- * -> worker drains the queue (fake fetcher + fake LLM) -> pending_review proposals with evaluation records.
+ * -> worker drains the queue (fake fetcher + fake LLM) -> documents updated directly to v2 + pending_review.
  */
 import { createSupabaseTestDb } from "../../../testing/db/pglite-harness"
 import { drainQueue, fakeFetcher, quickCapture, seedCaptureWorkspace } from "./capture-scenario"
@@ -42,26 +42,28 @@ async function main() {
         s.stepKind === "fetch" ? `${(s.output as { title?: string })?.title ?? ""} ${s.error ?? ""}` :
         s.stepKind === "generate" ? `${s.driver} ${String((s.output as { draft?: string })?.draft ?? "").length} chars` :
         s.stepKind === "context" ? JSON.stringify(s.inputSummary) :
-        s.stepKind === "persist" ? `proposal ${(s.output as { proposalId?: string })?.proposalId}` :
+        s.stepKind === "persist" ? `document v${(s.output as { revision?: number })?.revision}` :
         `score=${ev?.score ?? "-"} ${ev?.revisionInstruction ? "→ " + ev.revisionInstruction.slice(0, 60) : ""}`
       console.log(`  ${job.id.slice(0, 8)} [round ${s.round}] ${s.stepKind.padEnd(8)} ${s.status.padEnd(9)} ${detail}`)
     },
   })
 
   const final = await db.asUser(ws.viewerId, async (tx) => {
-    const jobs = await tx.query<{ id: string; status: string }>(
-      "select id, status from public.agent_jobs where payload->>'intake_event_id'=$1", [capture.event_id])
+    const jobs = await tx.query<{ id: string; status: string; target_id: string }>(
+      "select id, status, payload->'target'->>'id' as target_id from public.agent_jobs where payload->>'intake_event_id'=$1", [capture.event_id])
     const usage = await readJobUsage(tx, jobs.rows.map((j) => j.id))
-    const proposals = await tx.query<{ id: string; agent_job_id: string }>("select id, agent_job_id from public.content_ai_proposals where agent_job_id = any($1)", [jobs.rows.map((j) => j.id)])
-    return { jobs: jobs.rows, usage, proposals: proposals.rows }
+    const docs = await tx.query<{ id: string; platform: string; revision: number; body: string }>(
+      "select id, platform, revision, body from public.content_documents where work_item_id=$1", [capture.work_item_id])
+    return { jobs: jobs.rows, usage, docs: docs.rows }
   })
   console.log("\nresult:")
   for (const j of final.jobs) {
-    const p = final.proposals.find((x) => x.agent_job_id === j.id)
-    console.log(`  job ${j.id.slice(0, 8)} status=${j.status} rounds=${final.usage[j.id].rounds} hops=${final.usage[j.id].hops} cost_cents=${final.usage[j.id].costCents} proposal=${p?.id ?? "none"}`)
+    const d = final.docs.find((x) => x.id === j.target_id)
+    console.log(`  job ${j.id.slice(0, 8)} status=${j.status} rounds=${final.usage[j.id].rounds} hops=${final.usage[j.id].hops} cost_cents=${final.usage[j.id].costCents} doc=${d?.platform}@v${d?.revision ?? "?"} (${d?.body.length ?? 0} chars)`)
   }
-  const ok = results.length === capture.documents.length && final.jobs.every((j) => j.status === "pending_review") && final.proposals.length === final.jobs.length && dup.duplicate
-  console.log(`\n${ok ? "PASS" : "FAIL"}: ${final.proposals.length}/${final.jobs.length} pending_review proposals`)
+  const ok = results.length === capture.documents.length && final.jobs.every((j) => j.status === "pending_review")
+    && final.docs.length === final.jobs.length && final.docs.every((d) => d.revision === 2 && d.body.trim().length > 0) && dup.duplicate
+  console.log(`\n${ok ? "PASS" : "FAIL"}: ${final.docs.filter((d) => d.revision === 2).length}/${final.jobs.length} direct draft writes (v2)`)
   await db.close()
   if (!ok) process.exitCode = 1
 }

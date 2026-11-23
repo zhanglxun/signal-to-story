@@ -21,7 +21,7 @@
 | `approval_requests` | 人工批准（`kind=approval`，绑定 `target_type / target_id / target_revision`）和 Agent 提问（`kind=question`） | 只读；写只能经 RPC | 只能经 RPC 创建 pending |
 | ~~`decision_memories`~~（MVP 不做，DB-D11） | 人工决定记忆；`platform` / `content_kind` 为空表示全局 | `content.manage` 可写 | 只读 |
 | ~~`knowledge_entries`~~（MVP 不做，worker 读 `knowledge-base/` 文件） | 知识原文 Markdown + `trust_level` | 可写；设为 `trusted` 需要 `content.review` | 只读 |
-| `content_ai_proposals.agent_job_id` | 提案追溯到任务 | 只读 | 写 |
+| ~~`content_ai_proposals`~~（DB2c-3 已退役） | 原先存放 AI 草案；现改为 `write_document_draft(base_revision)` 直接写 `content_documents` | 读 `content_documents`；经 `enqueue_agent_job` 入队 | 经 `node_write_document_draft` 写草稿 |
 
 **任务状态机**：
 
@@ -70,4 +70,4 @@ running → 租约过期 / 可重试失败 → queued
 2. 执行模式分为 `harness / agent_session / chat / video`。`agent_session` 为每个事项开一个可写目录，凭证不进子进程。
 3. ~~worker 改用受限的节点身份~~（DB2c-2 已完成）：agent worker 用控制台签发的节点令牌 + 公开 key 调 `node_*` RPC，不再持有 `service_role`；吊销即失效，只能认领本组织任务、只能写自己持有的任务（database.md 4.4、DB-D16）。视频 worker 留到 DB5。`lease_epoch` 已在 DB2c-1 加入，拒绝旧进程的迟到写入。
 4. 所有 CLI 调用都收进 `workers/agent/drivers`，删除 Vite 里的 spawn。
-5. 知识库种子：`knowledge-base/**/*.md` → `npm run kb:seed` 生成前端常量和 `supabase/seeds/knowledge_base.sql`，测试会校验两者同步。
+5. 知识库：`knowledge-base/**/*.md` 由 worker 直接读取（`workers/agent/knowledge.ts`，全部视为可信，经 git 审阅）；`npm run kb:seed` 只生成控制台只读展示用的常量，测试会校验同步。知识表与决定记忆表已在最终批次删除。

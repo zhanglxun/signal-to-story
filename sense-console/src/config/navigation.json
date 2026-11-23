@@ -99,31 +99,6 @@
               "label": "知识库",
               "path": "/content/knowledge",
               "icon": "BookOpen"
-            },
-            {
-              "id": "decision-memories",
-              "label": "决定记忆",
-              "path": "/content/memories",
-              "icon": "Brain"
-            }
-          ]
-        },
-        {
-          "id": "publishing-pages",
-          "label": "发布运营",
-          "icon": "ListTodo",
-          "items": [
-            {
-              "id": "publishing-plans",
-              "label": "发布计划与记录",
-              "path": "/publishing/plans",
-              "icon": "ListTodo"
-            },
-            {
-              "id": "publishing-channels",
-              "label": "渠道与账号",
-              "path": "/publishing/channels",
-              "icon": "Users"
             }
           ]
         }
@@ -189,18 +164,18 @@
     },
     {
       "id": "analytics",
-      "label": "数据复盘",
+      "label": "发布记录",
       "icon": "Gauge",
       "defaultPath": "/analytics",
       "groups": [
         {
           "id": "analytics-pages",
-          "label": "数据复盘",
+          "label": "发布记录",
           "icon": "Gauge",
           "items": [
             {
               "id": "content-analytics",
-              "label": "数据与复盘",
+              "label": "已发布稿件",
               "path": "/analytics",
               "icon": "Gauge"
             }

@@ -1,87 +1,609 @@
-import { useState } from 'react'
-import { useQuery } from '@tanstack/react-query'
-import { Button } from '@/components/ui/button'
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
-import { Input } from '@/components/ui/input'
-import { Textarea } from '@/components/ui/textarea'
-import { Badge } from '@/components/ui/badge'
-import { Alert, AlertDescription } from '@/components/ui/alert'
-import { canTransition, exportMarkdown, platforms, statusLabels, type ContentDocument, type DocumentStatus } from '@/contracts/content'
-import { documentHistory, reviewDocument, saveDocument, getAiProposals } from '@/services/content-service'
-import { enqueueContentDraftJob } from '@/services/agent-job-service'
-import { Link } from 'react-router'
-import { Field } from '@/components/content/content-common'
-import { downloadText, useContentAction } from '@/hooks/use-content-action'
-import { RememberDecisionField } from '@/components/decision-memory/remember-decision-field'
-import { buildDecisionMemoryInput, emptyRememberValue } from '@/lib/remember-decision'
-import { createDecisionMemory } from '@/services/decision-memory-service'
-import { toast } from 'sonner'
-import { ProposalJobLink } from '@/components/content/proposal-job-link'
-import { SitePublishPanel } from '@/components/content/site-publish-panel'
+import { useId, useState, type KeyboardEvent } from "react"
+import { useQueryClient } from "@tanstack/react-query"
+import {
+  CheckCircle2Icon,
+  Columns2Icon,
+  CopyIcon,
+  DownloadIcon,
+  EyeIcon,
+  Maximize2Icon,
+  PencilIcon,
+  SparklesIcon,
+} from "lucide-react"
+import { toast } from "sonner"
 
-export function DocumentEditor({ document, canEdit, canReview, canPublish = false }: { document: ContentDocument; canEdit: boolean; canReview: boolean; canPublish?: boolean }) {
-  const [base, setBase] = useState(document)
-  const [title, setTitle] = useState(document.title)
-  const [body, setBody] = useState(document.body)
-  const [note, setNote] = useState('')
-  const [remember, setRemember] = useState(emptyRememberValue)
-  const [instruction, setInstruction] = useState('根据项目 Brief 和当前稿件完善一份可审核的内容草案。')
+import { DocumentAiPanel } from "@/components/content/document-ai-panel"
+import { DocumentHistoryPanel } from "@/components/content/document-history-panel"
+import { MarkdownPreview } from "@/components/content/markdown-preview"
+import { SitePublishPanel } from "@/components/content/site-publish-panel"
+import { Alert, AlertDescription } from "@/components/ui/alert"
+import { Badge } from "@/components/ui/badge"
+import { Button } from "@/components/ui/button"
+import {
+  Card,
+  CardAction,
+  CardContent,
+  CardFooter,
+  CardHeader,
+  CardTitle,
+} from "@/components/ui/card"
+import {
+  Collapsible,
+  CollapsibleContent,
+  CollapsibleTrigger,
+} from "@/components/ui/collapsible"
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog"
+import { Field, FieldGroup, FieldLabel } from "@/components/ui/field"
+import { Input } from "@/components/ui/input"
+import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs"
+import { Textarea } from "@/components/ui/textarea"
+import {
+  canTransition,
+  exportMarkdown,
+  platforms,
+  statusLabels,
+  type ContentDocument,
+  type DocumentStatus,
+} from "@/contracts/content"
+import { downloadText, useContentAction } from "@/hooks/use-content-action"
+import { useDocumentDraftJobs } from "@/hooks/use-document-draft-jobs"
+import { shouldDefaultToPreview } from "@/lib/work-item-workflow"
+import {
+  approveDocumentDirectly,
+  reviewDocument,
+  saveDocument,
+} from "@/services/content-service"
+
+export type DocumentViewMode = "preview" | "edit" | "split"
+
+export function DocumentEditor({
+  document,
+  canEdit,
+  canReview,
+  canPublish = false,
+  hideSidePanels = false,
+  viewModeOverride,
+  onViewModeOverrideChange,
+  rejectOpen: controlledRejectOpen,
+  onRejectOpenChange: onControlledRejectOpenChange,
+  onDirtyChange,
+}: {
+  document: ContentDocument
+  canEdit: boolean
+  canReview: boolean
+  canPublish?: boolean
+  hideSidePanels?: boolean
+  viewModeOverride?: DocumentViewMode | null
+  onViewModeOverrideChange?: (mode: DocumentViewMode) => void
+  rejectOpen?: boolean
+  onRejectOpenChange?: (open: boolean) => void
+  onDirtyChange?: (dirty: boolean) => void
+}) {
+  const queryClient = useQueryClient()
+  const titleId = useId()
+  const bodyId = useId()
+  const noteId = useId()
+  const rejectNoteId = useId()
+
+  const [edits, setEdits] = useState<{
+    baseRevision: number
+    title: string
+    body: string
+  } | null>(null)
+  const [internalViewMode, setInternalViewMode] =
+    useState<DocumentViewMode | null>(null)
+  const [fullscreenOpen, setFullscreenOpen] = useState(false)
+  const [internalRejectOpen, setInternalRejectOpen] = useState(false)
+  const [noteOpen, setNoteOpen] = useState(false)
+  const [note, setNote] = useState("")
   const { busy, run } = useContentAction()
-  const history = useQuery({ queryKey: ['document-history', document.id], queryFn: () => documentHistory(document.id) })
-  // Drafting runs on the agent worker (queue mode); poll until the queued job's proposal shows up.
-  const [queuedJobId, setQueuedJobId] = useState<string | null>(null)
-  const proposals = useQuery({ queryKey: ['document-history', document.id, 'ai'], queryFn: () => getAiProposals(document.id), refetchInterval: query => query.state.data?.some(p => p.status === 'running') || (queuedJobId && !query.state.data?.some(p => p.agent_job_id === queuedJobId)) ? 5000 : false })
-  const waiting = Boolean(queuedJobId && !proposals.data?.some(p => p.agent_job_id === queuedJobId))
-  const dirty = title !== base.title || body !== base.body
-  const stale = base.revision !== document.revision || base.status !== document.status
-  async function transition(status: DocumentStatus) {
-    // Validate the optional memory first so a bad summary never leaves the review half-applied.
-    let memory = null
-    try {
-      memory = status === 'approved' || status === 'changes_requested'
-        ? buildDecisionMemoryInput(remember, { organizationId: base.organization_id, kind: status === 'approved' ? 'approved_preference' : 'rejected_pattern', quote: note, platform: base.platform, source: 'review_event', sourceRef: `document:${base.id}@v${base.revision}` })
-        : null
-    } catch (error) { toast.error(error instanceof Error ? error.message : '偏好摘要无效'); return }
-    const ok = await run(async () => { const updated = await reviewDocument(base, status, note); setBase(updated); setNote('') }, '审核状态已更新')
-    if (ok && memory) {
-      try { await createDecisionMemory(memory); setRemember(emptyRememberValue); toast.success('已记入长期创作偏好') }
-      catch (error) { toast.error(`审核已提交，但未能记入偏好：${error instanceof Error ? error.message : '请稍后在「决定记忆」页手动添加'}`) }
+
+  const draftJobs = useDocumentDraftJobs(document)
+
+  const title = edits ? edits.title : document.title
+  const body = edits ? edits.body : document.body
+  const dirty =
+    edits !== null &&
+    (edits.title !== document.title || edits.body !== document.body)
+  const stale = edits !== null && edits.baseRevision !== document.revision
+
+  const defaultViewMode: DocumentViewMode = shouldDefaultToPreview(
+    document,
+    draftJobs.data
+  )
+    ? "preview"
+    : "edit"
+
+  const chosenViewMode =
+    viewModeOverride !== undefined ? viewModeOverride : internalViewMode
+  const viewMode: DocumentViewMode =
+    edits !== null && chosenViewMode === null
+      ? "edit"
+      : (chosenViewMode ?? defaultViewMode)
+
+  const rejectDialogOpen =
+    controlledRejectOpen !== undefined
+      ? controlledRejectOpen
+      : internalRejectOpen
+
+  function setRejectDialogOpen(next: boolean) {
+    if (onControlledRejectOpenChange) {
+      onControlledRejectOpenChange(next)
+    } else {
+      setInternalRejectOpen(next)
     }
   }
-  return <div className="space-y-4">
-    <Card><CardHeader><CardTitle className="flex flex-wrap items-center gap-2">{base.platform === 'master' ? '母稿' : platforms[base.platform]}<Badge variant="outline">v{base.revision}</Badge><Badge>{statusLabels[base.status]}</Badge></CardTitle></CardHeader><CardContent className="space-y-4">
-      {stale && <Alert><AlertDescription>云端稿件已变化，当前输入仍保留。请先复制需要保留的内容，再载入云端版本。<Button variant="outline" size="sm" onClick={() => { setBase(document); setTitle(document.title); setBody(document.body) }}>载入云端版本</Button></AlertDescription></Alert>}
-      <Field label="稿件标题"><Input maxLength={200} value={title} disabled={!canEdit || busy} onChange={e => setTitle(e.target.value)} /></Field>
-      <Field label="正文（Markdown）"><Textarea className="min-h-80 font-mono leading-7" maxLength={100000} value={body} disabled={!canEdit || busy} onChange={e => setBody(e.target.value)} /></Field>
-      <div className="flex flex-wrap items-center gap-2">
-        {canEdit && <Button disabled={busy || !dirty || stale} onClick={() => void run(async () => { const saved = await saveDocument(base, title, body); setBase(saved); setTitle(saved.title); setBody(saved.body) })}>保存新版本</Button>}
-        {canTransition(base.status, 'in_review', canEdit, canReview) && <Button variant="outline" disabled={busy || dirty || stale || !body.trim()} onClick={() => void transition('in_review')}>提交审核</Button>}
-        <Button variant="outline" disabled={dirty || stale} onClick={() => downloadText(`content-${base.id}-v${base.revision}.md`, exportMarkdown(base))}>导出 Markdown</Button>
-        <span className="text-xs text-muted-foreground">{dirty ? '有未保存修改' : '已保存到云端'} · 改稿后需要重新审核</span>
-      </div>
-      {base.review_note && <p className="text-sm">最近审核意见：{base.review_note}</p>}
-      {canReview && base.status === 'in_review' && <div className="space-y-3 border-t pt-4"><Field label="审核意见"><Textarea value={note} maxLength={4000} onChange={e => setNote(e.target.value)} placeholder="退回时请说明需要修改的内容" /></Field><RememberDecisionField value={remember} onChange={setRemember} platform={base.platform} disabled={busy} hint="退回将记为「要避免的做法」，通过将记为「认可的做法」；之后同类稿件生成时会自动遵守。" /><div className="flex gap-2">
-        <Button disabled={busy || dirty || stale} onClick={() => void transition('approved')}>审核通过</Button>
-        <Button variant="outline" disabled={busy || dirty || stale || !note.trim()} onClick={() => void transition('changes_requested')}>退回修改</Button>
-      </div></div>}
-    </CardContent></Card>
-    {!stale && <SitePublishPanel document={base} canRequest={canEdit} canPublish={canPublish} />}
-    {canEdit && <Card><CardHeader><CardTitle>AI 创作提案</CardTitle></CardHeader><CardContent className="space-y-3">
-      <Field label="创作要求"><Textarea value={instruction} maxLength={4000} onChange={e => setInstruction(e.target.value)} /></Field>
-      <Button variant="outline" disabled={busy || dirty || stale || waiting || !instruction.trim() || proposals.data?.some(p => p.status === 'running')} onClick={() => void run(async () => { const job = await enqueueContentDraftJob({ documentId: base.id, instruction }); setQueuedJobId(job.jobId) }, '已交给 Agent 出稿，完成后提案会出现在下方')}>交给 Agent 出稿</Button>
-      {queuedJobId && <p className="text-sm">{waiting ? 'Agent 出稿中（生成 → 预检 → 评估），' : '本次出稿已完成，'}<Link className="underline" to={`/tasks/${queuedJobId}`}>查看任务进度</Link></p>}
-      <p className="text-xs text-muted-foreground">由本机 Agent 节点（worker）使用已保存的稿件与事项 Brief 出稿；节点未启动时任务会一直排队。采纳后仍需保存版本并人工审核。</p>
-      {proposals.error && <p role="alert" className="text-sm">提案记录读取失败。</p>}
-      {proposals.data?.map(p => <details className="rounded-lg border p-3" key={p.id}><summary className="cursor-pointer text-sm">{p.model} · 输入 v{p.input_revision} · {({ running: '生成中', succeeded: '待人工审阅', failed: '失败' })[p.status]} · {new Date(p.created_at).toLocaleString()}</summary>
-        {p.error && <p className="mt-2 text-sm text-destructive">{p.error}</p>}{p.body && <><pre className="my-3 max-h-96 overflow-auto whitespace-pre-wrap text-sm">{p.body}</pre><Button variant="outline" disabled={busy || dirty || stale || p.input_revision !== base.revision} onClick={() => setBody(p.body!)}>采纳到编辑区</Button>{p.input_revision !== base.revision && <p className="text-xs text-muted-foreground">输入版本已过期，请复制需要的片段后手动合并。</p>}</>}
-        {p.agent_job_id && <ProposalJobLink jobId={p.agent_job_id} />}
-        {p.usage?.total_tokens != null && <p className="mt-2 text-xs text-muted-foreground">Token 用量：{p.usage.total_tokens} · 实际费用以供应商账单为准</p>}
-      </details>)}
-    </CardContent></Card>}
-    <Card><CardHeader><CardTitle>版本与审核记录</CardTitle></CardHeader><CardContent className="space-y-4">
-      {history.error && <p role="alert">版本历史读取失败，请刷新重试。</p>}
-      {history.data?.revisions.map(revision => <details key={revision.id} className="rounded-lg border p-3"><summary className="cursor-pointer text-sm">v{revision.revision} · {new Date(revision.created_at).toLocaleString()} · {revision.title}</summary><pre className="mt-3 max-h-80 overflow-auto whitespace-pre-wrap text-sm">{revision.body}</pre></details>)}
-      {history.data?.reviews.map(event => <p key={event.id} className="text-xs text-muted-foreground">{new Date(event.created_at).toLocaleString()} · v{event.revision} · {statusLabels[event.status]}{event.note && `：${event.note}`} · 操作人 {event.created_by.slice(0, 8)}</p>)}
-    </CardContent></Card>
-  </div>
+
+  function handleSelectViewMode(next: DocumentViewMode) {
+    if (onViewModeOverrideChange) {
+      onViewModeOverrideChange(next)
+    } else {
+      setInternalViewMode(next)
+    }
+  }
+
+  function commitEdits(
+    next: { baseRevision: number; title: string; body: string } | null
+  ) {
+    setEdits(next)
+    const nextDirty =
+      next !== null &&
+      (next.title !== document.title || next.body !== document.body)
+    onDirtyChange?.(nextDirty)
+  }
+
+  function updateDraftField(nextTitle: string, nextBody: string) {
+    if (
+      nextTitle === document.title &&
+      nextBody === document.body &&
+      (!edits || edits.baseRevision === document.revision)
+    ) {
+      commitEdits(null)
+      return
+    }
+    commitEdits({
+      baseRevision: edits?.baseRevision ?? document.revision,
+      title: nextTitle,
+      body: nextBody,
+    })
+  }
+
+  async function saveCurrentEdits() {
+    const ok = await run(async () => {
+      await saveDocument(document, title, body)
+      commitEdits(null)
+    })
+    if (ok) {
+      await queryClient.invalidateQueries({
+        queryKey: ["agent-jobs", "document", document.id],
+      })
+    }
+  }
+
+  function handleEditorKeyDown(e: KeyboardEvent) {
+    if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === "s") {
+      e.preventDefault()
+      if (canEdit && dirty && !stale && !busy) {
+        void saveCurrentEdits()
+      }
+    }
+  }
+
+  async function transition(status: DocumentStatus) {
+    await run(async () => {
+      await reviewDocument(document, status, note)
+      setNote("")
+      if (status === "changes_requested") setRejectDialogOpen(false)
+    }, "审核状态已更新")
+  }
+
+  async function handleDirectApprove() {
+    await run(async () => {
+      await approveDocumentDirectly(document, note)
+      setNote("")
+      setFullscreenOpen(false)
+    }, "稿件已确认定稿，已解锁发布与导出")
+  }
+
+  async function handleCopyMarkdown() {
+    try {
+      await navigator.clipboard.writeText(exportMarkdown(document))
+      toast.success("已复制 Markdown 到剪贴板")
+    } catch {
+      toast.error("无法访问剪贴板，请使用「导出 Markdown」")
+    }
+  }
+
+  const canDirectApprove =
+    canEdit &&
+    canReview &&
+    (document.status === "draft" || document.status === "changes_requested")
+
+  const docLabel =
+    document.platform === "master" ? "母稿" : platforms[document.platform]
+
+  return (
+    <div className="space-y-4">
+      <Card>
+        <CardHeader className="border-b">
+          <CardTitle className="flex flex-wrap items-center gap-2">
+            <span>{docLabel}</span>
+            <Badge variant="outline">v{document.revision}</Badge>
+            <Badge
+              variant={
+                document.status === "approved"
+                  ? "secondary"
+                  : document.status === "changes_requested"
+                    ? "destructive"
+                    : "default"
+              }
+            >
+              {statusLabels[document.status]}
+            </Badge>
+          </CardTitle>
+          <CardAction className="flex flex-wrap items-center gap-2">
+            <Tabs
+              value={viewMode}
+              onValueChange={(v) => {
+                if (v === "preview" || v === "edit" || v === "split") {
+                  handleSelectViewMode(v)
+                }
+              }}
+            >
+              <TabsList>
+                <TabsTrigger value="preview">
+                  <EyeIcon className="size-3.5" />
+                  阅读预览
+                </TabsTrigger>
+                <TabsTrigger value="edit">
+                  <PencilIcon className="size-3.5" />
+                  编辑原文
+                </TabsTrigger>
+                <TabsTrigger value="split" className="hidden lg:inline-flex">
+                  <Columns2Icon className="size-3.5" />
+                  双栏对照
+                </TabsTrigger>
+              </TabsList>
+            </Tabs>
+            <Button
+              type="button"
+              variant="outline"
+              size="icon-sm"
+              aria-label="全屏阅读"
+              onClick={() => setFullscreenOpen(true)}
+            >
+              <Maximize2Icon className="size-4" />
+            </Button>
+          </CardAction>
+        </CardHeader>
+
+        <CardContent className="space-y-4" onKeyDown={handleEditorKeyDown}>
+          {stale && (
+            <Alert>
+              <AlertDescription>
+                云端稿件已变化，当前输入仍保留。请先复制需要保留的内容，再载入云端版本。
+                <Button
+                  variant="outline"
+                  size="sm"
+                  className="ml-2"
+                  onClick={() => commitEdits(null)}
+                >
+                  载入云端版本
+                </Button>
+              </AlertDescription>
+            </Alert>
+          )}
+
+          {document.review_note && (
+            <Alert>
+              <AlertDescription>
+                最近审核意见：{document.review_note}
+              </AlertDescription>
+            </Alert>
+          )}
+
+          {viewMode === "preview" && (
+            <div className="space-y-4">
+              <MarkdownPreview body={body} title={title} showMeta />
+              {canEdit && (
+                <div className="flex flex-wrap items-center gap-2">
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    onClick={() => handleSelectViewMode("edit")}
+                  >
+                    <PencilIcon className="size-3.5" />
+                    编辑标题或正文
+                  </Button>
+                </div>
+              )}
+            </div>
+          )}
+
+          {viewMode === "edit" && (
+            <FieldGroup>
+              <Field>
+                <FieldLabel htmlFor={titleId}>稿件标题</FieldLabel>
+                <Input
+                  id={titleId}
+                  maxLength={200}
+                  value={title}
+                  disabled={!canEdit || busy}
+                  onChange={(e) => updateDraftField(e.target.value, body)}
+                />
+              </Field>
+              <Field>
+                <FieldLabel htmlFor={bodyId}>正文（Markdown）</FieldLabel>
+                <Textarea
+                  id={bodyId}
+                  className="min-h-96 font-mono text-sm leading-7"
+                  maxLength={100000}
+                  value={body}
+                  disabled={!canEdit || busy}
+                  onChange={(e) => updateDraftField(title, e.target.value)}
+                />
+              </Field>
+            </FieldGroup>
+          )}
+
+          {viewMode === "split" && (
+            <div className="grid gap-4 lg:grid-cols-2">
+              <FieldGroup>
+                <Field>
+                  <FieldLabel htmlFor={titleId}>稿件标题</FieldLabel>
+                  <Input
+                    id={titleId}
+                    maxLength={200}
+                    value={title}
+                    disabled={!canEdit || busy}
+                    onChange={(e) => updateDraftField(e.target.value, body)}
+                  />
+                </Field>
+                <Field>
+                  <FieldLabel htmlFor={bodyId}>正文（Markdown）</FieldLabel>
+                  <Textarea
+                    id={bodyId}
+                    className="min-h-96 font-mono text-sm leading-7"
+                    maxLength={100000}
+                    value={body}
+                    disabled={!canEdit || busy}
+                    onChange={(e) => updateDraftField(title, e.target.value)}
+                  />
+                </Field>
+              </FieldGroup>
+              <div className="max-h-[34rem] overflow-y-auto rounded-lg border bg-muted/20 p-4">
+                <MarkdownPreview body={body} title={title} showMeta />
+              </div>
+            </div>
+          )}
+
+          {(canDirectApprove ||
+            canTransition(document.status, "in_review", canEdit, canReview) ||
+            (canReview && document.status === "in_review")) && (
+            <Collapsible
+              open={noteOpen}
+              onOpenChange={setNoteOpen}
+              className="space-y-3 border-t pt-4"
+            >
+              <div className="flex flex-wrap items-center gap-2">
+                {canDirectApprove && (
+                  <Button
+                    disabled={busy || dirty || stale || !body.trim()}
+                    onClick={() => void handleDirectApprove()}
+                  >
+                    <CheckCircle2Icon className="size-4" />
+                    确认并定稿
+                  </Button>
+                )}
+
+                {canTransition(document.status, "in_review", canEdit, canReview) && (
+                  <Button
+                    variant={canDirectApprove ? "outline" : "default"}
+                    disabled={busy || dirty || stale || !body.trim()}
+                    onClick={() => void transition("in_review")}
+                  >
+                    提交审核
+                  </Button>
+                )}
+
+                {canReview && document.status === "in_review" && (
+                  <>
+                    <Button
+                      disabled={busy || dirty || stale}
+                      onClick={() => void transition("approved")}
+                    >
+                      <CheckCircle2Icon className="size-4" />
+                      审核通过
+                    </Button>
+                    <Button
+                      variant="outline"
+                      disabled={busy || dirty || stale}
+                      onClick={() => setRejectDialogOpen(true)}
+                    >
+                      退回修改
+                    </Button>
+                  </>
+                )}
+
+                {canReview && (
+                  <CollapsibleTrigger
+                    render={<Button type="button" variant="ghost" size="sm" />}
+                  >
+                    <SparklesIcon className="size-3.5" />
+                    {noteOpen ? "收起备注与偏好" : "附带审核备注 / 记入偏好"}
+                  </CollapsibleTrigger>
+                )}
+              </div>
+
+              {canReview && (
+                <CollapsibleContent className="space-y-3 pt-1">
+                  <Field>
+                    <FieldLabel htmlFor={noteId}>审核意见（可选）</FieldLabel>
+                    <Textarea
+                      id={noteId}
+                      value={note}
+                      maxLength={4000}
+                      rows={2}
+                      onChange={(e) => setNote(e.target.value)}
+                      placeholder="记录本次审核关注点或亮点"
+                    />
+                  </Field>
+                </CollapsibleContent>
+              )}
+            </Collapsible>
+          )}
+        </CardContent>
+
+        <CardFooter className="flex-wrap justify-between gap-2">
+          <div className="flex flex-wrap items-center gap-2">
+            {canEdit && (viewMode !== "preview" || dirty) && (
+              <Button
+                disabled={busy || !dirty || stale}
+                onClick={() => void saveCurrentEdits()}
+              >
+                保存新版本
+              </Button>
+            )}
+            <span className="text-xs text-muted-foreground">
+              {dirty ? "有未保存修改" : "已保存到云端"} · 改稿后需要重新审核
+            </span>
+          </div>
+          <div className="flex flex-wrap items-center gap-2">
+            <Button
+              type="button"
+              variant="outline"
+              disabled={dirty || stale || !body.trim()}
+              onClick={() => void handleCopyMarkdown()}
+            >
+              <CopyIcon className="size-4" />
+              复制 Markdown
+            </Button>
+            <Button
+              type="button"
+              variant="outline"
+              disabled={dirty || stale}
+              onClick={() =>
+                downloadText(
+                  `content-${document.id}-v${document.revision}.md`,
+                  exportMarkdown(document)
+                )
+              }
+            >
+              <DownloadIcon className="size-4" />
+              导出 Markdown
+            </Button>
+          </div>
+        </CardFooter>
+      </Card>
+
+      {!hideSidePanels && (
+        <>
+          {!stale && (
+            <SitePublishPanel
+              document={document}
+              canRequest={canEdit}
+              canPublish={canPublish}
+            />
+          )}
+          <DocumentAiPanel
+            document={document}
+            canEdit={canEdit}
+            blocked={dirty || stale}
+          />
+          <DocumentHistoryPanel documentId={document.id} />
+        </>
+      )}
+
+      <Dialog open={fullscreenOpen} onOpenChange={setFullscreenOpen}>
+        <DialogContent className="flex max-h-[90vh] flex-col sm:max-w-4xl">
+          <DialogHeader>
+            <DialogTitle className="flex flex-wrap items-center gap-2">
+              <span>{title || docLabel}</span>
+              <Badge variant="outline">
+                {docLabel} · v{document.revision}
+              </Badge>
+              <Badge variant="secondary">{statusLabels[document.status]}</Badge>
+            </DialogTitle>
+            <DialogDescription>
+              成稿排版阅读视图（支持核对内容后再直接定稿或复制导出）
+            </DialogDescription>
+          </DialogHeader>
+          <div className="min-h-0 flex-1 overflow-y-auto pr-1">
+            <MarkdownPreview body={body} showMeta />
+          </div>
+          <DialogFooter>
+            <Button
+              type="button"
+              variant="outline"
+              disabled={dirty || stale || !body.trim()}
+              onClick={() => void handleCopyMarkdown()}
+            >
+              <CopyIcon className="size-4" />
+              复制 Markdown
+            </Button>
+            {(canDirectApprove || (canReview && document.status === "in_review")) && (
+              <Button
+                type="button"
+                disabled={busy || dirty || stale || !body.trim()}
+                onClick={() => void handleDirectApprove()}
+              >
+                <CheckCircle2Icon className="size-4" />
+                确认并定稿
+              </Button>
+            )}
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={rejectDialogOpen} onOpenChange={setRejectDialogOpen}>
+        <DialogContent className="sm:max-w-lg">
+          <DialogHeader>
+            <DialogTitle>退回修改</DialogTitle>
+            <DialogDescription>
+              数据库要求退回修改时必须填写原因；也可勾选记入长期创作偏好，避免 AI
+              下次重犯。
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4">
+            <Field>
+              <FieldLabel htmlFor={rejectNoteId}>退回原因</FieldLabel>
+              <Textarea
+                id={rejectNoteId}
+                value={note}
+                maxLength={4000}
+                rows={4}
+                onChange={(e) => setNote(e.target.value)}
+                placeholder="例如：第 2 节缺少具体案例支撑，请补充实际场景说明"
+              />
+            </Field>
+          </div>
+          <DialogFooter>
+            <Button
+              type="button"
+              variant="outline"
+              onClick={() => setRejectDialogOpen(false)}
+            >
+              取消
+            </Button>
+            <Button
+              type="button"
+              variant="destructive"
+              disabled={busy || dirty || stale || !note.trim()}
+              onClick={() => void transition("changes_requested")}
+            >
+              确认退回修改
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+    </div>
+  )
 }

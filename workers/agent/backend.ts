@@ -1,4 +1,4 @@
-import { type HarnessJob, type HarnessStepRecord, type HarnessTerminalStatus, readJobLimits, readJobTarget, type SaveProposalInput } from "../../sense-console/src/harness/job-store"
+import { type HarnessJob, type HarnessStepRecord, type HarnessTerminalStatus, readJobLimits, readJobTarget, type WriteDraftInput, type WriteDraftResult } from "../../sense-console/src/harness/job-store"
 
 /** Raw rows the worker reads to build a Context Pack (snake_case, as stored). */
 export interface DraftContextRows {
@@ -17,6 +17,7 @@ export interface ClaimedJobRow {
   work_item_id: string | null
   kind: string
   payload: Record<string, unknown>
+  result?: Record<string, unknown> | null
   created_by: string | null
   attempts: number
   max_attempts: number
@@ -37,7 +38,7 @@ export interface AgentQueueBackend {
   fail(jobId: string, leaseEpoch: number, error: string, retryable: boolean, retryDelaySeconds: number, errorCode: string | null): Promise<void>
   listSteps(jobId: string): Promise<HarnessStepRecord[]>
   insertStep(step: HarnessStepRecord, leaseEpoch: number): Promise<void>
-  saveProposal(input: SaveProposalInput): Promise<{ proposalId: string }>
+  writeDraft(input: WriteDraftInput): Promise<WriteDraftResult>
   loadDraftContext(job: HarnessJob): Promise<DraftContextRows>
   /** service_role RPC passthrough (e.g. list_pending_notices). Returns {data, error}. */
   rpc(fn: string, args: Record<string, unknown>): Promise<{ data: unknown; error: { message: string } | null }>
@@ -51,6 +52,7 @@ export function toHarnessJob(row: ClaimedJobRow): HarnessJob {
     workItemId: row.work_item_id ?? null,
     kind: row.kind,
     payload,
+    result: row.result ?? null,
     target: readJobTarget(payload),
     approvalRequestId: typeof payload.approval_request_id === "string" ? payload.approval_request_id : null,
     createdBy: row.created_by,

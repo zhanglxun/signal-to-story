@@ -174,7 +174,7 @@ export function formatCents(cents: number): string {
   return `¥${(cents / 100).toFixed(2)}`
 }
 
-// ---------------------------------------------------------------- storyboard (LLM output → proposal)
+// ---------------------------------------------------------------- storyboard (LLM output → draft plan)
 export const VideoShotDraftSchema = z.object({
   shot_size: z.enum(shotSizes),
   camera_motion: z.enum(cameraMotions),
@@ -201,7 +201,6 @@ export type VideoPlanDraft = z.infer<typeof VideoPlanDraftSchema>
 export const VideoStoryboardPayloadSchema = z.object({
   schema_version: z.literal(VIDEO_STUDIO_SCHEMA_VERSION),
   outline: z.string().trim().min(10).max(20000),
-  project_id: z.string().uuid().nullable().optional(),
   aspect_ratio: z.enum(aspectRatios).default("9:16"),
   target_seconds: z.number().int().min(3).max(600).default(30),
   style: z.string().max(1000).default(""),
@@ -310,7 +309,6 @@ export function videoJobJsonSchema() {
 export interface VideoPlan {
   id: string
   organizationId: string
-  projectId: string | null
   title: string
   aspectRatio: AspectRatio
   targetSeconds: number
@@ -323,7 +321,7 @@ export interface VideoPlan {
   composedVideoAssetId: number | null
   finalDurationMs: number | null
   error: string | null
-  sourceProposalId: string | null
+  workItemId: string | null
   updatedAt: string
 }
 
@@ -344,44 +342,7 @@ export interface VideoShot {
   audioAssetId: number | null
   videoAssetId: number | null
   renderStatus: ShotRenderStatus
-  estimatedCostCents: number
-  actualCostCents: number
   error: string | null
-}
-
-export interface VideoStoryboardProposal {
-  id: string
-  agentJobId: string
-  inputOutline: string
-  proposal: VideoPlanDraft | null
-  rawProposal: unknown
-  model: string | null
-  status: "pending" | "accepted" | "rejected"
-  acceptedPlanId: string | null
-  reason: string
-  createdAt: string
-}
-
-export interface VideoCostSummary {
-  planId: string
-  revision: number
-  estimatedCents: number
-  actualCents: number
-  planLevelActualCents: number
-  shotCount: number
-  renderedCount: number
-  cloudShotCount: number
-}
-
-export interface VideoCostEntry {
-  id: string
-  shotId: string | null
-  agentJobId: string | null
-  kind: "tts" | "shot_render" | "compose" | "keyframe" | "storyboard_llm"
-  provider: string
-  estimatedCents: number
-  actualCents: number
-  createdAt: string
 }
 
 type Row = Record<string, unknown>
@@ -391,11 +352,11 @@ const str = (v: unknown) => (v == null ? null : String(v))
 
 export function mapVideoPlan(r: Row): VideoPlan {
   return {
-    id: String(r.id), organizationId: String(r.organization_id), projectId: str(r.project_id), title: String(r.title),
+    id: String(r.id), organizationId: String(r.organization_id), title: String(r.title),
     aspectRatio: r.aspect_ratio as AspectRatio, targetSeconds: num(r.target_seconds), style: String(r.style ?? ""),
     defaultVoice: String(r.default_voice), ttsProvider: r.tts_provider as TtsProvider, bgmTrack: str(r.bgm_track),
     status: r.status as PlanStatus, revision: num(r.revision), composedVideoAssetId: optNum(r.composed_video_asset_id),
-    finalDurationMs: optNum(r.final_duration_ms), error: str(r.error), sourceProposalId: str(r.source_proposal_id), updatedAt: String(r.updated_at),
+    finalDurationMs: optNum(r.final_duration_ms), error: str(r.error), workItemId: str(r.work_item_id), updatedAt: String(r.updated_at),
   }
 }
 
@@ -406,29 +367,6 @@ export function mapVideoShot(r: Row): VideoShot {
     narration: String(r.narration ?? ""), voice: str(r.voice), sfxDescription: String(r.sfx_description ?? ""),
     targetDurationMs: num(r.target_duration_ms), actualDurationMs: optNum(r.actual_duration_ms), keyframeAssetId: optNum(r.keyframe_asset_id),
     audioAssetId: optNum(r.audio_asset_id), videoAssetId: optNum(r.video_asset_id), renderStatus: r.render_status as ShotRenderStatus,
-    estimatedCostCents: num(r.estimated_cost_cents), actualCostCents: num(r.actual_cost_cents), error: str(r.error),
-  }
-}
-
-export function mapVideoProposal(r: Row): VideoStoryboardProposal {
-  const parsed = VideoPlanDraftSchema.safeParse(r.proposal)
-  return {
-    id: String(r.id), agentJobId: String(r.agent_job_id), inputOutline: String(r.input_outline ?? ""),
-    proposal: parsed.success ? parsed.data : null, rawProposal: r.proposal, model: str(r.model),
-    status: r.status as VideoStoryboardProposal["status"], acceptedPlanId: str(r.accepted_plan_id), reason: String(r.reason ?? ""), createdAt: String(r.created_at),
-  }
-}
-
-export function mapVideoCostSummary(r: Row): VideoCostSummary {
-  return {
-    planId: String(r.plan_id), revision: num(r.revision), estimatedCents: num(r.estimated_cents), actualCents: num(r.actual_cents),
-    planLevelActualCents: num(r.plan_level_actual_cents), shotCount: num(r.shot_count), renderedCount: num(r.rendered_count), cloudShotCount: num(r.cloud_shot_count),
-  }
-}
-
-export function mapVideoCostEntry(r: Row): VideoCostEntry {
-  return {
-    id: String(r.id), shotId: str(r.shot_id), agentJobId: str(r.agent_job_id), kind: r.kind as VideoCostEntry["kind"], provider: String(r.provider),
-    estimatedCents: num(r.estimated_cents), actualCents: num(r.actual_cents), createdAt: String(r.created_at),
+    error: str(r.error),
   }
 }

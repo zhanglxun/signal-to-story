@@ -272,7 +272,11 @@ export function mapApprovalRequest(row: Row): ApprovalRequest {
     status: row.status as ApprovalStatus,
     summary: String(row.summary ?? ""),
     payload: (row.payload as Record<string, unknown>) ?? {},
-    estimatedCostCents: row.estimated_cost_cents == null ? null : Number(row.estimated_cost_cents),
+    // DB5: the estimate lives in payload.estimated_cost_cents (the column is gone).
+    estimatedCostCents: (() => {
+      const v = (row.payload as Record<string, unknown> | null)?.estimated_cost_cents ?? row.estimated_cost_cents
+      return v == null ? null : Number(v)
+    })(),
     requestedByJob: str(row.requested_by_job),
     requestedBy: str(row.requested_by),
     decidedBy: str(row.decided_by),

@@ -21,14 +21,6 @@ export interface KnowledgeEntry {
   sourcePath?: string | null
 }
 
-/** Row of public.knowledge_entries mapped to camelCase. */
-export interface StoredKnowledgeEntry extends KnowledgeEntry {
-  id: string
-  organizationId: string
-  trustLevel: KnowledgeTrustLevel
-  reviewedBy: string | null
-  reviewedAt: string | null
-}
 
 export interface MarkdownImportResult {
   entry: KnowledgeEntry

@@ -1,5 +1,5 @@
 import { getSupabaseClient } from '@/lib/supabase'
-import { urlSchema, type ContentDocument, type DocumentStatus, type Metric, type Platform, type Publication, type PublishingChannel, type ReviewEvent, type Revision } from '@/contracts/content'
+import { urlSchema, type ContentDocument, type DocumentHistoryEvent, type DocumentStatus } from '@/contracts/content'
 
 export function db() {
   const client = getSupabaseClient()
@@ -24,12 +24,6 @@ export async function allRows<T>(table: string, organizationId: string, order: s
   }
 }
 export const listDocuments = (org: string) => allRows<ContentDocument>('content_documents', org, 'updated_at')
-export const listChannels = (org: string) => allRows<PublishingChannel>('publishing_channels', org, 'created_at')
-export async function listPublications(org: string): Promise<Publication[]> {
-  const rows = await allRows<Publication & { content_revisions: { title: string } }>('content_publications', org, 'scheduled_at', '*,content_revisions(title)')
-  return rows.map(row => ({ ...row, title_snapshot: row.content_revisions.title }))
-}
-export const listMetrics = (org: string) => allRows<Metric>('publication_metrics', org, 'observed_at')
 export async function saveDocument(document: ContentDocument, title: string, body: string) {
   if (!title.trim() || title.trim().length > 200 || body.length > 100000) throw new Error('标题需为 1–200 字，正文不超过 100000 字。')
   const { data, error } = await db().from('content_documents').update({ title: title.trim(), body }).eq('id', document.id).eq('revision', document.revision).eq('status', document.status).select().maybeSingle()
@@ -41,44 +35,28 @@ export async function reviewDocument(document: ContentDocument, status: Document
   fail(error); if (!data) throw new Error('审核对象已变化，请刷新后重新审核。')
   return data as ContentDocument
 }
-export async function documentHistory(documentId: string) {
-  const [revisions, reviews] = await Promise.all([
-    db().from('content_revisions').select().eq('document_id', documentId).order('revision', { ascending: false }),
-    db().from('content_review_events').select().eq('document_id', documentId).order('created_at', { ascending: false }),
-  ])
-  fail(revisions.error); fail(reviews.error)
-  return { revisions: (revisions.data ?? []) as Revision[], reviews: (reviews.data ?? []) as ReviewEvent[] }
+/** Solo-friendly direct approval: walks draft/changes_requested -> in_review -> approved while obeying DB triggers. */
+export async function approveDocumentDirectly(document: ContentDocument, reviewNote = '') {
+  if (document.status === 'in_review') return reviewDocument(document, 'approved', reviewNote)
+  const submitted = await reviewDocument(document, 'in_review', '')
+  return reviewDocument(submitted, 'approved', reviewNote)
 }
-export async function createChannel(org: string, platform: Platform, name: string, profileUrl: string) {
-  if (!name.trim() || name.trim().length > 100) throw new Error('账号名称需为 1–100 字。')
-  if (profileUrl.trim()) urlSchema.parse(profileUrl.trim())
-  const { error } = await db().from('publishing_channels').insert({ organization_id: org, platform, name: name.trim(), profile_url: profileUrl.trim() })
+/** Review / AI / publishing history of one document (audit_events; there is no revision snapshot table). */
+export async function documentHistory(documentId: string): Promise<DocumentHistoryEvent[]> {
+  const { data, error } = await db().from('audit_events').select('id,action,metadata,created_at,actor_user_id')
+    .eq('target_type', 'content_document').eq('target_id', documentId).like('action', 'content.%')
+    .order('created_at', { ascending: false }).limit(100)
   fail(error)
+  return ((data ?? []) as Array<{ id: number; action: string; metadata: Record<string, unknown> | null; created_at: string; actor_user_id: string | null }>).map(row => ({
+    id: Number(row.id), action: row.action, created_at: row.created_at, actor_user_id: row.actor_user_id,
+    revision: typeof row.metadata?.revision === 'number' ? row.metadata.revision : null,
+    note: typeof row.metadata?.note === 'string' ? row.metadata.note : '',
+  }))
 }
-export async function planPublication(document: ContentDocument, channelId: string, scheduledAt: string, videoAssetId?: number | null) {
-  if (document.status !== 'approved') throw new Error('请先审核对应的平台稿件。')
-  const { error } = await db().from('content_publications').insert({ organization_id: document.organization_id, document_id: document.id, revision: document.revision, channel_id: channelId, scheduled_at: new Date(scheduledAt).toISOString(), ...(videoAssetId != null ? { video_asset_id: videoAssetId } : {}) })
+/** Record (or clear with '') the link of a manual publication on an external platform. Requires content.publish. */
+export async function setPublishedUrl(documentId: string, url: string) {
+  const value = url.trim()
+  if (value) urlSchema.parse(value)
+  const { error } = await db().rpc('set_document_published_url', { p_document_id: documentId, p_url: value })
   fail(error)
-}
-export async function recordPublication(publication: Publication, url: string, publishedAt: string) {
-  const { error } = await db().from('content_publications').update({ status: 'published', published_url: urlSchema.parse(url.trim()), published_at: new Date(publishedAt).toISOString() }).eq('id', publication.id).eq('status', 'planned').select().single()
-  fail(error)
-}
-export async function cancelPublication(id: string) {
-  const { error } = await db().from('content_publications').update({ status: 'cancelled' }).eq('id', id).eq('status', 'planned').select().single()
-  fail(error)
-}
-export async function saveMetric(publication: Publication, metric: Omit<Metric, 'id' | 'publication_id'>) {
-  const { error } = await db().from('publication_metrics').insert({ ...metric, organization_id: publication.organization_id, publication_id: publication.id })
-  fail(error)
-}
-export async function publicationSnapshot(publication: Publication) {
-  const { data, error } = await db().from('content_revisions').select().eq('document_id', publication.document_id).eq('revision', publication.revision).single()
-  fail(error); return data as Revision
-}
-
-export type AiProposal = { id: string; input_revision: number; model: string; status: 'running' | 'succeeded' | 'failed'; body: string | null; error: string | null; created_at: string; usage: { total_tokens?: number } | null; agent_job_id?: string | null }
-export async function getAiProposals(documentId: string) {
-  const { data, error } = await db().from('content_ai_proposals').select('*').eq('document_id', documentId).order('created_at', { ascending: false }).limit(20)
-  fail(error); return (data ?? []) as AiProposal[]
 }

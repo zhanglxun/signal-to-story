@@ -3,11 +3,21 @@
 这里放的是**从迁移文件生成**的上线脚本，不要手改。改了迁移就重新生成：
 
 ```bash
-npx tsx testing/db/release.ts          # 生成 supabase/release/0.5.0-step{1,2,3}.sql
+npx tsx testing/db/release.ts          # 生成 supabase/release/0.5.0-step{1,2,3,4,5}.sql
 npx vitest run testing/db/release*.test.ts   # 在模拟线上状态的 PGlite 上演练
 ```
 
 背景见 [docs/database.md](../../docs/database.md) 第 8 节和 DB-D14：线上库同时作为开发、测试和正式环境，迁移分批推送。
+
+## 线上批次状态
+
+| 批次 | 脚本 | 覆盖步骤与迁移 | 状态 |
+| --- | --- | --- | --- |
+| 第 1 批 | `0.5.0-step1.sql` | DB2a + DB2b（`20261115090000`～`20261122100000`） | 已在线上执行 |
+| 第 2 批 | `0.5.0-step2.sql` | DB2c-1（`20261123100000`） | 已在线上执行 |
+| 第 3 批 | `0.5.0-step3.sql` | DB2c-2（`20261124100000`） | 已在线上执行（2026-11-21 核对通过：`max=20261124100000`、`runner_nodes=0`、`node_*=12`、`agent_jobs_node_id_fkey` 存在） |
+| 第 4 批 | `0.5.0-step4.sql` | DB2c-3（`20261125100000`：AI 直接写草稿、退役 `content_ai_proposals`） | 已在线上执行（2026-11-23 核对通过：`max=20261125100000`、`content_ai_proposals` 已删、`node_*=12`；真实出稿一次跑通） |
+| 第 5 批（最终） | `0.5.0-step5.sql` | DB4 + DB5 + DB3 + V1 退役（`20261126100000`～`20261126100300`） | 已生成并通过 PGlite 演练，待 Codex 执行（给 Codex 的提示词：[0.5.0-step5-codex-prompt.md](0.5.0-step5-codex-prompt.md)） |
 
 ---
 
@@ -205,3 +215,162 @@ npx vitest run testing/db/release*.test.ts   # 在模拟线上状态的 PGlite �
 4. 确认新 worker 正常后，可以到 Supabase Dashboard 轮换（重新生成）之前给 worker 用的那把 secret key——它已经不再需要。
 
 - **出问题怎么回退**：脚本失败会自动回滚。脚本成功但新 worker 有问题时，旧的 `service_role` 路径仍在，可以先用上一个提交的 worker 代码顶上。
+
+---
+
+## 0.5.0 第 4 批（DB2c-3：AI 直接写草稿）
+
+**做什么**：在一个事务里执行迁移 `20261125100000_ai_direct_draft`，任何一步失败都会整体回滚。
+
+1. 前置检查：迁移历史最后一条必须是 `20261124100000`；`node_write_document_draft` 还不存在；**没有任何 `content_draft` 任务持有未过期的租约**（agent worker 必须先停）。
+2. 删除 `public.node_save_proposal(text, uuid, bigint, jsonb)` 与退役表 `public.content_ai_proposals`。
+3. 新增 `public.write_document_draft`（校验运行中任务的 `lease_epoch`、目标稿件与 `base_revision` 乐观锁，按任务发起人身份更新 `content_documents`、触发版本号递增和快照、写入 `audit_events` 并记录 `agent_jobs.result.written_revision`）与 `public.node_write_document_draft`（保持 `node_*` 共 12 个）。
+4. 新增 `content_documents` 触发器 `document_complete_draft_jobs`：稿件审核通过（`status = 'approved'`）时，自动将该稿件下处于 `pending_review` 的 `content_draft` 任务置为 `succeeded`。
+5. 写入迁移历史。
+
+**不做什么**：不删 V1 收集/项目/历史表（留到最后退役批次），脚本里没有密钥。
+
+### 给 Codex 的执行步骤
+
+> 执行人：Codex。需要项目的数据库连接，或 Supabase Dashboard 的 SQL Editor 权限。**不要在输出或日志里打印任何密钥、连接串、项目 ID 或节点令牌。**
+
+1. **停掉本机 agent worker**（`npm run worker:agent`），若之前已有运行中的 `content_draft` 任务需等其租约过期（默认 2 分钟）。
+
+2. **备份**（可选；`content_ai_proposals` 线上快照为 0 行，但执行前建议在 Table Editor 确认或做 schema/data 备份）：
+   - 有 CLI 时可选：`supabase db dump --data-only -f backup-0.5.0-step4-data.sql`，以及 `supabase db dump -f backup-0.5.0-step4-schema.sql`。
+   - 备份文件放在仓库外，不要提交。
+
+3. **只读预检**：结果应为 `20261124100000`、`0`、`0`（以及 `proposals` 确认行数）：
+
+   ```sql
+   select max(version) from supabase_migrations.schema_migrations;
+   select count(*) from public.agent_jobs where kind = 'content_draft' and status = 'running' and locked_until > now();
+   select count(*) from pg_proc p join pg_namespace n on n.oid = p.pronamespace
+    where n.nspname = 'public' and p.proname = 'node_write_document_draft';
+   select count(*) as proposals from public.content_ai_proposals;
+   ```
+
+   前三个结果不一致就**停止**，把结果发回来。
+
+4. **执行脚本**：二选一。
+   - SQL Editor：打开 `supabase/release/0.5.0-step4.sql`，**整份粘贴、一次运行**。
+   - psql：`psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -f supabase/release/0.5.0-step4.sql`。
+
+   出现任何报错都说明已经整体回滚，**不要分段重跑**，把报错原文发回来。
+
+5. **核对结果**：
+
+   ```sql
+   select max(version) from supabase_migrations.schema_migrations;                       -- 20261125100000
+   select to_regclass('public.content_ai_proposals');                                    -- null（已退役）
+   select count(*) from pg_proc p join pg_namespace n on n.oid = p.pronamespace
+    where n.nspname = 'public' and p.proname like 'node\_%';                              -- 12
+   select to_regprocedure('public.node_write_document_draft(text,uuid,bigint,uuid,integer,text,text)'); -- 非 null
+   ```
+
+   把这些结果原样发回来。
+
+6. **不需要做的**：不执行 `supabase db push`，不修改函数环境变量；如控制台刚改为直连 `enqueue_agent_job` RPC，本批也无需重部署 Edge Function（`content-draft` Edge Function 若不再调用可按需同步部署更新以关闭 `mode=sync`）。
+
+### 执行后
+
+- 用当前分支代码重启本机 `npm run worker:agent`（需已配置 `SUPABASE_PUBLISHABLE_KEY` 与控制台新建节点的 `SENSE_NODE_TOKEN`）和本地控制台 `npm --prefix sense-console run dev`。
+- 在控制台完整跑通一轮：收件箱/速记 → 事项 → 新建母稿 →「交给 Agent 出稿」→ 编辑器自动载入 AI 写入的新版本草稿 → 提交审核并审核通过 → 导出 Markdown，并核对任务中心已自动转为「已完成」。
+- **出问题怎么回退**：脚本失败会自动回滚，不需要处理。脚本已经成功但想撤销时，只能用第 2 步备份恢复。
+
+---
+
+## 0.5.0 第 5 批（最终批次：DB4 + DB5 + DB3 + V1 退役）
+
+**做什么**：在一个事务里执行 4 个迁移，任何一步失败都会整体回滚。执行后 public schema 只剩 **21 张表、0 个视图**（[database.md](../../docs/database.md) 第 3 节、DB-D17）。
+
+1. 前置检查：迁移历史最后一条必须是 `20261125100000`；`chat_sessions` 还不存在；**没有任何任务持有未过期的租约**（所有 worker 先停）；`content_project_assets`、外部发布三表、视频与知识表为空；读者站 `site_*` 除 `site_settings` 外为空。任一不满足就中止。
+2. `20261126100000_publish_on_documents`（DB4）：`content_documents` 新增 `published_revision / published_title / published_body / published_meta / published_at / published_url / slug`；新 RPC `publish_document`、`unpublish_document`、`set_document_published_url`；触发器禁止直接写发布列；`anon` 只授予发布列，RLS 只放行已发布行；删除本地 `site_*` 12 表（线上 `site_settings` 1 行配置随之删除）及其函数、外部发布三表。
+3. `20261126100100_video_mvp`（DB5）：`video_plans` 改挂 `work_item_id`；删除分镜提案、成本账本、成本视图及其 RPC；镜头去成本列；`approval_requests.estimated_cost_cents` 并入 `payload`；新增 `write_video_draft` / `node_write_video_draft`（删除 `node_save_storyboard_proposal`、`node_storyboard_knowledge`，`node_*` 仍为 12 个）。
+4. `20261126100200_chat`（DB3）：新建 `chat_sessions`、`chat_messages`、`send_chat_message`、`node_append_chat_message`。
+5. `20261126100300_retire_v1`：**最后一次** `private.backfill_v1()`（会把后来新增的审核记录补进 `audit_events`，2026-11-26 线上实测为 12 条），然后对账：每条 `signals` / `intake_receipts` / `selections` / `content_projects` / `content_review_events` 都必须在新表找到对应行、稿件全部挂在事项上，否则整体回滚；改写审核历史触发器（写 `audit_events`）；`content_documents.work_item_id` 改必填并删 `project_id`；删除 `signals`、`selections`、`intake_receipts`、OAuth 三表、`content_projects`、`content_project_assets`、`content_revisions`、`content_review_events`、`knowledge_entries`、`decision_memories` 与 `intake_oauth`、`backfill_v1`。
+6. 写入迁移历史。
+
+**会删除的有数据的表**（2026-11-26 线上行数）：`signals` 34、`selections` 4、`content_projects` 1、`intake_receipts` 2、`content_revisions` 12、`content_review_events` 21、`site_settings` 1。前五类已回填到 `intake_events` / `work_items` / `audit_events`（脚本内对账）；`content_revisions` 是历史正文快照，按 R2 不迁移，**只保存在备份里**。
+
+**不做什么**：不改 `prompt_examples`、`assets`、`storage_provider_configs`；不删存储桶（`site-resources` 线上为空，保留无害）；脚本里没有密钥。
+
+### 给 Codex 的执行步骤
+
+> 执行人：Codex。需要项目的数据库连接，或 Supabase Dashboard 的 SQL Editor 权限。**不要在输出或日志里打印任何密钥、连接串、项目 ID 或节点令牌。**
+
+0. **代码先就位**：使用 `0.5.0` 分支包含 `0.5.0-step5.sql` 的提交（本地 `git pull`），先在本地跑一遍门禁：
+
+   ```bash
+   npm install && npm run typecheck && npm run lint && npm test && npm run test:video-worker
+   npx vitest run testing/db/release-step5.test.ts
+   ```
+
+1. **停掉所有 worker**：本机 `npm run worker:agent`、视频 worker 进程或容器。等 2～5 分钟让租约过期。
+
+2. **备份（必须）**：这一批删除有数据的表，免费版没有自动备份。
+   - 有 CLI 时：`supabase db dump --data-only -f backup-0.5.0-step5-data.sql`，以及 `supabase db dump -f backup-0.5.0-step5-schema.sql`。
+   - 没有 CLI 时：在 Dashboard → Table Editor 把 `signals`、`selections`、`intake_receipts`、`content_projects`、`content_documents`、`content_revisions`、`content_review_events`、`site_settings`、`approval_requests`、`audit_events` 分别 Export → CSV。
+   - 备份文件放在仓库外，不要提交。
+
+3. **只读预检**：
+
+   ```sql
+   select
+    (select max(version) from supabase_migrations.schema_migrations) as head,                       -- 20261125100000
+    (select count(*) from public.agent_jobs where status='running' and locked_until > now()) as live_leases,   -- 0
+    (select count(*) from public.content_project_assets) as project_assets,                         -- 0
+    (select count(*) from public.publishing_channels)+(select count(*) from public.content_publications)+(select count(*) from public.publication_metrics) as ext_publish,  -- 0
+    (select count(*) from public.video_plans)+(select count(*) from public.video_storyboard_proposals)+(select count(*) from public.video_cost_entries)
+      +(select count(*) from public.knowledge_entries)+(select count(*) from public.decision_memories) as video_knowledge,   -- 0
+    (select count(*) from public.site_entries)+(select count(*) from public.site_entry_releases)+(select count(*) from public.site_resources)+(select count(*) from public.site_bookmarks) as site_rows,  -- 0
+    (select count(*) from public.content_documents where work_item_id is null) as docs_without_item,   -- 0
+    to_regclass('public.chat_sessions') as chat;                                                    -- null
+   ```
+
+   任一结果不符就**停止**，把结果原样发回来。
+
+4. **执行脚本**：二选一。
+   - SQL Editor：打开 `supabase/release/0.5.0-step5.sql`，**整份粘贴、一次运行**。
+   - psql：`psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -f supabase/release/0.5.0-step5.sql`。
+
+   出现任何报错都说明已经整体回滚，**不要分段重跑**，把报错原文发回来。成功时会有一条 `backfill_v1 (final): {...}` 通知，原样记下。
+
+5. **核对结果**：
+
+   ```sql
+   select max(version) from supabase_migrations.schema_migrations;                                  -- 20261126100300
+   select count(*) filter (where c.relkind = 'r') as tables, count(*) filter (where c.relkind in ('v','m')) as views
+     from pg_class c join pg_namespace n on n.oid = c.relnamespace where n.nspname = 'public' and c.relkind in ('r','v','m');   -- 21, 0
+   select to_regclass('public.signals'), to_regclass('public.content_projects'), to_regclass('public.site_settings'),
+          to_regclass('public.knowledge_entries'), to_regclass('public.video_cost_entries');       -- 全部 null
+   select count(*) from pg_proc p join pg_namespace n on n.oid = p.pronamespace
+    where n.nspname = 'public' and p.proname like 'node\_%';                                       -- 12
+   select is_nullable from information_schema.columns
+    where table_schema='public' and table_name='content_documents' and column_name='work_item_id';  -- NO
+   select count(*) from public.audit_events where metadata->'legacy' ? 'review_event_id';          -- 21（= 原 content_review_events 行数）
+   select count(*) from public.intake_events where payload->'legacy' ? 'signal_id';                -- 34（= 原 signals 行数）
+   select has_column_privilege('anon','public.content_documents','published_body','select') as anon_published,  -- true
+          has_column_privilege('anon','public.content_documents','body','select') as anon_draft;                -- false
+   ```
+
+   把这些结果和第 4 步的 `backfill_v1 (final)` 通知原样发回来。
+
+6. **部署前端**（顺序：数据库之后立刻做；执行完第 4 步后线上 V1 控制台已不可用）：
+   - `sense-console`：`npm --prefix sense-console ci && npm --prefix sense-console run build`，按现有方式替换线上控制台（story.susense.cn）。
+   - `sense-site`：`npm --prefix sense-site ci && npm --prefix sense-site run build`，环境变量只需 `VITE_SUPABASE_URL`、`VITE_SUPABASE_PUBLISHABLE_KEY`（可选 `VITE_SITE_NAME`、`VITE_SITE_ORGANIZATION_ID`），**`VITE_SITE_DEMO` 必须为空**。
+   - Edge Functions 本批不需要重部署（未引用被删除的对象）；如果 `content-draft` 还是 DB2c-3 之前的版本，可顺带 `supabase functions deploy content-draft`。
+
+7. **用新代码重启 worker**：`npm run worker:agent`（公开 key + 节点令牌）；视频 worker 用新镜像（不再写成本账本）。
+
+8. **不需要做的**：不执行 `supabase db push`，不修改函数环境变量，不删除存储桶。
+
+### 执行后验收（人在控制台做一遍）
+
+1. 收件箱 / 速记 → 事项 → 新建母稿 →「交给 Agent 出稿」→ 编辑器自动载入 AI 写入的新版本。
+2. 提交审核并通过 → 发布面板「一键批准并发布」→ 打开读者站，文章可见；改稿后读者站仍是旧版本；「下线」后读者站读不到。
+3. 在平台稿上回填一个外部发布链接 →「发布记录」页能看到。
+4. 视频工坊「从大纲开始」→ Agent 直接生成分镜草稿（不再有「采纳提案」一步）。
+5. 知识库页能看到仓库 `knowledge-base/` 的 3 条条目（只读）；菜单里不再有「发布运营」和「决定记忆」。
+
+**出问题怎么回退**：脚本失败会自动回滚，不需要处理。脚本成功后想撤销，只能用第 2 步的备份恢复，并重新部署 V1 控制台。

@@ -1,14 +1,7 @@
 import { describe, expect, it } from 'vitest'
-import { canTransition, optionalCount, urlSchema } from '@/contracts/content'
+import { canTransition, urlSchema } from '@/contracts/content'
 
 describe('content workflow boundaries', () => {
-  it('preserves missing metrics separately from genuine zero observations', () => {
-    expect(optionalCount('')).toBeNull()
-    expect(optionalCount('  ')).toBeNull()
-    expect(optionalCount('0')).toBe(0)
-    expect(optionalCount('42')).toBe(42)
-    for (const value of ['-1', '2.1', 'Infinity', 'text', '9007199254740992']) expect(() => optionalCount(value)).toThrow()
-  })
   it('requires the appropriate permission and an in-review version for approval', () => {
     expect(canTransition('draft', 'approved', true, true)).toBe(false)
     expect(canTransition('in_review', 'approved', true, false)).toBe(false)

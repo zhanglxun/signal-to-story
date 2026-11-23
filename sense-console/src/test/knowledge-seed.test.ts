@@ -3,14 +3,13 @@ import { readFileSync } from "node:fs"
 import { describe, expect, it } from "vitest"
 
 import { mapAgentJob, mapAgentJobStep, summarizeJobUsage } from "@/contracts/agent-job"
-import { GENERATED_SQL, GENERATED_TS, loadRepositoryKnowledge, renderGeneratedTs, renderSeedSql } from "../../scripts/knowledge-seed"
+import { GENERATED_TS, loadRepositoryKnowledge, renderGeneratedTs } from "../../scripts/knowledge-seed"
 
 describe("knowledge-base seed generator", () => {
-  it("generated files are in sync with knowledge-base/*.md (run `npm run kb:seed` if this fails)", () => {
+  it("the generated console copy is in sync with knowledge-base/*.md (run `npm run kb:seed` if this fails)", () => {
     const entries = loadRepositoryKnowledge()
     expect(entries.length).toBeGreaterThan(0)
     expect(readFileSync(GENERATED_TS, "utf8")).toBe(renderGeneratedTs(entries))
-    expect(readFileSync(GENERATED_SQL, "utf8")).toBe(renderSeedSql(entries))
   })
 })
 

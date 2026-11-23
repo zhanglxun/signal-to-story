@@ -19,7 +19,7 @@ export const MANDATE_GATED_JOB_TYPES: Readonly<Record<string, MandateActionType>
 /**
  * UI-side ADVISORY check only (disable buttons, explain why).
  * The authority is the database: approval_requests + decide_approval_request() +
- * the agent_jobs Mandate trigger + the content_publications guard.
+ * the agent_jobs Mandate trigger + publish_document (MD001 / MD002).
  */
 export function checkMandateGate(input: MandateGateCheckInput): MandateGateCheckResult {
   const requiresHuman = MANDATE_REQUIRED_ACTIONS.has(input.action)

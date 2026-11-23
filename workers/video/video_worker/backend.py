@@ -37,7 +37,6 @@ class Backend(Protocol):
     def update_shot(self, shot_id: str, patch: Dict[str, Any]) -> None: ...
     def update_plan(self, plan_id: str, patch: Dict[str, Any]) -> None: ...
     def insert_asset(self, row: Dict[str, Any]) -> int: ...
-    def insert_cost_entry(self, row: Dict[str, Any]) -> None: ...
     def upload(self, bucket: str, path: str, local_file: str, content_type: str) -> None: ...
     def download(self, bucket: str, path: str, dest_file: str) -> None: ...
 
@@ -116,13 +115,6 @@ class RestBackend:
         rows = self._request("POST", "/rest/v1/assets?select=id", row, {"Prefer": "return=representation"})
         return int(rows[0]["id"])
 
-    def insert_cost_entry(self, row):
-        try:
-            self._request("POST", "/rest/v1/video_cost_entries", row, {"Prefer": "return=minimal"})
-        except BackendError as e:
-            if e.status != 409:  # duplicate (job, kind, shot) = already recorded on a previous attempt
-                raise
-
     def upload(self, bucket, path, local_file, content_type):
         data = Path(local_file).read_bytes()
         self._request("POST", f"/storage/v1/object/{bucket}/{urllib.parse.quote(path)}", headers={"Content-Type": content_type, "x-upsert": "true"}, raw=data)
@@ -167,7 +159,7 @@ class StdioBackend:
             "fail": ("job_id", "lease_epoch", "error", "retryable", "retry_delay_seconds", "error_code"),
             "get_plan": ("plan_id",), "list_shots": ("plan_id",), "get_asset": ("asset_id",),
             "update_shot": ("shot_id", "patch"), "update_plan": ("plan_id", "patch"),
-            "insert_asset": ("row",), "insert_cost_entry": ("row",),
+            "insert_asset": ("row",),
             "upload": ("bucket", "path", "local_file", "content_type"), "download": ("bucket", "path", "dest_file"),
         }
         if op not in names:

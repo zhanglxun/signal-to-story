@@ -1,10 +1,10 @@
 # Agent Harness Worker
 
-独立进程，消费 `public.agent_jobs`，执行「Context Pack → 生成 → 确定性预检 → 独立 LLM 评估 → 重写（≤ max_rounds）→ 提案 / 转人工」。设计与接口见 [docs/modules/harness.md](../../../docs/modules/harness.md)。
+独立进程，消费 `public.agent_jobs`，执行「Context Pack → 生成 → 确定性预检 → 独立 LLM 评估 → 重写（≤ max_rounds）→ 直接写入草稿 / 转人工」。设计与接口见 [docs/modules/harness.md](../../docs/modules/harness.md)。
 
 - 只做 outbound 连接（Supabase HTTPS + 模型 API），没有监听端口。
-- 只持有**公开 key + 节点令牌**（DB2c-2），所有读写都走 `node_*` RPC：只能认领本组织的任务、只能写自己正在执行的任务；不能批准、不能写知识库/决定记忆、不能改正式稿件、不能写发布记录（数据库拒绝）。不需要也不应该配置 `service_role`。
-- 产出写入 `content_ai_proposals`（`status=succeeded`、`agent_job_id`），任务置为 `pending_review`，由人工在现有提案采纳流程中处理。
+- 只持有**公开 key + 节点令牌**（DB2c-2），所有读写都走 `node_*` RPC：只能认领本组织的任务、只能写自己正在执行的任务；不能批准、不能写知识库/决定记忆、不能写发布记录（数据库拒绝）。不需要也不应该配置 `service_role`。
+- 产出经 `node_write_document_draft` 校验 `base_revision` 后直接写入 `content_documents` 新草稿版本（DB2c-3；若期间人工改过稿件则拒绝覆盖并转失败 `stale_target`），任务置为 `pending_review`，人工在控制台复核通过后任务自动转为 `succeeded`。
 
 ## 运行
 
@@ -38,10 +38,10 @@ npm run worker:agent
 ## 本地演示 / 验收
 
 ```bash
-npm --prefix sense-console run demo:harness
+npm run demo:harness
 ```
 
-PGlite + 全量迁移 + fake LLM：场景 1 评估先失败后通过 → 提案 + `pending_review`；场景 2 三轮不过 → `blocked_needs_human`。若环境里配置了 `SENSE_LLM_*`，场景 1 改用真实模型（会产生费用）。
+PGlite + 全量迁移 + fake LLM：场景 1 评估先失败后通过 → 直接写入稿件 v2 + `pending_review`；场景 2 三轮不过 → `blocked_needs_human`。若环境里配置了 `SENSE_LLM_*`，场景 1 改用真实模型（会产生费用）。
 
 ## 通知
 

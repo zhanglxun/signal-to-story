@@ -3,7 +3,7 @@
  * to the repo head (docs/database.md §8.1). The script is generated from the migration files, so the SQL
  * that the tests rehearse is exactly the SQL that runs live.
  *
- *   npx tsx testing/db/release.ts            → supabase/release/0.5.0-step{1,2,3}.sql
+ *   npx tsx testing/db/release.ts            → supabase/release/0.5.0-step{1,2,3,4,5}.sql
  *
  * Shape: preflight assertions → [retire legacy live-only objects] → pending migrations in order →
  * migration history rows → [V1 backfill (idempotent)] → commit. Any failure rolls everything back.
@@ -81,12 +81,55 @@ export const RELEASES = {
   },
   step3: {
     after: "20261123100000",
+    upTo: "20261124100000",
     label: "0.5.0 step 3 (DB2c-2)",
     file: "0.5.0-step3.sql",
     retireLegacySite: false,
     backfillV1: false,
     // Additive: the service_role node RPCs stay, so a running old-style worker is not cut off mid-job.
     appliedWhen: "to_regclass('public.runner_nodes') is not null",
+  },
+  step4: {
+    after: "20261124100000",
+    upTo: "20261125100000",
+    label: "0.5.0 step 4 (DB2c-3)",
+    file: "0.5.0-step4.sql",
+    retireLegacySite: false,
+    backfillV1: false,
+    appliedWhen: "to_regprocedure('public.node_write_document_draft(text,uuid,bigint,uuid,integer,text,text)') is not null",
+    preflight: [
+      `  -- Agent workers running content_draft must be stopped before retiring node_save_proposal / content_ai_proposals.`,
+      `  select count(*) into n from public.agent_jobs where kind = 'content_draft' and status = 'running' and locked_until > now();`,
+      `  if n > 0 then raise exception 'preflight: % content_draft job(s) hold a live lease; stop the agent worker and wait for the leases to expire', n; end if;`,
+    ],
+  },
+  // Final batch (go-live): DB4 publishing on documents, DB5 video MVP, DB3 chat storage, then the V1 retirement
+  // (last backfill + reconciliation + drop of every retired table). After it the public schema is 21 tables, 0 views.
+  step5: {
+    after: "20261125100000",
+    label: "0.5.0 step 5 (final: DB4 + DB5 + DB3 + retire V1)",
+    file: "0.5.0-step5.sql",
+    retireLegacySite: false,
+    backfillV1: false,
+    appliedWhen: "to_regclass('public.chat_sessions') is not null",
+    preflight: [
+      `  -- Every worker (agent and video) must be stopped: node RPCs, video tables and content_documents change shape.`,
+      `  select count(*) into n from public.agent_jobs where status = 'running' and locked_until > now();`,
+      `  if n > 0 then raise exception 'preflight: % agent job(s) hold a live lease; stop every worker and wait for the leases to expire', n; end if;`,
+      `  -- Linked project assets are not carried over (database.md R3); refuse instead of silently dropping them.`,
+      `  select count(*) into n from public.content_project_assets;`,
+      `  if n > 0 then raise exception 'preflight: content_project_assets has % rows; they are not migrated — export them first', n; end if;`,
+      `  -- External publishing tables are dropped without migration (DB-D3: empty live).`,
+      `  select (select count(*) from public.publishing_channels) + (select count(*) from public.content_publications) + (select count(*) from public.publication_metrics) into n;`,
+      `  if n > 0 then raise exception 'preflight: external publishing tables hold % rows; expected empty', n; end if;`,
+      `  -- Retired video and knowledge tables must be empty (nothing to migrate).`,
+      `  select (select count(*) from public.video_plans) + (select count(*) from public.video_storyboard_proposals) + (select count(*) from public.video_cost_entries)`,
+      `       + (select count(*) from public.knowledge_entries) + (select count(*) from public.decision_memories) into n;`,
+      `  if n > 0 then raise exception 'preflight: video / knowledge tables hold % rows; expected empty', n; end if;`,
+      `  -- Reader-site tables: only the single site_settings row may exist (no published entries are lost).`,
+      `  select (select count(*) from public.site_entries) + (select count(*) from public.site_entry_releases) + (select count(*) from public.site_resources) + (select count(*) from public.site_bookmarks) into n;`,
+      `  if n > 0 then raise exception 'preflight: reader-site tables hold % rows; republish through publish_document after the release instead', n; end if;`,
+    ],
   },
 } satisfies Record<string, ReleaseSpec>
 

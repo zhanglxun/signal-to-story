@@ -15,6 +15,7 @@ export function useContentAction() {
         client.invalidateQueries({ queryKey: ['work-item'] }),
         client.invalidateQueries({ queryKey: ['intake-inbox'] }),
         client.invalidateQueries({ queryKey: ['document-history'] }),
+        client.invalidateQueries({ queryKey: ['agent-jobs'] }),
       ])
       toast.success(message)
       return true

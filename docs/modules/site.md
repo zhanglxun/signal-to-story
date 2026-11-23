@@ -8,27 +8,18 @@
 
 ## 2. 页面（导航最多两级）
 
-首页 `/` · 探索 `/explore`（主题、形式、栏目筛选和标题搜索）→ 内容 `/content/:slug` · 专题 `/topics` → `/topics/:slug` · 资源库 `/resources` · 我的 `/me`（收藏）。登录、注册、恢复密码是辅助路由。
+首页 `/` · 探索 `/explore`（内容形式筛选和标题 / 摘要搜索）→ 内容 `/content/:slug`。专题、资源库、读者注册登录、收藏已随 DB4 下线（DB-D17）。
 
-## 3. 首版边界
+## 3. 边界
 
-- **纳入**：公开阅读；注册后可读的内容（public / registered 两级）；收藏、专题、基本搜索、资源鉴权下载；人工发布与下线。
-- **后置**：支付、会员、订阅、评论、推荐、SSR / 完整 SEO（首版是 SPA，不承诺搜索收录）。
+- **纳入**：公开阅读已发布的文章；人工发布与下线。
+- **后置**：读者账号、注册可读、收藏、专题、资源下载、支付、评论、SSR / SEO（首版是 SPA）。
 - **演示模式**：没有配置 Supabase 时进入演示模式，页面显示「演示数据」；配置后如果数据库出错只显示重试，绝不回退到演示数据。
 
-## 4. 权限规则
+## 4. 数据与权限（DB4）
 
-- 读者不加入后台组织，也拿不到任何 `content.*` 能力。
-- `anon` 只能读已上线的 public 条目的安全元数据；正文单独存放，按条目状态和访问级别授权；受限正文不能通过搜索、分页总数、关联查询或资源 URL 泄露。
-- 发布事务：要求登录、同组织、具备 `content.publish`、源稿件为当前 approved 版本，在同一事务里写入不可变快照并切换公开指针。改稿不影响已上线的快照；下线立即撤销正文和资源授权。
-- 受限资源放私有 bucket，用短时签名 URL 下载；Markdown 渲染禁用原始 HTML。
-
-## 5. 现状（本地，未上线）
-
-- 表：`site_settings / site_categories / site_topics / site_topic_items / site_entries / site_entry_bodies / site_release_* / site_resources / site_bookmarks`。线上另有一套旧的 `site_*` 表，计划退役。
-- 发布需要先走数据库级批准（请求 → 批准 → 发布）。
-- 47 条测试覆盖游客、已验证读者、未验证读者、后台成员和其他组织之间的隔离。
-
-## 6. 0.5 调整方向
-
-改为直接读 `content_documents` 的已发布列（`published_title` `published_body` `published_at` `slug`）：发布 RPC 写入快照，改稿不影响线上；`anon` 只被授予这几列，RLS 只放行已发布的行。专题、收藏、资源首版不做。定版见 [database.md](../database.md) DB-D11。
+- 站点直接读 `content_documents` 的发布列：`id, slug, published_revision, published_title, published_body, published_meta, published_at`。`published_meta` 存摘要、形式、封面、媒体与来源引用。
+- `anon` 只被授予这些列的 SELECT，RLS 只放行 `published_at is not null` 的行；`select *`、草稿正文、审核意见一律拒绝。可选环境变量 `VITE_SITE_ORGANIZATION_ID` 只显示某个组织的内容。
+- 发布只能经 `publish_document`：登录、`content.publish`、稿件为当前 approved 版本、并有绑定该版本的已批准 `publish_site` 请求（MD001 缺批准 / MD002 已过期）。发布把当前版本复制进发布列，之后改稿不影响线上；`unpublish_document` 清空 `published_at` 即下线。发布列只能由这些 RPC 写（触发器拦截直接更新）。
+- 外部平台人工发布后用 `set_document_published_url` 回填链接，不抓数据。
+- 测试：`supabase/tests/db/publish-document-db.test.ts`、`sense-site/src/test/db/site-permissions.test.ts`（真实迁移上的 anon 权限）。

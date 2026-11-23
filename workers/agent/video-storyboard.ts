@@ -1,7 +1,7 @@
 /**
- * `video_storyboard` job: outline + trusted video SOP → LLM → strict JSON (VideoPlanDraft) → zod + SOP precheck
- * → (rewrite up to max_rounds) → video_storyboard_proposals row + pending_review.
- * The agent never writes video_plans / video_shots; a human adopts the proposal via accept_video_storyboard_proposal.
+ * `video_storyboard` job: outline + repository video SOP → LLM → strict JSON (VideoPlanDraft) → zod + SOP precheck
+ * → (rewrite up to max_rounds) → a draft video plan written directly (write_video_draft) → job succeeded.
+ * The draft is free to edit; paid rendering still needs a human approval bound to the plan revision (DB5).
  * Steps are durable (agent_job_steps), so a resumed job does not re-bill finished LLM calls; limits come from
  * payload.limits and totals from the recorded steps.
  */
@@ -18,6 +18,7 @@ import type { HarnessStepKind, HarnessStepRecord } from "../../sense-console/src
 import { type ChatMessage, stripCodeFence } from "../../sense-console/src/harness/llm"
 import { LeaseLostError } from "../../sense-console/src/harness/loop-controller"
 import type { SqlExecutor } from "./backends/sql-backend"
+import { loadVideoKnowledge } from "./knowledge"
 import type { JobHandler, JobHandlerOutcome } from "./job-handlers"
 
 export const VIDEO_STORYBOARD_PROMPT_VERSION = "video-storyboard-v1"
@@ -29,36 +30,20 @@ export interface StoryboardKnowledge {
 }
 
 export interface VideoStoryboardStore {
-  /** Trusted video SOP / brand knowledge only (unreviewed knowledge never enters the system zone). */
-  loadTrustedVideoKnowledge(job: { organizationId: string; jobId: string }): Promise<StoryboardKnowledge[]>
-  /** Insert once per job; return the existing id on replay. */
-  saveProposal(input: { organizationId: string; jobId: string; leaseEpoch: number; projectId: string | null; outline: string; proposal: VideoPlanDraft; model: string }): Promise<{ proposalId: string }>
+  /** Write the draft plan + shots once per job; a replay returns the same plan id. */
+  writeDraft(input: { jobId: string; leaseEpoch: number; draft: VideoPlanDraft; model: string }): Promise<{ planId: string }>
 }
 
-const knowledgeFilter = "slug = 'video-storyboard-sop' or 'video' = any(tags) or category = 'brand_voice'"
-
+/** service_role SQL (tests, demos): the same database function the node RPC wraps. */
 export class SqlVideoStoryboardStore implements VideoStoryboardStore {
   private readonly run: <T>(fn: (sql: SqlExecutor) => Promise<T>) => Promise<T>
   constructor(run: <T>(fn: (sql: SqlExecutor) => Promise<T>) => Promise<T>) {
     this.run = run
   }
-  loadTrustedVideoKnowledge({ organizationId }: { organizationId: string; jobId: string }) {
-    return this.run(async (sql) =>
-      (await sql.query<StoryboardKnowledge>(
-        `select slug, title, content from public.knowledge_entries where organization_id = $1 and trust_level = 'trusted' and (${knowledgeFilter}) order by slug limit 10`,
-        [organizationId]
-      )).rows
-    )
-  }
-  saveProposal(input: Parameters<VideoStoryboardStore["saveProposal"]>[0]) {
+  writeDraft(input: Parameters<VideoStoryboardStore["writeDraft"]>[0]) {
     return this.run(async (sql) => {
-      const existing = await sql.query<{ id: string }>("select id from public.video_storyboard_proposals where agent_job_id = $1", [input.jobId])
-      if (existing.rows[0]) return { proposalId: existing.rows[0].id }
-      const r = await sql.query<{ id: string }>(
-        "insert into public.video_storyboard_proposals(organization_id, agent_job_id, project_id, input_outline, proposal, model) values ($1,$2,$3,$4,$5,$6) returning id",
-        [input.organizationId, input.jobId, input.projectId, input.outline, input.proposal, input.model]
-      )
-      return { proposalId: r.rows[0].id }
+      const r = await sql.query<{ id: string }>("select public.write_video_draft($1, $2, $3) as id", [input.jobId, input.leaseEpoch, { ...input.draft, model: input.model }])
+      return { planId: String(r.rows[0].id) }
     })
   }
 }
@@ -144,11 +129,11 @@ export function createVideoStoryboardHandler(store: VideoStoryboardStore): JobHa
       await backend.insertStep(step, epoch)
       steps.push(step)
     }
-    const finish = async (status: JobHandlerOutcome["status"], reason: string, proposalId: string | null = null, errorCode: string | null = null): Promise<JobHandlerOutcome> => {
+    const finish = async (status: JobHandlerOutcome["status"], reason: string, planId: string | null = null, errorCode: string | null = null): Promise<JobHandlerOutcome> => {
       const t = totals()
-      await backend.complete(job.id, epoch, status, { termination_reason: reason, rounds_executed: t.rounds, cost_cents: t.cost, proposal_id: proposalId, prompt_version: VIDEO_STORYBOARD_PROMPT_VERSION },
-        status === "pending_review" ? null : reason, errorCode)
-      return { status, reason, roundsExecuted: t.rounds, costCents: t.cost, proposalId }
+      await backend.complete(job.id, epoch, status, { termination_reason: reason, rounds_executed: t.rounds, cost_cents: t.cost, plan_id: planId, prompt_version: VIDEO_STORYBOARD_PROMPT_VERSION },
+        status === "succeeded" || status === "pending_review" ? null : reason, errorCode)
+      return { status, reason, roundsExecuted: t.rounds, costCents: t.cost, planId }
     }
     const checkLease = async () => {
       const beat = await backend.heartbeat(job.id, epoch, leaseSeconds)
@@ -160,9 +145,9 @@ export function createVideoStoryboardHandler(store: VideoStoryboardStore): JobHa
     if (!payload.success) return finish("failed", `任务参数无效：${payload.error.issues[0]?.message ?? "unknown"}`, null, "invalid_payload")
 
     const persisted = steps.find((s) => s.stepKind === "persist")
-    if (persisted) return finish("pending_review", "已从中断处恢复：提案此前已保存。", (persisted.output as { proposalId?: string })?.proposalId ?? null)
+    if (persisted) return finish("succeeded", "已从中断处恢复：分镜草稿此前已写入。", (persisted.output as { planId?: string })?.planId ?? null)
 
-    const knowledge = await store.loadTrustedVideoKnowledge({ organizationId: job.organizationId, jobId: job.id })
+    const knowledge = loadVideoKnowledge()
     if (!find(0, "context")) {
       await record({ jobId: job.id, organizationId: job.organizationId, round: 0, stepKind: "context", status: "succeeded",
         inputSummary: { trusted_knowledge: knowledge.map((k) => k.slug), outline_chars: payload.data.outline.length, prompt_version: VIDEO_STORYBOARD_PROMPT_VERSION },
@@ -197,9 +182,9 @@ export function createVideoStoryboardHandler(store: VideoStoryboardStore): JobHa
       if (evaluation.passed) {
         const draft = validateStoryboardOutput(text).draft as VideoPlanDraft
         if (await checkLease()) return finish("cancelled", "人工取消，已在步骤边界停止。", null, "cancelled")
-        const { proposalId } = await store.saveProposal({ organizationId: job.organizationId, jobId: job.id, leaseEpoch: job.leaseEpoch, projectId: payload.data.project_id ?? null, outline: payload.data.outline, proposal: draft, model: gen.model ?? generator.model })
-        await record({ jobId: job.id, organizationId: job.organizationId, round, stepKind: "persist", status: "succeeded", output: { proposalId, shots: draft.shots.length }, costCents: 0, durationMs: 0 })
-        return finish("pending_review", `第 ${round} 轮通过 Schema 与 SOP 校验，分镜提案待人工采纳。`, proposalId)
+        const { planId } = await store.writeDraft({ jobId: job.id, leaseEpoch: job.leaseEpoch, draft, model: gen.model ?? generator.model })
+        await record({ jobId: job.id, organizationId: job.organizationId, round, stepKind: "persist", status: "succeeded", output: { planId, shots: draft.shots.length }, costCents: 0, durationMs: 0 })
+        return finish("succeeded", `第 ${round} 轮通过 Schema 与 SOP 校验，分镜草稿已写入，可直接编辑。`, planId)
       }
       feedback = `上一轮输出未通过校验，请修正后重新输出完整 JSON：\n- ${evaluation.issues.join("\n- ")}`
       previous = text

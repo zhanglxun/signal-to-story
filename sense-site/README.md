@@ -26,14 +26,14 @@ src/
 ├── config/brand.ts    品牌文案唯一来源
 ├── contracts/site.ts  读者侧契约（与数据库公开列集合一致）
 ├── data/              演示模式示例快照
-├── features/          读者登录、主题、React Query hooks
+├── features/          主题、React Query hooks
 ├── lib/               env、Supabase 客户端、markdown-it（html:false）
-├── pages/             首页、探索、内容、专题、资源库、我的、登录/注册/找回密码、404
+├── pages/             首页、探索、内容、404
 ├── services/          SiteService 接口及 Supabase / demo 两种实现；读者 Auth
 └── test/              vitest；test/db 为 PGlite 权限隔离测试
 ```
 
-数据库迁移不在本目录：站点发布层位于仓库根目录 `supabase/migrations/20261116100000_create_site_publishing.sql` 与 `20261116100100_site_publish_functions.sql`，SQL 验收脚本为 `supabase/tests/site_publishing.sql`。
+数据库迁移不在本目录：站点读取 `content_documents` 的发布列，定义在仓库根目录 `supabase/migrations/20261126100000_publish_on_documents.sql`；权限测试为 `src/test/db/site-permissions.test.ts` 与 `supabase/tests/db/publish-document-db.test.ts`。
 
 `src/test/db/` 使用 PGlite 在进程内应用 `supabase/migrations` 的全部迁移，并以 anon / 注册读者 / 后台成员身份真实执行 RLS 与 GRANT；不连接任何远程数据库。
 

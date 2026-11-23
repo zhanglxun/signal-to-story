@@ -1,5 +1,5 @@
 import { useState } from "react"
-import { CheckIcon, FilmIcon, ShieldCheckIcon, XIcon } from "lucide-react"
+import { FilmIcon, ShieldCheckIcon } from "lucide-react"
 
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
@@ -14,20 +14,17 @@ import type { AgentJob, ApprovalRequest } from "@/contracts/agent-job"
 import {
   aspectRatios,
   formatCents,
-  motionModeLabels,
   shotRenderStatusLabels,
   type AspectRatio,
-  type VideoCostEntry,
-  type VideoCostSummary,
+  type JobEstimate,
   type VideoPlan,
   type VideoShot,
-  type VideoStoryboardProposal,
   videoJobTypeLabels,
   VOICE_OPTIONS,
 } from "@/contracts/video-studio"
 
 const jobStatusLabels: Record<string, string> = {
-  queued: "排队中", running: "执行中", pending_review: "待人工采纳", blocked_needs_human: "需人工处理", succeeded: "已完成", failed: "失败", cancelled: "已取消",
+  queued: "排队中", running: "执行中", pending_review: "待人工确认", blocked_needs_human: "需人工处理", succeeded: "已完成", failed: "失败", cancelled: "已取消",
 }
 const approvalStatusLabels: Record<ApprovalRequest["status"], string> = { pending: "待批准", approved: "已批准", rejected: "已拒绝", expired: "已失效" }
 
@@ -85,45 +82,28 @@ export function OutlineSheet({ open, onOpenChange, onSubmit, busy }: { open: boo
   )
 }
 
-export function ProposalPanel({ proposals, jobs, canManage, busy, onAccept, onReject }: {
-  proposals: VideoStoryboardProposal[]
-  jobs: AgentJob[]
-  canManage: boolean
-  busy?: boolean
-  onAccept: (id: string) => void
-  onReject: (id: string, reason: string) => void
-}) {
-  const active = jobs.filter((j) => ["queued", "running", "blocked_needs_human", "failed"].includes(j.status)).slice(0, 3)
-  if (proposals.length === 0 && active.length === 0) return null
+/** Storyboard jobs: the agent writes a draft plan directly (result.plan_id); open it to edit. */
+export function StoryboardJobsPanel({ jobs, onOpenPlan }: { jobs: AgentJob[]; onOpenPlan: (planId: string) => void }) {
+  const recent = jobs.filter((j) => ["queued", "running", "blocked_needs_human", "failed", "succeeded"].includes(j.status)).slice(0, 4)
+  if (recent.length === 0) return null
   return (
     <Card>
       <CardHeader>
-        <CardTitle>分镜提案</CardTitle>
-        <CardDescription>Agent 只产出提案；采纳后才写入正式分镜。</CardDescription>
+        <CardTitle>大纲拆解</CardTitle>
+        <CardDescription>Agent 直接写入分镜草稿，你在下方逐镜修改；付费渲染仍需人工批准。</CardDescription>
       </CardHeader>
-      <CardContent className="space-y-4">
-        {active.map((j) => (
-          <p key={j.id} className="text-sm text-muted-foreground">
-            拆解任务 {j.id.slice(0, 8)} · {jobStatusLabels[j.status] ?? j.status}{j.error ? ` · ${j.error}` : ""}
-          </p>
-        ))}
-        {proposals.map((p) => (
-          <div key={p.id} className="space-y-2 rounded-lg border p-3">
-            <div className="flex flex-wrap items-center justify-between gap-2">
-              <span className="text-sm font-medium">{p.proposal?.title ?? "（提案格式无效）"}</span>
-              <span className="text-xs text-muted-foreground">{p.proposal ? `${p.proposal.shots.length} 镜 · ${p.proposal.aspect_ratio} · ${p.proposal.target_seconds}s` : ""}</span>
+      <CardContent className="space-y-2">
+        {recent.map((j) => {
+          const planId = typeof j.result?.plan_id === "string" ? j.result.plan_id : null
+          return (
+            <div key={j.id} className="flex flex-wrap items-center justify-between gap-2 text-sm">
+              <span className="text-muted-foreground">
+                拆解任务 {j.id.slice(0, 8)} · {jobStatusLabels[j.status] ?? j.status}{j.error ? ` · ${j.error}` : ""}
+              </span>
+              {planId ? <Button size="sm" variant="outline" onClick={() => onOpenPlan(planId)}>打开草稿</Button> : null}
             </div>
-            {p.proposal ? (
-              <ol className="list-decimal space-y-1 pl-5 text-sm text-muted-foreground">
-                {p.proposal.shots.map((s, i) => <li key={i}>{s.narration || "（无旁白）"} <span className="text-xs">· {motionModeLabels[s.motion_mode]}</span></li>)}
-              </ol>
-            ) : null}
-            <div className="flex gap-2">
-              <Button size="sm" disabled={!canManage || busy || !p.proposal} onClick={() => onAccept(p.id)}><CheckIcon />采纳为分镜</Button>
-              <Button size="sm" variant="outline" disabled={!canManage || busy} onClick={() => onReject(p.id, "人工退回")}><XIcon />退回</Button>
-            </div>
-          </div>
-        ))}
+          )
+        })}
       </CardContent>
     </Card>
   )
@@ -219,36 +199,26 @@ export function TimelinePanel({ plan, shots, finalUrl, finalPlaceholder, onCompo
   )
 }
 
-export function CostLedgerPanel({ summary, entries, jobs }: { summary: VideoCostSummary | null; entries: VideoCostEntry[]; jobs: AgentJob[] }) {
-  const kindLabels: Record<VideoCostEntry["kind"], string> = { tts: "配音", shot_render: "单镜渲染", compose: "合成", keyframe: "关键帧", storyboard_llm: "大纲拆解" }
+/** Estimate only (no cost ledger in the MVP): computed from the shots, the database re-computes on enqueue. */
+export function EstimatePanel({ estimate, shots, jobs }: { estimate: JobEstimate; shots: VideoShot[]; jobs: AgentJob[] }) {
+  const rendered = shots.filter((s) => s.renderStatus === "rendered").length
+  const cloud = shots.filter((s) => s.motionMode === "cloud_video_model").length
   return (
     <Card>
       <CardHeader>
-        <CardTitle>成本账本</CardTitle>
+        <CardTitle>费用估算与任务</CardTitle>
         <CardDescription>
-          {summary ? `估算 ${formatCents(summary.estimatedCents)} · 实际 ${formatCents(summary.actualCents)} · ${summary.renderedCount}/${summary.shotCount} 镜已渲染 · 云端镜头 ${summary.cloudShotCount}` : "暂无成本数据"}
+          全片合成约 {formatCents(estimate.costCents)}{estimate.requiresApproval ? "（需批准）" : "（免费）"} · {rendered}/{shots.length} 镜已渲染 · 云端镜头 {cloud}
         </CardDescription>
       </CardHeader>
-      <CardContent className="space-y-4">
-        {entries.length > 0 ? (
-          <div className="overflow-x-auto">
-            <Table>
-              <TableHeader><TableRow><TableHead>类型</TableHead><TableHead>提供方</TableHead><TableHead>估算</TableHead><TableHead>实际</TableHead></TableRow></TableHeader>
-              <TableBody>
-                {entries.map((e) => (
-                  <TableRow key={e.id}><TableCell>{kindLabels[e.kind]}</TableCell><TableCell>{e.provider}</TableCell><TableCell>{formatCents(e.estimatedCents)}</TableCell><TableCell>{formatCents(e.actualCents)}</TableCell></TableRow>
-                ))}
-              </TableBody>
-            </Table>
-          </div>
-        ) : null}
+      <CardContent>
         {jobs.length > 0 ? (
           <ul className="space-y-1 text-sm text-muted-foreground">
             {jobs.slice(0, 8).map((j) => (
               <li key={j.id}>{videoJobTypeLabels[j.kind as keyof typeof videoJobTypeLabels] ?? j.kind} · {jobStatusLabels[j.status] ?? j.status}{j.errorCode ? ` (${j.errorCode})` : ""}</li>
             ))}
           </ul>
-        ) : null}
+        ) : <p className="text-sm text-muted-foreground">暂无渲染任务。</p>}
       </CardContent>
     </Card>
   )

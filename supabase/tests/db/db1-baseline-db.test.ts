@@ -27,9 +27,9 @@ async function runningJob(key: string) {
   const org = await seedOrganization(db, { members: [{ role: "owner" }, { role: "viewer" }] })
   const { owner } = org.members
   const job = await db.asUser(owner, async (tx) => {
-    const p = await tx.query<{ id: string }>("insert into public.content_projects(organization_id,title) values($1,'P') returning id", [org.organizationId])
+    const p = await tx.query<{ id: string }>("insert into public.work_items(organization_id,title) values($1,'P') returning id", [org.organizationId])
     const d = await tx.query<{ id: string }>(
-      "insert into public.content_documents(organization_id,project_id,platform,title,body) values($1,$2,'x','T','B') returning id",
+      "insert into public.content_documents(organization_id,work_item_id,platform,title,body) values($1,$2,'x','T','B') returning id",
       [org.organizationId, p.rows[0].id]
     )
     const j = await tx.query<{ id: string }>(

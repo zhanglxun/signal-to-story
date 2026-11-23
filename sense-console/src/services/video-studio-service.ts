@@ -1,6 +1,6 @@
 /**
  * Video Studio data access (browser, publishable key + RLS). Content edits go to the tables through
- * column grants; everything with side effects (jobs, approvals, adoption, reorder) goes through RPCs
+ * column grants; everything with side effects (jobs, approvals, reorder) goes through RPCs
  * that re-check permissions, plan revision and the paid-render Mandate in the database.
  */
 import { type AgentJob, type ApprovalRequest, mapAgentJob, mapApprovalRequest } from "@/contracts/agent-job"
@@ -8,21 +8,15 @@ import {
   type AspectRatio,
   type CameraMotion,
   type JobEstimate,
-  mapVideoCostEntry,
-  mapVideoCostSummary,
   mapVideoPlan,
-  mapVideoProposal,
   mapVideoShot,
   type MotionMode,
   type ShotSize,
   type TtsProvider,
   VIDEO_STORYBOARD_JOB_TYPE,
-  type VideoCostEntry,
-  type VideoCostSummary,
   type VideoPlan,
   type VideoRenderJobType,
   type VideoShot,
-  type VideoStoryboardProposal,
   videoRenderJobTypes,
 } from "@/contracts/video-studio"
 import { getSupabaseClient } from "@/lib/supabase"
@@ -155,7 +149,7 @@ export function moveShotOrder(shots: readonly Pick<VideoShot, "id" | "position">
   return ordered
 }
 
-// ---------------------------------------------------------------- storyboard (agent) → proposal → human adoption
+// ---------------------------------------------------------------- storyboard (agent) → draft plan the human edits
 export async function enqueueStoryboardJob(input: {
   organizationId: string
   outline: string
@@ -163,14 +157,14 @@ export async function enqueueStoryboardJob(input: {
   targetSeconds?: number
   style?: string
   defaultVoice?: string
-  projectId?: string | null
+  workItemId?: string | null
   idempotencyKey?: string
 }): Promise<AgentJob> {
   const { data, error } = await db().rpc("enqueue_video_storyboard_job", {
     p_organization_id: input.organizationId,
     p_outline: input.outline,
     p_options: { aspect_ratio: input.aspectRatio, target_seconds: input.targetSeconds, style: input.style, default_voice: input.defaultVoice },
-    p_project_id: input.projectId ?? null,
+    p_work_item_id: input.workItemId ?? null,
     p_idempotency_key: input.idempotencyKey ?? null,
   })
   fail(error)
@@ -183,24 +177,7 @@ export async function listStoryboardJobs(organizationId: string): Promise<AgentJ
   return (data ?? []).map(mapAgentJob)
 }
 
-export async function listStoryboardProposals(organizationId: string, status: VideoStoryboardProposal["status"] = "pending"): Promise<VideoStoryboardProposal[]> {
-  const { data, error } = await db().from("video_storyboard_proposals").select("*").eq("organization_id", organizationId).eq("status", status).order("created_at", { ascending: false }).limit(20)
-  fail(error)
-  return (data ?? []).map(mapVideoProposal)
-}
-
-export async function acceptStoryboardProposal(proposalId: string, title?: string): Promise<string> {
-  const { data, error } = await db().rpc("accept_video_storyboard_proposal", { p_proposal_id: proposalId, p_title: title ?? null })
-  fail(error)
-  return String(data)
-}
-
-export async function rejectStoryboardProposal(proposalId: string, reason: string): Promise<void> {
-  const { error } = await db().rpc("reject_video_storyboard_proposal", { p_proposal_id: proposalId, p_reason: reason })
-  fail(error)
-}
-
-// ---------------------------------------------------------------- render jobs, approvals, cost
+// ---------------------------------------------------------------- render jobs and approvals
 export async function estimateVideoJobOnServer(planId: string, jobType: VideoRenderJobType, shotId?: string | null): Promise<JobEstimate & { planRevision: number }> {
   const { data, error } = await db().rpc("estimate_video_job", { p_plan_id: planId, p_job_type: jobType, p_shot_id: shotId ?? null })
   fail(error)
@@ -241,18 +218,6 @@ export async function listPlanJobs(planId: string): Promise<AgentJob[]> {
   const { data, error } = await db().from("agent_jobs").select("*").eq("payload->target->>type", "video_plan").eq("payload->target->>id", planId).in("kind", [...videoRenderJobTypes]).order("created_at", { ascending: false }).limit(50)
   fail(error)
   return (data ?? []).map(mapAgentJob)
-}
-
-export async function getPlanCostSummary(planId: string): Promise<VideoCostSummary | null> {
-  const { data, error } = await db().from("video_plan_cost_summary").select("*").eq("plan_id", planId).maybeSingle()
-  fail(error)
-  return data ? mapVideoCostSummary(data) : null
-}
-
-export async function listPlanCostEntries(planId: string): Promise<VideoCostEntry[]> {
-  const { data, error } = await db().from("video_cost_entries").select("*").eq("plan_id", planId).order("created_at", { ascending: true }).limit(500)
-  fail(error)
-  return (data ?? []).map(mapVideoCostEntry)
 }
 
 /** assets.cloud_url for worker uploads looks like `supabase://video-studio/<org>/<plan>/<file>`. */

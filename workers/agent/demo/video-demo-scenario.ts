@@ -1,26 +1,9 @@
 /** Fixtures for the video storyboard worker test and `npm run demo:video` (fake LLM, PGlite). */
-import { readFileSync } from "node:fs"
-import path from "node:path"
-import { fileURLToPath } from "node:url"
-
 import { FakeLlmClient } from "../../../sense-console/src/harness/llm"
 import type { SupabaseTestDb } from "../../../testing/db/pglite-harness"
 import type { VideoWorkspace } from "../../../testing/db/video-studio-seed"
 
-const here = path.dirname(fileURLToPath(import.meta.url))
-export const VIDEO_SOP_PATH = path.resolve(here, "../../../knowledge-base/sops/video-storyboard-sop.md")
-
 export const DEMO_OUTLINE = "一只橘猫在月球上开了第一家面包店。宇航员闻香而来排起长队，最后猫店长把会发光的星星面包送给了地球上的小朋友。"
-
-export async function seedTrustedVideoSop(db: SupabaseTestDb, ws: VideoWorkspace) {
-  const content = readFileSync(VIDEO_SOP_PATH, "utf8").replace(/^---[\s\S]*?---\n/, "")
-  await db.asPostgres((tx) =>
-    tx.query(
-      "insert into public.knowledge_entries(organization_id, slug, title, category, tags, content, trust_level) values ($1,'video-storyboard-sop','AI 视频工坊分镜拆解与多轨配音 SOP','sop',array['video','storyboard'],$2,'trusted')",
-      [ws.organizationId, content]
-    )
-  )
-}
 
 export const DEMO_STORYBOARD = {
   schema_version: 1,

@@ -1,4 +1,4 @@
-import { MenuIcon, MoonIcon, SunIcon, UserIcon } from "lucide-react"
+import { MenuIcon, MoonIcon, SunIcon } from "lucide-react"
 import { useState } from "react"
 import { Link, NavLink, Outlet } from "react-router"
 
@@ -7,15 +7,12 @@ import { DemoBanner } from "@/components/site/demo-banner"
 import { Button } from "@/components/ui/button"
 import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetTrigger } from "@/components/ui/sheet"
 import { brandConfig } from "@/config/brand"
-import { useReaderAuth } from "@/features/auth/reader-auth"
 import { useTheme } from "@/features/theme/theme"
 import { cn } from "@/lib/utils"
 
 const primaryNav = [
   { to: "/", label: "首页", end: true },
   { to: "/explore", label: "探索" },
-  { to: "/topics", label: "专题" },
-  { to: "/resources", label: "资源库" },
 ] as const
 
 function navClass({ isActive }: { isActive: boolean }) {
@@ -35,7 +32,6 @@ function ThemeToggle() {
 }
 
 export function SiteLayout() {
-  const { session } = useReaderAuth()
   const [open, setOpen] = useState(false)
   return (
     <div className="flex min-h-svh flex-col bg-background">
@@ -57,16 +53,6 @@ export function SiteLayout() {
           </nav>
           <div className="ml-auto flex items-center gap-1">
             <ThemeToggle />
-            {session ? (
-              <Button variant="outline" size="sm" nativeButton={false} render={<Link to="/me" />}>
-                <UserIcon />
-                <span className="max-w-24 truncate">我的</span>
-              </Button>
-            ) : (
-              <Button size="sm" nativeButton={false} render={<Link to="/login" />}>
-                登录
-              </Button>
-            )}
             <Sheet open={open} onOpenChange={setOpen}>
               <SheetTrigger render={<Button variant="ghost" size="icon" className="md:hidden" aria-label="打开菜单" />}>
                 <MenuIcon />
@@ -78,7 +64,7 @@ export function SiteLayout() {
                   </SheetTitle>
                 </SheetHeader>
                 <nav aria-label="移动端导航" className="flex flex-col gap-1 px-4">
-                  {[...primaryNav, { to: "/me", label: "我的" }].map((item) => (
+                  {primaryNav.map((item) => (
                     <NavLink key={item.to} to={item.to} end={"end" in item} className={navClass} onClick={() => setOpen(false)}>
                       {item.label}
                     </NavLink>

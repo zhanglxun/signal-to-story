@@ -134,7 +134,7 @@ signal-to-story/
 **禁止的调用方向**（用 ESLint `no-restricted-imports` 和各自的 tsconfig 强制执行）：
 
 - `sense-console` 不能引用 `workers`，也不能 `spawn` 子进程。
-- `workers` 不能引用 `sense-console`。**过渡例外（R2 前）**：`workers/agent` 仍以相对路径引用 `sense-console/src/{harness,contracts}`；`supabase/tests/db` 引用 `sense-console/scripts/knowledge-seed`。R2 把前者迁入 `workers/agent/loop`，后者一并消除或另行安排。
+- `workers` 不能引用 `sense-console`。**过渡例外（R2 前）**：`workers/agent` 仍以相对路径引用 `sense-console/src/{harness,contracts}`，R2 迁入 `workers/agent/loop`。（`supabase/tests/db` 对 `knowledge-seed` 的引用已随知识表删除而消除。）
 - `workers/agent/loop` 不得引用 `drivers/`、`entry/`，不得读 `process.env`，用 ESLint `no-restricted-imports` 强制，保证可用假模型单测。
 - `workers` 可以引用 `supabase/functions/_shared`（纯 TS、Deno 兼容）：IM 协议在 Edge Function 收消息和 worker 发通知两处都要用，只能放在 Deno 能打包的位置。
 - `supabase/functions` 只能引用 `supabase/functions/_shared`。
@@ -258,5 +258,8 @@ Chat、harness 出稿、`agent_session` 改稿共用同一套 Agent 循环：har
 
 1. ~~R0 文档~~（已完成）。
 2. ~~R1 搬家~~（已完成）。
-3. ~~规划数据库设计~~（方案见 [database.md](database.md)，审计见第 9 节，决定见第 10 节）。
-4. 之后 R2 把 `sense-console/src/{harness,contracts}` 迁入 `workers/agent/loop`：先做 contracts 类型依赖盘点（6.2），再消除上面的过渡例外，并只保留一份 zod（目前根目录精确锁定 4.4.3 与 console 对齐）。待用户确认后实施。
+3. ~~规划数据库设计~~（已完成，方案见 [database.md](database.md)，审计见第 9 节，决定见第 10 节）。
+4. ~~DB0～DB2c-2 实施与线上第 1～3 批推送~~（已完成，线上库至 `20261124100000`，详见 [database.md](database.md) 与 [status.md](status.md)）。
+5. ~~DB2c-3 第 4 批~~（2026-11-23 上线核对通过）。
+6. ~~DB3 建表、DB4、DB5、V1 退役~~（代码完成，合并为最终批次 `0.5.0-step5.sql`，见 [database.md](database.md) DB-D17，待 Codex 执行）。
+7. 下一步：执行最终批次并部署 0.5 控制台与读者站 → **R2**（将 `sense-console/src/{harness,contracts}` 迁入 `workers/agent/loop`，加 ESLint `no-restricted-imports` 门禁，消除过渡例外）→ **R3**（Chat 循环与 HTTP/SSE 入口；表与 RPC 已就绪）。

@@ -1,8 +1,9 @@
 import type { SupabaseClient } from "@supabase/supabase-js"
 
-import type { HarnessJob, HarnessStepRecord, HarnessTerminalStatus, SaveProposalInput } from "../../../sense-console/src/harness/job-store"
+import { type HarnessJob, type HarnessStepRecord, type HarnessTerminalStatus, StaleRevisionError, type WriteDraftInput, type WriteDraftResult } from "../../../sense-console/src/harness/job-store"
 import { type AgentQueueBackend, type ClaimedJobRow, type DraftContextRows, rowToStep, stepToRow } from "../backend"
-import type { StoryboardKnowledge, VideoStoryboardStore } from "../video-storyboard"
+import { loadRepositoryKnowledge } from "../knowledge"
+import type { VideoStoryboardStore } from "../video-storyboard"
 import type { SqlExecutor } from "./sql-backend"
 
 /** One RPC call: supabase-js `rpc` shape. */
@@ -92,27 +93,27 @@ export class NodeBackend implements AgentQueueBackend {
     await call(this.call, "node_record_step", { p_token: this.token, p_job_id: step.jobId, p_lease_epoch: leaseEpoch, p_kind: row.kind, p_status: row.status, p_output: row.output, p_usage: row.usage, p_error: row.error })
   }
 
-  async saveProposal(input: SaveProposalInput) {
-    const id = await call<string>(this.call, "node_save_proposal", {
+  async writeDraft(input: WriteDraftInput): Promise<WriteDraftResult> {
+    const { data, error } = await this.call("node_write_document_draft", {
       p_token: this.token,
       p_job_id: input.job.id,
       p_lease_epoch: input.job.leaseEpoch,
-      p_proposal: {
-        input_revision: input.inputRevision,
-        model: input.model,
-        prompt_version: input.promptVersion,
-        instruction: input.instruction,
-        input_brief: input.inputBrief,
-        body: input.body,
-        usage: { input_tokens: input.usage.inputTokens, output_tokens: input.usage.outputTokens, total_tokens: input.usage.inputTokens + input.usage.outputTokens },
-      },
+      p_document_id: input.documentId,
+      p_base_revision: input.baseRevision,
+      p_title: input.title ?? null,
+      p_body: input.body,
     })
-    return { proposalId: String(id) }
+    if (error) {
+      if (/stale_revision|拒绝覆盖/.test(error.message)) throw new StaleRevisionError(error.message)
+      throw new Error(`node_write_document_draft: ${error.message}`)
+    }
+    const res = data as { document_id: string; revision: number; already_written?: boolean }
+    return { documentId: String(res.document_id), revision: Number(res.revision), alreadyWritten: Boolean(res.already_written) }
   }
 
   async loadDraftContext(job: HarnessJob): Promise<DraftContextRows> {
     const rows = await call<DraftContextRows>(this.call, "node_draft_context", { p_token: this.token, p_job_id: job.id })
-    return { ...rows, memories: rows.memories ?? [], knowledge: rows.knowledge ?? [] }
+    return { ...rows, memories: [], knowledge: loadRepositoryKnowledge() }
   }
 }
 
@@ -124,16 +125,13 @@ export class NodeVideoStoryboardStore implements VideoStoryboardStore {
     this.call = rpc
     this.token = token
   }
-  async loadTrustedVideoKnowledge(job: { organizationId: string; jobId: string }) {
-    return (await call<StoryboardKnowledge[] | null>(this.call, "node_storyboard_knowledge", { p_token: this.token, p_job_id: job.jobId })) ?? []
-  }
-  async saveProposal(input: Parameters<VideoStoryboardStore["saveProposal"]>[0]) {
-    const id = await call<string>(this.call, "node_save_storyboard_proposal", {
+  async writeDraft(input: Parameters<VideoStoryboardStore["writeDraft"]>[0]) {
+    const id = await call<string>(this.call, "node_write_video_draft", {
       p_token: this.token,
       p_job_id: input.jobId,
       p_lease_epoch: input.leaseEpoch,
-      p_proposal: { project_id: input.projectId, input_outline: input.outline, proposal: input.proposal, model: input.model },
+      p_draft: { ...input.draft, model: input.model },
     })
-    return { proposalId: String(id) }
+    return { planId: String(id) }
   }
 }

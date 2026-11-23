@@ -3,7 +3,7 @@ import { z } from "zod"
 import type { DraftEvaluationReport, SafeContextPack } from "../contracts/agent-harness"
 import { escapeZoneTags } from "./injection"
 import type { HarnessJob, HarnessProgress, HarnessStepKind, HarnessStepRecord, HarnessTerminalStatus, JobStore } from "./job-store"
-import { type ChatMessage, type LlmClient, type LlmUsage, stripCodeFence, ZERO_USAGE } from "./llm"
+import { type ChatMessage, type LlmClient, stripCodeFence } from "./llm"
 import { DEFAULT_EVALUATION_CHECKLIST, type EvaluationChecklistItem, runLlmEvaluation } from "./llm-evaluator"
 import { runDeterministicPrecheck } from "./precheck"
 
@@ -17,7 +17,7 @@ export interface HarnessDraftContext {
   title: string
   body: string
   instruction: string
-  /** JSON of the project brief, stored on the proposal for audit. */
+  /** JSON of the card brief, stored in context/step metadata for audit. */
   brief: string
   contextPack: SafeContextPack
   /** Raw source texts for the evaluator (ids must match contextPack.sourceIds). */
@@ -48,7 +48,7 @@ export interface HarnessRunOutcome {
   hopsUsed: number
   costCents: number
   tokensUsed: number
-  proposalId: string | null
+  writtenRevision: number | null
   finalDraft: string
   evaluations: DraftEvaluationReport[]
   terminationReason: string
@@ -106,8 +106,8 @@ export function buildGeneratorMessages(context: HarnessDraftContext, feedback: s
 /**
  * Generator <-> Evaluator loop with durable steps.
  * Per round: generate -> deterministic precheck -> (if precheck passed) LLM evaluation.
- * Passing round => content_ai_proposals row (status succeeded) + job pending_review.
- * Limits (max rounds / hops / budget / tokens) => blocked_needs_human. Never edits the formal document.
+ * Passing round => write_document_draft (base_revision optimistic lock) + job pending_review.
+ * Limits (max rounds / hops / budget / tokens) => blocked_needs_human. Never writes without base_revision match.
  * Resumable: completed steps are read back from the store and not re-executed.
  */
 export async function runHarnessJob(options: RunHarnessJobOptions): Promise<HarnessRunOutcome> {
@@ -118,8 +118,6 @@ export async function runHarnessJob(options: RunHarnessJobOptions): Promise<Harn
   const evaluations: DraftEvaluationReport[] = []
   let latestDraft = ""
   let feedback: string | null = null
-  let lastUsage: LlmUsage = ZERO_USAGE
-  let lastModel = generator.model
 
   const record = async (step: HarnessStepRecord) => {
     await store.recordStep(step)
@@ -131,7 +129,7 @@ export async function runHarnessJob(options: RunHarnessJobOptions): Promise<Harn
     if (!beat.ok) throw new LeaseLostError()
     return beat.cancelRequested
   }
-  const finish = async (status: HarnessTerminalStatus, reason: string, extra: { proposalId?: string | null; errorCode?: string } = {}): Promise<HarnessRunOutcome> => {
+  const finish = async (status: HarnessTerminalStatus, reason: string, extra: { writtenRevision?: number | null; errorCode?: string } = {}): Promise<HarnessRunOutcome> => {
     const p = progressFromSteps(steps)
     const result = {
       termination_reason: reason,
@@ -139,7 +137,8 @@ export async function runHarnessJob(options: RunHarnessJobOptions): Promise<Harn
       hops_used: p.hopsUsed,
       cost_cents: p.costCents,
       tokens_used: p.tokensUsed,
-      proposal_id: extra.proposalId ?? null,
+      written_revision: extra.writtenRevision ?? null,
+      written_document_id: extra.writtenRevision != null ? context.documentId : null,
       last_score: evaluations.at(-1)?.score ?? null,
     }
     await store.finish(job.id, {
@@ -155,7 +154,7 @@ export async function runHarnessJob(options: RunHarnessJobOptions): Promise<Harn
       hopsUsed: p.hopsUsed,
       costCents: p.costCents,
       tokensUsed: p.tokensUsed,
-      proposalId: extra.proposalId ?? null,
+      writtenRevision: extra.writtenRevision ?? null,
       finalDraft: latestDraft,
       evaluations,
       terminationReason: reason,
@@ -166,9 +165,27 @@ export async function runHarnessJob(options: RunHarnessJobOptions): Promise<Harn
 
   const persisted = steps.find((s) => s.stepKind === "persist")
   if (persisted) {
-    const out = persisted.output as { proposalId?: string; draft?: string } | undefined
+    const out = persisted.output as { revision?: number; draft?: string } | undefined
     latestDraft = out?.draft ?? ""
-    return finish("pending_review", "已从中断处恢复：提案此前已保存，挂起待人工审核。", { proposalId: out?.proposalId ?? null })
+    return finish("pending_review", "已从中断处恢复：草稿此前已写入稿件，挂起待人工审核。", { writtenRevision: out?.revision ?? null })
+  }
+  const priorWrittenRevision = typeof job.result?.written_revision === "number" ? job.result.written_revision : null
+  if (priorWrittenRevision != null) {
+    const lastGen = [...steps].reverse().find((s) => s.stepKind === "generate" && s.status === "succeeded")
+    const genOut = lastGen?.output as { draft?: string } | undefined
+    latestDraft = genOut?.draft ?? ""
+    const resumedRound = lastGen?.round ?? Math.max(1, progressFromSteps(steps).rounds)
+    await record({
+      jobId: job.id,
+      organizationId: job.organizationId,
+      round: resumedRound,
+      stepKind: "persist",
+      status: "succeeded",
+      output: { documentId: context.documentId, revision: priorWrittenRevision, baseRevision: context.documentRevision, draft: latestDraft },
+      costCents: 0,
+      durationMs: 0,
+    })
+    return finish("pending_review", `已从中断处恢复：草稿此前已写入稿件 v${priorWrittenRevision}，挂起待人工审核。`, { writtenRevision: priorWrittenRevision })
   }
 
   if (!find(0, "context")) {
@@ -242,8 +259,6 @@ export async function runHarnessJob(options: RunHarnessJobOptions): Promise<Harn
       continue
     }
     latestDraft = genOut?.draft ?? ""
-    if (gen.usage) lastUsage = { inputTokens: gen.usage.inputTokens ?? 0, outputTokens: gen.usage.outputTokens ?? 0, costCents: gen.usage.costCents ?? 0 }
-    lastModel = gen.model ?? generator.model
 
     // ---- deterministic precheck
     let pre = find(round, "precheck")
@@ -303,16 +318,12 @@ export async function runHarnessJob(options: RunHarnessJobOptions): Promise<Harn
 
     if (finalReport.passedAll) {
       if (await checkLease()) return finish("cancelled", "人工取消，已在步骤边界停止。", { errorCode: "cancelled" })
-      const { proposalId } = await store.saveProposal({
+      const written = await store.writeDraft({
         job,
         documentId: context.documentId,
-        inputRevision: context.documentRevision,
+        baseRevision: context.documentRevision,
+        title: context.title,
         body: latestDraft,
-        model: lastModel,
-        instruction: context.instruction,
-        inputBrief: context.brief,
-        usage: lastUsage,
-        promptVersion: HARNESS_PROMPT_VERSION,
       })
       await record({
         jobId: job.id,
@@ -320,11 +331,11 @@ export async function runHarnessJob(options: RunHarnessJobOptions): Promise<Harn
         round,
         stepKind: "persist",
         status: "succeeded",
-        output: { proposalId, draft: latestDraft },
+        output: { documentId: written.documentId, revision: written.revision, baseRevision: context.documentRevision, draft: latestDraft },
         costCents: 0,
         durationMs: 0,
       })
-      return finish("pending_review", `第 ${round} 轮通过预检与独立评估，已保存为待人工审核提案（挂起零消耗）。`, { proposalId })
+      return finish("pending_review", `第 ${round} 轮通过预检与独立评估，已直接写入稿件 v${written.revision}，等待人工审核。`, { writtenRevision: written.revision })
     }
     feedback = finalReport.revisionInstruction
   }

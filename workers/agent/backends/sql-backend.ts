@@ -1,5 +1,6 @@
-import type { HarnessJob, HarnessStepRecord, HarnessTerminalStatus, SaveProposalInput } from "../../../sense-console/src/harness/job-store"
+import { type HarnessJob, type HarnessStepRecord, type HarnessTerminalStatus, StaleRevisionError, type WriteDraftInput, type WriteDraftResult } from "../../../sense-console/src/harness/job-store"
 import { type AgentQueueBackend, type ClaimedJobRow, type DraftContextRows, rowToStep, stepToRow } from "../backend"
+import { loadRepositoryKnowledge } from "../knowledge"
 
 /** Minimal executor: PGlite, a PGlite Transaction or node-postgres all fit. */
 export interface SqlExecutor {
@@ -70,18 +71,21 @@ export class SqlBackend implements AgentQueueBackend {
     )
   }
 
-  async saveProposal(input: SaveProposalInput) {
-    return this.run(async (sql) => {
-      const existing = await sql.query<{ id: string }>("select id from public.content_ai_proposals where agent_job_id = $1", [input.job.id])
-      if (existing.rows[0]) return { proposalId: existing.rows[0].id }
-      const r = await sql.query<{ id: string }>(
-        `insert into public.content_ai_proposals(organization_id, document_id, input_revision, model, prompt_version, instruction, input_brief, status, body, usage, created_by, finished_at, agent_job_id)
-         values ($1,$2,$3,$4,$5,$6,$7,'succeeded',$8,$9,$10,now(),$11) returning id`,
-        [input.job.organizationId, input.documentId, input.inputRevision, input.model, input.promptVersion, input.instruction, input.inputBrief,
-          input.body, { input_tokens: input.usage.inputTokens, output_tokens: input.usage.outputTokens, total_tokens: input.usage.inputTokens + input.usage.outputTokens }, input.job.createdBy, input.job.id]
-      )
-      return { proposalId: r.rows[0].id }
-    })
+  async writeDraft(input: WriteDraftInput): Promise<WriteDraftResult> {
+    try {
+      return await this.run(async (sql) => {
+        const r = await sql.query<{ r: { document_id: string; revision: number; already_written?: boolean } }>(
+          "select public.write_document_draft($1,$2,$3,$4,$5,$6) as r",
+          [input.job.id, input.job.leaseEpoch, input.documentId, input.baseRevision, input.title ?? null, input.body]
+        )
+        const res = r.rows[0].r
+        return { documentId: String(res.document_id), revision: Number(res.revision), alreadyWritten: Boolean(res.already_written) }
+      })
+    } catch (error) {
+      const msg = error instanceof Error ? error.message : String(error)
+      if (/stale_revision|拒绝覆盖/.test(msg)) throw new StaleRevisionError(msg)
+      throw error
+    }
   }
 
   async loadDraftContext(job: HarnessJob): Promise<DraftContextRows> {
@@ -104,16 +108,7 @@ export class SqlBackend implements AgentQueueBackend {
             [workItem.id, job.organizationId]
           )).rows[0] ?? null
         : null
-      const memories = (await sql.query<DraftContextRows["memories"][number]>(
-        `select id, kind, summary, human_quote, platform, content_kind, active, expires_at, created_at from public.decision_memories
-         where organization_id = $1 and active and (expires_at is null or expires_at > now()) order by created_at desc limit 100`,
-        [job.organizationId]
-      )).rows
-      const knowledge = (await sql.query<DraftContextRows["knowledge"][number]>(
-        "select slug, title, category, tags, content, trust_level from public.knowledge_entries where organization_id = $1 and trust_level <> 'archived' order by updated_at desc limit 200",
-        [job.organizationId]
-      )).rows
-      return { document, workItem, source, memories, knowledge }
+      return { document, workItem, source, memories: [], knowledge: loadRepositoryKnowledge() }
     })
   }
 }

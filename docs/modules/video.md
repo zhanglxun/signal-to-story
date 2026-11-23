@@ -4,13 +4,13 @@
 
 ## 1. 流程
 
-大纲 → 分镜任务（harness 循环输出 `VideoPlan` JSON，经结构校验）→ 人采纳 → 编辑镜头（台词、音色、运镜、关键帧资产）→ 服务端估算成本 → 超过阈值需要 `paid_video_render` 批准 → 视频 worker 配音、渲染、合成 → 产物上传对象存储并登记 `assets` → 成本写入 `video_cost_entries`。
+大纲 → 分镜任务（harness 循环输出 `VideoPlan` JSON，经结构校验）→ **AI 直接写入草稿计划与镜头**（`write_video_draft`，按任务幂等，挂在事项卡上）→ 人编辑镜头（台词、音色、运镜、关键帧资产）→ 服务端估算费用 → 超过阈值需要 `paid_video_render` 批准（预估写在批准的 `payload.estimated_cost_cents`）→ 视频 worker 配音、渲染、合成 → 产物上传对象存储并登记 `assets` → 实际费用写入任务 `result.cost_cents`。
 
-## 2. 表（本地 migration，未上线）
+## 2. 表（DB5 定版，随最终批次上线）
 
-- `video_plans`：分镜方案，带 `revision`。
+- `video_plans`：分镜方案，带 `revision`，挂 `work_item_id`。
 - `video_shots`：镜头，包括景别、运镜（`local_ken_burns` 或云端视频模型）、旁白、毫秒时长、音效描述、关键帧和产物资产、渲染状态。
-- `video_cost_entries`：每次调用的成本明细。
+- 不建成本账本（R6）：分镜提案表、`video_cost_entries`、成本视图已删除；镜头没有成本列，`render_status` 就是进度。
 
 ## 3. 规则
 
@@ -28,6 +28,7 @@
 
 ## 5. 0.5 调整方向
 
+- ~~DB5：挂 `work_item_id`、AI 直接写草稿、删除提案与账本~~（2026-11-26 完成，最终批次）。
+- 视频 worker 仍用 `service_role`，切换节点令牌留待后续。
 - ~~`sense-console/video-factory` 移到 `workers/video/engine`~~（R1 已完成：Python 包 `engine`，worker 用 `from engine.composer import ...`，不再修改 `sys.path`；demo 项目在 `engine/projects/`，生成的媒体不进 git；含硬编码密钥的 `download_wanx_shots.py` 与两个 DashScope 测试脚本已删除）。
-- 视频事项挂到 `work_item_id`（R5 确认）。
 - mock 演示页标为演示或下线，不再和真实页面混在一起。

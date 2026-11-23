@@ -9,7 +9,6 @@ import { AppProviders } from "@/app/providers"
 import { routes } from "@/app/routes"
 import type { SiteService } from "@/services/site-service"
 import { createDemoSiteService } from "@/services/demo-site-service"
-import { createDemoReaderAuth, setReaderAuthForTests } from "@/services/reader-auth-service"
 import { setSiteServiceForTests, SiteServiceError } from "@/services/site-service"
 
 function renderAt(path: string) {
@@ -25,23 +24,18 @@ function renderAt(path: string) {
 beforeEach(() => {
   localStorage.clear()
   setSiteServiceForTests(createDemoSiteService())
-  setReaderAuthForTests(createDemoReaderAuth())
 })
 afterEach(() => {
   setSiteServiceForTests(null)
-  setReaderAuthForTests(null)
 })
 
 describe("reader site pages (demo mode)", () => {
-  it("home shows the demo badge, brand, latest entries and topic entry points", async () => {
+  it("home shows the demo badge, brand and latest entries", async () => {
     renderAt("/")
     expect(screen.getByTestId("demo-banner")).toHaveTextContent("演示数据")
     expect(await screen.findByRole("heading", { level: 1, name: "星火工厂 · Signal to Story" })).toBeInTheDocument()
     expect(await screen.findByRole("link", { name: "企业 AI Agent 落地卡住的三个真实原因" })).toBeInTheDocument()
-    expect(await screen.findByText("企业 Agent 入门路径")).toBeInTheDocument()
-    // Categories without published entries do not take a homepage slot; offline entries never show.
-    const categories = await screen.findByRole("list", { name: "主题分类" })
-    expect(within(categories).queryByText("暂无内容的分类")).not.toBeInTheDocument()
+    // Offline entries never show.
     expect(screen.queryByText("已下线的示例内容")).not.toBeInTheDocument()
   })
 
@@ -53,32 +47,8 @@ describe("reader site pages (demo mode)", () => {
     expect(within(body).getByRole("link", { name: "Supabase RLS 指南" })).toHaveAttribute("rel", "noopener noreferrer nofollow ugc")
   })
 
-  it("registered article shows only the summary and a login prompt to visitors", async () => {
-    renderAt("/content/ai-cost-ledger-template")
-    expect(await screen.findByText("注册读者可阅读全文")).toBeInTheDocument()
-    expect(screen.getByText("以上为人工摘要。登录或免费注册后即可阅读全文，并会回到本页。")).toBeInTheDocument()
-    expect(screen.queryByTestId("markdown-body")).not.toBeInTheDocument()
-    expect(screen.queryByText(/每周复盘看什么/)).not.toBeInTheDocument()
-  })
 
-  it("after sign-in the registered body is readable and the reader returns to the article", async () => {
-    const user = userEvent.setup()
-    const router = renderAt("/login?redirect=%2Fcontent%2Fai-cost-ledger-template")
-    await user.type(await screen.findByLabelText("邮箱"), "reader@example.com")
-    await user.type(screen.getByLabelText("密码"), "demo-password")
-    await user.click(within(screen.getByRole("form", { name: "读者登录" })).getByRole("button", { name: "登录" }))
-    await waitFor(() => expect(router.state.location.pathname).toBe("/content/ai-cost-ledger-template"))
-    const body = await screen.findByTestId("markdown-body")
-    expect(body).toHaveTextContent("成本账字段")
-  })
 
-  it("bookmarks require login and appear in 我的收藏", async () => {
-    const user = userEvent.setup()
-    await createDemoReaderAuthSignedIn()
-    renderAt("/content/rag-in-plain-words")
-    await user.click(await screen.findByRole("button", { name: "收藏" }))
-    expect(await screen.findByRole("button", { name: "已收藏" })).toBeInTheDocument()
-  })
 
   it("unknown routes and offline entries render 404", async () => {
     renderAt("/does-not-exist")
@@ -106,11 +76,6 @@ describe("reader site pages (demo mode)", () => {
     expect(video?.getAttribute("src")).toMatch(/^https:\/\//)
   })
 
-  it("resources ask visitors to log in before registered downloads", async () => {
-    renderAt("/resources")
-    expect(await screen.findByText("提示词上线检查清单（可打印）")).toBeInTheDocument()
-    expect(screen.getByText("登录后下载")).toHaveAttribute("href", "/login?redirect=%2Fresources")
-  })
 
   it("database errors show a retry state instead of demo data", async () => {
     const failing: SiteService = {
@@ -126,14 +91,4 @@ describe("reader site pages (demo mode)", () => {
     expect(screen.getByText("内容服务暂时不可用，请稍后重试。")).toBeInTheDocument()
   })
 
-  it("me redirects visitors to login", async () => {
-    const router = renderAt("/me")
-    await waitFor(() => expect(router.state.location.pathname).toBe("/login"))
-  })
 })
-
-async function createDemoReaderAuthSignedIn() {
-  const auth = createDemoReaderAuth()
-  await auth.signIn("reader@example.com", "demo-password")
-  setReaderAuthForTests(auth)
-}

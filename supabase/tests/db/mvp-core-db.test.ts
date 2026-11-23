@@ -1,6 +1,6 @@
 // @vitest-environment node
 // DB2a (docs/database.md §4.1–4.3): intake_events, work_items, content_documents.work_item_id,
-// and the V1 → 0.5 backfill that the retire migration will run before dropping the V1 tables.
+// and the V1 → 0.5 backfill that the retire migration runs once more before dropping the V1 tables.
 import { createHash } from "node:crypto"
 import { afterAll, beforeAll, describe, expect, it } from "vitest"
 
@@ -121,7 +121,19 @@ describe("work_items", () => {
   })
 })
 
-describe("private.backfill_v1", () => {
+// The retire migration (20261126100300) runs backfill_v1 one last time, reconciles and drops it with the V1 tables,
+// so this block runs on a database migrated only up to the last step before retirement.
+describe("private.backfill_v1 (before the retire release)", () => {
+  let head: SupabaseTestDb
+  beforeAll(async () => {
+    head = db
+    db = await createSupabaseTestDb({ upTo: "20261125100000_ai_direct_draft.sql" })
+  })
+  afterAll(async () => {
+    await db.close()
+    db = head
+  })
+
   it("moves every V1 row to its 0.5 home, keeps a legacy pointer, and is idempotent", async () => {
     const org = await seedOrganization(db, { members: [{ role: "owner" }] })
     const { owner } = org.members

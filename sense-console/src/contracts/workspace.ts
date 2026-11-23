@@ -12,6 +12,8 @@ export type ContentWorkspace = {
   canManage: boolean
   canReview?: boolean
   canPublish?: boolean
+  /** agent.dispatch: enqueue, retry, resume, or cancel agent jobs. */
+  canDispatch?: boolean
   /** organization.manage: execution nodes, storage, integrations. */
   canManageOrganization?: boolean
 }

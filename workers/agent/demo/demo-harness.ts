@@ -1,7 +1,7 @@
 /**
- * Local end-to-end demo (no network, no Supabase): `npm --prefix sense-console run demo:harness`
+ * Local end-to-end demo (no network, no Supabase): `npm run demo:harness`
  * PGlite + every migration -> enqueue -> claim -> generate -> evaluate (fail) -> rewrite -> pass
- * -> proposal + pending_review; then a second job that fails 3 rounds -> blocked_needs_human.
+ * -> direct write to content_documents (v2) + pending_review; then a second job that fails 3 rounds -> blocked_needs_human.
  * Set SENSE_LLM_* (and optionally SENSE_EVAL_LLM_*) to use a real model for scenario 1 instead of fakes.
  */
 import type { LlmClient } from "../../../sense-console/src/harness/llm"
@@ -38,7 +38,7 @@ async function scenario(title: string, generator: LlmClient, evaluator: LlmClien
       const detail =
         s.stepKind === "generate" ? `${s.driver} ${String((s.output as { draft?: string })?.draft ?? "").length} chars` :
         s.stepKind === "context" ? JSON.stringify(s.inputSummary) :
-        s.stepKind === "persist" ? `proposal ${(s.output as { proposalId?: string })?.proposalId}` :
+        s.stepKind === "persist" ? `document v${(s.output as { revision?: number })?.revision}` :
         `score=${ev?.score ?? "-"} ${ev?.revisionInstruction ? "→ " + ev.revisionInstruction.slice(0, 80) : ""}`
       printStep(s.stepKind, s.round, s.status, detail)
     },
@@ -47,15 +47,14 @@ async function scenario(title: string, generator: LlmClient, evaluator: LlmClien
     const j = await tx.query<{ status: string; error: string | null }>("select status, error from public.agent_jobs where id=$1", [result.jobId])
     const usage = (await readJobUsage(tx, [result.jobId!]))[result.jobId!]
     const steps = await tx.query<{ n: number }>("select count(*)::int as n from public.agent_job_steps where job_id=$1", [result.jobId])
-    const p = await tx.query<{ id: string; status: string }>("select id, status from public.content_ai_proposals where agent_job_id=$1", [result.jobId])
-    const doc = await tx.query<{ body: string; revision: number }>("select body, revision from public.content_documents where id=$1", [ws.documentId])
-    return { job: j.rows[0], usage, steps: steps.rows[0].n, proposal: p.rows[0] ?? null, doc: doc.rows[0] }
+    const doc = await tx.query<{ body: string; revision: number; status: string }>("select body, revision, status from public.content_documents where id=$1", [ws.documentId])
+    return { job: j.rows[0], usage, steps: steps.rows[0].n, doc: doc.rows[0] }
   })
   console.log(`result: job.status=${final.job.status} rounds=${final.usage.rounds} hops=${final.usage.hops} steps=${final.steps}`)
-  console.log(`        proposal=${final.proposal ? `${final.proposal.id} (${final.proposal.status})` : "none"}; document untouched: revision=${final.doc.revision} body="${final.doc.body}"`)
+  console.log(`        document: revision=${final.doc.revision} status=${final.doc.status} body="${final.doc.body.slice(0, 60)}${final.doc.body.length > 60 ? "…" : ""}"`)
   if (final.job.error) console.log(`        reason: ${final.job.error}`)
   await db.close()
-  return final.job.status
+  return { status: final.job.status, revision: final.doc.revision }
 }
 
 async function main() {
@@ -68,8 +67,8 @@ async function main() {
     "demo-pass"
   )
   const s2 = await scenario("Scenario 2: evaluator never passes -> blocked_needs_human (fake LLM)", demoGenerator(), demoEvaluatorAlwaysFail(), "demo-block")
-  const ok = (realGenerator ? true : s1 === "pending_review") && s2 === "blocked_needs_human"
-  console.log(`\n${ok ? "PASS" : "FAIL"}: scenario1=${s1} scenario2=${s2}`)
+  const ok = (realGenerator ? true : s1.status === "pending_review" && s1.revision === 2) && s2.status === "blocked_needs_human" && s2.revision === 1
+  console.log(`\n${ok ? "PASS" : "FAIL"}: scenario1=${s1.status}@v${s1.revision} scenario2=${s2.status}@v${s2.revision}`)
   if (!ok) process.exitCode = 1
 }
 

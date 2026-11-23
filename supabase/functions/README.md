@@ -23,6 +23,5 @@
 
 ## `content-draft`
 
-- 要求有效用户 JWT 与目标组织的 `content.manage` 权限。
-- `mode: "sync"`（默认，或 `CONTENT_DRAFT_DEFAULT_MODE` 未设为 `queue`）：沿用单次模型调用写 `content_ai_proposals`，可计费请求不自动重试。
-- `mode: "queue"`：以调用者身份调用 `enqueue_agent_job` 写入幂等的 `agent_jobs`（`content_draft`），立即返回 `job_id`；由 `workers/agent` 执行生成—评估循环。详见仓库根目录 `docs/modules/harness.md`。
+- 要求有效用户 JWT 与目标组织的 `content.manage` + `agent.dispatch` 权限。
+- 仅保留队列模式（同步写 `content_ai_proposals` 已在 DB2c-3 下线，显式传 `mode: "sync"` 返回 `410`）：以调用者身份调用 `enqueue_agent_job` 写入幂等的 `agent_jobs`（`content_draft`），立即返回 `job_id`；由 `workers/agent` 执行生成—评估循环并通过 `node_write_document_draft` 直接写回草稿新版本。详见仓库根目录 `docs/modules/harness.md`。

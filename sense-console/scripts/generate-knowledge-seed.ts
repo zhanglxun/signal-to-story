@@ -1,16 +1,16 @@
 /**
- * `npm run kb:seed`           regenerate src/data/knowledge-base-defaults.generated.ts + supabase/seeds/knowledge_base.sql
+ * `npm run kb:seed`           regenerate src/data/knowledge-base-defaults.generated.ts (the console's read-only view;
+ *                              the agent worker reads knowledge-base/ directly — there is no knowledge table)
  * `npm run kb:seed -- --check` exit 1 if the generated files are out of date
  */
 import { mkdirSync, readFileSync, writeFileSync } from "node:fs"
 import path from "node:path"
 
-import { GENERATED_SQL, GENERATED_TS, loadRepositoryKnowledge, renderGeneratedTs, renderSeedSql } from "./knowledge-seed"
+import { GENERATED_TS, loadRepositoryKnowledge, renderGeneratedTs } from "./knowledge-seed"
 
 const entries = loadRepositoryKnowledge()
 const outputs: Array<[string, string]> = [
   [GENERATED_TS, renderGeneratedTs(entries)],
-  [GENERATED_SQL, renderSeedSql(entries)],
 ]
 
 if (process.argv.includes("--check")) {

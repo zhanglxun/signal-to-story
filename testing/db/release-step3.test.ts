@@ -13,6 +13,7 @@ import { diffSnapshots, snapshotQuery, type SchemaSnapshot } from "./schema-snap
 
 const STEP3 = { ...RELEASES.step3, label: "test" }
 const STEP2_LAST = listMigrationFiles().filter((f) => f.slice(0, 14) <= RELEASES.step3.after).at(-1)!
+const STEP3_LAST = listMigrationFiles().filter((f) => f.slice(0, 14) <= RELEASES.step3.upTo).at(-1)!
 
 async function afterStep2() {
   const db = await createSupabaseTestDb({ upTo: STEP2_LAST })
@@ -36,7 +37,7 @@ describe("0.5 release step 3 (DB2c-2)", () => {
 
     const q = <T>(sql: string, params: unknown[] = []) => db.asPostgres(async (tx) => (await tx.query<T>(sql, params)).rows)
     expect((await q<{ version: string }>("select version from supabase_migrations.schema_migrations order by version")).map((h) => h.version))
-      .toEqual(listMigrationFiles().map((f) => f.slice(0, 14)))
+      .toEqual(listMigrationFiles().filter((f) => f <= STEP3_LAST).map((f) => f.slice(0, 14)))
 
     // The old worker finishes its job on the unchanged service_role RPC.
     await db.asServiceRole((tx) => tx.query("select public.complete_agent_job($1, 1, 'failed', '{}'::jsonb, 'x', 'test')", [running.id]))
@@ -49,7 +50,7 @@ describe("0.5 release step 3 (DB2c-2)", () => {
     expect(claimed).toMatchObject({ id: next.id, node_id: node.id })
 
     const after = (await db.asPostgres((tx) => tx.query<{ snapshot: SchemaSnapshot }>(snapshotQuery()))).rows[0].snapshot
-    const fresh = await createSupabaseTestDb()
+    const fresh = await createSupabaseTestDb({ upTo: STEP3_LAST })
     const head = (await fresh.asPostgres((tx) => tx.query<{ snapshot: SchemaSnapshot }>(snapshotQuery()))).rows[0].snapshot
     await fresh.close()
     const diff = diffSnapshots(after, head)
@@ -78,7 +79,7 @@ describe("0.5 release step 3 (DB2c-2)", () => {
 
   it("contains only the step-3 migration and no secrets", () => {
     const sql = buildRelease(STEP3)
-    expect(pendingMigrations(RELEASES.step3.after)).toEqual(["20261124100000_runner_nodes.sql"])
+    expect(pendingMigrations(RELEASES.step3.after, RELEASES.step3.upTo)).toEqual(["20261124100000_runner_nodes.sql"])
     expect(sql).not.toMatch(/drop table if exists public\.site_|backfill_v1/)
     expect(sql).not.toMatch(/service_role_key|sb_secret|password\s*=|supabase\.co|stn_[a-f0-9]{64}/i)
     expect(sql).toBe(readFileSync(path.join(REPO_ROOT, "supabase/release", RELEASES.step3.file), "utf8").replace(RELEASES.step3.label, "test"))

@@ -1,7 +1,7 @@
 /**
  * Full Video Studio chain on PGlite (all migrations) + fake LLM + the real Python worker (dry-run engine):
- * outline → storyboard job → proposal → human adoption → paid render rejected → approval request → human approval
- * → enqueue → Python worker (stdio bridge, service_role) renders → assets / shot state / ledger → compose → costs.
+ * outline → storyboard job → draft plan written directly → paid render rejected → approval request → human approval
+ * → enqueue → Python worker (stdio bridge, service_role) renders → assets / shot state → compose.
  * The Python worker cannot reach PGlite over HTTP, so it runs with `--backend stdio` and this bridge executes each
  * of its operations as service_role SQL — the same grants, triggers and Mandate the REST backend hits in production.
  */
@@ -16,7 +16,7 @@ import { createSupabaseTestDb, type SupabaseTestDb } from "../../../testing/db/p
 import { seedVideoWorkspace, type VideoWorkspace } from "../../../testing/db/video-studio-seed"
 import { SqlBackend, type SqlExecutor } from "../backends/sql-backend"
 import { processNextJob, type WorkerLogger } from "../runner"
-import { demoStoryboardLlm, enqueueDemoStoryboard, seedTrustedVideoSop } from "./video-demo-scenario"
+import { demoStoryboardLlm, enqueueDemoStoryboard } from "./video-demo-scenario"
 import { createVideoStoryboardHandler, SqlVideoStoryboardStore } from "../video-storyboard"
 
 const here = path.dirname(fileURLToPath(import.meta.url))
@@ -60,14 +60,12 @@ export function createBridgeHandler(db: SupabaseTestDb, objectRoot: string) {
         await asWorker((s) => s.query(`update public.${table} set ${set.sql} where id = $1`, [op === "update_shot" ? a.shot_id : a.plan_id, ...set.values]))
         return null
       }
-      case "insert_asset":
-      case "insert_cost_entry": {
+      case "insert_asset": {
         const row = a.row as Record<string, unknown>
         const keys = Object.keys(row)
         if (!keys.every((k) => IDENT.test(k))) throw new Error("invalid column")
-        const table = op === "insert_asset" ? "assets" : "video_cost_entries"
-        const r = await asWorker((s) => s.query<{ id: unknown }>(`insert into public.${table}(${keys.join(",")}) values (${keys.map((_, i) => `$${i + 1}`).join(",")}) returning id`, keys.map((k) => row[k])))
-        return op === "insert_asset" ? Number(r.rows[0].id) : null
+        const r = await asWorker((s) => s.query<{ id: unknown }>(`insert into public.assets(${keys.join(",")}) values (${keys.map((_, i) => `$${i + 1}`).join(",")}) returning id`, keys.map((k) => row[k])))
+        return Number(r.rows[0].id)
       }
       case "upload": {
         const dest = path.join(objectRoot, String(a.bucket), String(a.path))
@@ -125,7 +123,8 @@ export interface VideoDemoReport {
   planId: string
   finalAssetId: number | null
   finalBytes: number
-  costs: { estimatedCents: number; actualCents: number }
+  /** Estimate the human approved for paid rendering (approval payload; there is no cost ledger). */
+  approvedCents: number
 }
 
 export async function runVideoStudioDemo(options: { print?: (line: string) => void; engine?: string } = {}): Promise<VideoDemoReport> {
@@ -139,24 +138,18 @@ export async function runVideoStudioDemo(options: { print?: (line: string) => vo
   try {
     say(`PGlite ready: ${db.appliedMigrations.length} migrations`)
     const ws: VideoWorkspace = await seedVideoWorkspace(db)
-    await seedTrustedVideoSop(db, ws)
 
-    // 1. Outline → storyboard job → proposal (fake LLM; first output fails the schema)
+    // 1. Outline → storyboard job → draft plan written directly (fake LLM; first output fails the schema)
     const job = await enqueueDemoStoryboard(db, ws)
     const agent = await processNextJob({
       backend: new SqlBackend((fn) => db.asServiceRole(fn)), workerId: "demo-agent", generator: demoStoryboardLlm(), evaluator: null, logger: silent,
       jobHandlers: { video_storyboard: createVideoStoryboardHandler(new SqlVideoStoryboardStore((fn) => db.asServiceRole(fn))) },
     })
     say(`[1] video_storyboard ${job.id.slice(0, 8)} → ${agent.handlerOutcome?.status} after ${agent.handlerOutcome?.roundsExecuted} rounds (round 1 rejected by zod)`)
-    const proposal = await db.asUser(ws.ownerId, async (tx) => (await tx.query<{ id: string; status: string }>("select id, status from public.video_storyboard_proposals where agent_job_id=$1", [job.id])).rows[0])
-    const plansBefore = await db.asPostgres(async (tx) => (await tx.query("select id from public.video_plans")).rows.length)
-    say(`[2] proposal ${proposal.id.slice(0, 8)} status=${proposal.status}; formal plans before adoption: ${plansBefore}`)
-
-    // 2. Human adoption
-    const planId = await db.asUser(ws.ownerId, async (tx) => (await tx.query<{ id: string }>("select public.accept_video_storyboard_proposal($1) as id", [proposal.id])).rows[0].id)
-    const shots = await db.asUser(ws.ownerId, async (tx) => (await tx.query<{ id: string; position: number; motion_mode: string; estimated_cost_cents: string }>(
-      "select id, position, motion_mode, estimated_cost_cents from public.video_shots where plan_id=$1 order by position", [planId])).rows)
-    say(`[3] adopted → plan ${planId.slice(0, 8)} r1 with ${shots.length} shots: ${shots.map((s) => `${s.position}:${s.motion_mode}(${Number(s.estimated_cost_cents)}分)`).join(" ")}`)
+    const planId = await db.asUser(ws.ownerId, async (tx) => (await tx.query<{ plan_id: string }>("select result->>'plan_id' as plan_id from public.agent_jobs where id=$1", [job.id])).rows[0].plan_id)
+    const shots = await db.asUser(ws.ownerId, async (tx) => (await tx.query<{ id: string; position: number; motion_mode: string }>(
+      "select id, position, motion_mode from public.video_shots where plan_id=$1 order by position", [planId])).rows)
+    say(`[2-3] draft plan ${planId.slice(0, 8)} r1 written by the agent with ${shots.length} shots: ${shots.map((s) => `${s.position}:${s.motion_mode}`).join(" ")}`)
     const cloud = shots.find((s) => s.motion_mode === "cloud_video_model")!
     const local = shots.find((s) => s.motion_mode === "local_ken_burns")!
 
@@ -170,7 +163,7 @@ export async function runVideoStudioDemo(options: { print?: (line: string) => vo
     say(`[5] local Ken Burns preview (free, no approval) → ${preview.status}, server estimate ${preview.payload.server_estimate.cost_cents}分`)
 
     // 4. Approval request → member cannot decide → owner approves
-    const approval = await db.asUser(ws.ownerId, async (tx) => (await tx.query<{ id: string; estimated_cost_cents: number; summary: string }>("select * from public.request_video_render_approval($1)", [planId])).rows[0])
+    const approval = await db.asUser(ws.ownerId, async (tx) => (await tx.query<{ id: string; estimated_cost_cents: number; summary: string }>("select id, summary, (payload->>'estimated_cost_cents')::int as estimated_cost_cents from public.request_video_render_approval($1)", [planId])).rows[0])
     say(`[6] approval requested: ${approval.summary}`)
     const memberTry = await db.asUser(ws.memberId, (tx) => tx.query("select public.decide_approval_request($1,'approved','')", [approval.id])).then(() => "approved (UNEXPECTED)", (e: Error) => `denied: ${e.message}`)
     say(`[7] member (no agent.approve) decides → ${memberTry}`)
@@ -189,17 +182,13 @@ export async function runVideoStudioDemo(options: { print?: (line: string) => vo
     // 6. Results as the viewer sees them
     const view = await db.asUser(ws.viewerId, async (tx) => ({
       jobs: (await tx.query<{ kind: string; status: string; error_code: string | null }>("select kind, status, error_code from public.agent_jobs where organization_id=$1 order by created_at", [ws.organizationId])).rows,
-      shots: (await tx.query<{ position: number; render_status: string; actual_duration_ms: number; actual_cost_cents: string }>("select position, render_status, actual_duration_ms, actual_cost_cents from public.video_shots where plan_id=$1 order by position", [planId])).rows,
+      shots: (await tx.query<{ position: number; render_status: string; actual_duration_ms: number }>("select position, render_status, actual_duration_ms from public.video_shots where plan_id=$1 order by position", [planId])).rows,
       plan: (await tx.query<{ status: string; composed_video_asset_id: number | null; final_duration_ms: number | null; revision: number }>("select status, composed_video_asset_id, final_duration_ms, revision from public.video_plans where id=$1", [planId])).rows[0],
-      summary: (await tx.query<{ estimated_cents: string; actual_cents: string }>("select estimated_cents, actual_cents from public.video_plan_cost_summary where plan_id=$1", [planId])).rows[0],
-      ledger: (await tx.query<{ kind: string; provider: string; n: number; actual: string }>("select kind, provider, count(*)::int as n, sum(actual_cents) as actual from public.video_cost_entries where plan_id=$1 group by kind, provider order by kind", [planId])).rows,
       assets: (await tx.query<{ category: string; n: number }>("select category, count(*)::int as n from public.assets where organization_id=$1 and asset_type='video_studio' group by category order by category", [ws.organizationId])).rows,
     }))
     for (const j of view.jobs) say(`    job ${j.kind.padEnd(18)} ${j.status}${j.error_code ? ` (${j.error_code})` : ""}`)
     say(`[12] shots: ${view.shots.map((s) => `${s.position}:${s.render_status}/${s.actual_duration_ms}ms`).join(" ")}`)
     say(`     assets: ${view.assets.map((a) => `${a.category}×${a.n}`).join(" ")}`)
-    say(`     ledger: ${view.ledger.map((l) => `${l.kind}/${l.provider}×${l.n}=${Number(l.actual)}分`).join(" ")}`)
-    say(`     cost summary: estimated ${Number(view.summary.estimated_cents)}分, actual ${Number(view.summary.actual_cents)}分 (dry-run: providers not called)`)
     let finalBytes = 0
     const finalAssetId = view.plan.composed_video_asset_id == null ? null : Number(view.plan.composed_video_asset_id)
     if (finalAssetId) {
@@ -217,8 +206,8 @@ export async function runVideoStudioDemo(options: { print?: (line: string) => vo
     const ok = rejected.startsWith("rejected") && memberTry.startsWith("denied") && paid.status === "queued" && run1.code === 0 && run2.code === 0
       && view.plan.status === "rendered" && view.shots.every((s) => s.render_status === "rendered") && expired === "expired"
       && view.jobs.filter((j) => j.kind !== "video_storyboard").every((j) => j.status === "succeeded")
-    say(ok ? "PASS: outline → proposal → adoption → approval → queue → dry-run render → assets → costs" : "FAIL")
-    return { ok, lines, planId, finalAssetId, finalBytes, costs: { estimatedCents: Number(view.summary.estimated_cents), actualCents: Number(view.summary.actual_cents) } }
+    say(ok ? "PASS: outline → draft plan → approval → queue → dry-run render → assets" : "FAIL")
+    return { ok, lines, planId, finalAssetId, finalBytes, approvedCents: Number(approval.estimated_cost_cents) }
   } finally {
     await db.close()
     rmSync(objectRoot, { recursive: true, force: true })

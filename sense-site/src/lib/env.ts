@@ -4,7 +4,11 @@ const key = import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY?.trim() ?? ""
 export const siteEnv = {
   supabaseUrl: url,
   supabasePublishableKey: key,
-  siteSlug: import.meta.env.VITE_SITE_SLUG?.trim() || "signal-to-story",
+  siteName: import.meta.env.VITE_SITE_NAME?.trim() || "星火工厂 · Signal to Story",
+  siteDescription:
+    import.meta.env.VITE_SITE_DESCRIPTION?.trim() || "企业 AI 实战、AI 知识科普、工具与工作流、故事与创意。",
+  /** Optional: only show documents of this organization (all published documents otherwise). */
+  organizationId: import.meta.env.VITE_SITE_ORGANIZATION_ID?.trim() || "",
   isSupabaseConfigured: Boolean(url && key),
   /**
    * Demo mode is explicit (VITE_SITE_DEMO=1) or used when no backend is configured.

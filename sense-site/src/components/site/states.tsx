@@ -1,4 +1,4 @@
-import { AlertCircleIcon, InboxIcon, LockIcon, SearchXIcon } from "lucide-react"
+import { AlertCircleIcon, InboxIcon, SearchXIcon } from "lucide-react"
 import type { ReactNode } from "react"
 
 import { Button } from "@/components/ui/button"
@@ -61,10 +61,6 @@ export function ErrorState({ message, onRetry }: { message?: string; onRetry?: (
       </StateFrame>
     </div>
   )
-}
-
-export function LockedState({ title, children, action }: { title: string; children?: ReactNode; action?: ReactNode }) {
-  return <StateFrame icon={<LockIcon className="size-5" />} title={title} action={action}>{children}</StateFrame>
 }
 
 export function RouteError() {

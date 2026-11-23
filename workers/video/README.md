@@ -1,6 +1,6 @@
 # Video Worker（P5 视频工坊执行端）
 
-独立 Python 进程，认领 `agent_jobs` 中的 `video_tts_preview` / `video_shot_render` / `video_compose`，调用 `engine/`（原 `sense-console/video-factory`，现为 Python 包 `engine`）生成产物，上传私有 bucket `video-studio`，回写 `assets`（`asset_type='video_studio'`）、`video_shots` 渲染状态、`video_cost_entries` 成本账本，再 `complete/fail`。只出站连接，无监听端口。
+独立 Python 进程，认领 `agent_jobs` 中的 `video_tts_preview` / `video_shot_render` / `video_compose`，调用 `engine/`（原 `sense-console/video-factory`，现为 Python 包 `engine`）生成产物，上传私有 bucket `video-studio`，回写 `assets`（`asset_type='video_studio'`）、`video_shots` 渲染状态，实际费用写进任务 `result.cost_cents`（不建成本账本），再 `complete/fail`。只出站连接，无监听端口。
 
 | 文件 | 作用 |
 | --- | --- |

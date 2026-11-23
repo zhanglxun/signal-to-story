@@ -72,8 +72,8 @@ describe("quick_capture RPC", () => {
     expect(item.rows[0]).toMatchObject({ status: "doing", title: "example.com/b", brief: { url: "https://example.com/b", platforms: ["xiaohongshu", "x"], intake_event_id: r.event_id } })
     const ev = await db.asPostgres((tx) => tx.query<{ work_item_id: string }>("select work_item_id from public.intake_events where id=$1", [r.event_id]))
     expect(ev.rows[0].work_item_id).toBe(r.work_item_id)
-    const docs = await db.asPostgres((tx) => tx.query<{ work_item_id: string; project_id: string | null }>("select work_item_id, project_id from public.content_documents where id = any($1)", [r.documents.map((d) => d.document_id)]))
-    expect(docs.rows.every((d) => d.work_item_id === r.work_item_id && d.project_id === null)).toBe(true)
+    const docs = await db.asPostgres((tx) => tx.query<{ work_item_id: string }>("select work_item_id from public.content_documents where id = any($1)", [r.documents.map((d) => d.document_id)]))
+    expect(docs.rows.every((d) => d.work_item_id === r.work_item_id)).toBe(true)
 
     const dup = await capture(org.members.owner, org.organizationId, { url: "https://example.com/b", intent: "auto_draft", platforms: ["xiaohongshu", "x", "x"], key: "web-auto-0001" })
     expect(dup).toMatchObject({ duplicate: true, event_id: r.event_id, work_item_id: r.work_item_id })

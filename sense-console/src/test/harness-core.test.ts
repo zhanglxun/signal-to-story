@@ -168,10 +168,20 @@ describe("loop controller (in-memory JobStore)", () => {
     const generator = new FakeLlmClient((_r, i) => (i === 0 ? "震惊！" + LONG : LONG))
     const out = await runHarnessJob({ job: job(), store, context: context(), generator, evaluator })
     expect(out.status).toBe("pending_review")
+    expect(out.writtenRevision).toBe(2)
     expect(out.roundsExecuted).toBe(2)
     expect(evaluator.calls).toHaveLength(1)
-    expect(store.proposals.size).toBe(1)
+    expect(store.drafts.size).toBe(1)
     expect(generator.calls[1].messages[1].content).toContain("<evaluator_feedback>")
+  })
+
+  it("propagates StaleRevisionError when the document revision changed before writeDraft", async () => {
+    const store = new InMemoryJobStore()
+    store.documentRevisions.set("doc-1", 2)
+    await expect(
+      runHarnessJob({ job: job(), store, context: context(), generator: new FakeLlmClient(() => LONG), evaluator: new FakeLlmClient(() => verdict(true)) })
+    ).rejects.toThrow(/stale_revision/)
+    expect(store.drafts.size).toBe(0)
   })
 
   it("counts an unparseable evaluator answer as a failed round, then blocks after max rounds", async () => {
@@ -181,7 +191,7 @@ describe("loop controller (in-memory JobStore)", () => {
     expect(out.roundsExecuted).toBe(3)
     expect(store.outcomes.get("job-1")?.errorCode).toBe("max_rounds")
     expect(store.steps.filter((s) => s.stepKind === "evaluate").every((s) => s.status === "failed")).toBe(true)
-    expect(store.proposals.size).toBe(0)
+    expect(store.drafts.size).toBe(0)
   })
 
   it("blocks on hop and budget limits", async () => {
