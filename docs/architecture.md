@@ -202,7 +202,7 @@ flowchart TB
 
 测试用的假实现仍在 `testing/`。如将来出现第二个使用方（HTTP 服务与队列 worker 拆成两个进程，或 Console 确实要在浏览器跑某段校验），再抽共享目录，到时再议。仍然不建 npm workspace / 发布包。
 
-**R2 的前置盘点（待办，用户确认后再实施）**：迁移前先查 `sense-console` 页面和服务是否使用 `src/contracts` 的类型。若用到，先决定这些类型的去处（建议用数据库生成类型或接口返回字段；Mandate 的界面提示改为接口返回「可执行动作」字段，仅 UX，门禁仍在数据库），否则前端会断。另需处理 `supabase/tests/db` 对 `sense-console/scripts/knowledge-seed` 的引用。
+**R2 的前置盘点（已完成，2026-11-24）**：结论是 `src/contracts` 大量被前端页面使用，因此**保留在控制台**作为界面侧契约，worker 只复制自己用到的部分到 `workers/agent/loop/contracts/`（两份，各自对数据库负责，不共享代码）；`src/harness` 整体迁走，控制台只留展示用的模型 / CLI 元数据（`src/config/agent-runtimes.ts`）。原记录如下：迁移前先查 `sense-console` 页面和服务是否使用 `src/contracts` 的类型。若用到，先决定这些类型的去处（建议用数据库生成类型或接口返回字段；Mandate 的界面提示改为接口返回「可执行动作」字段，仅 UX，门禁仍在数据库），否则前端会断。另需处理 `supabase/tests/db` 对 `sense-console/scripts/knowledge-seed` 的引用。
 
 ### 6.3 Chat：界面在 Console，循环与执行在 `workers/agent`（2026-11-18 修订）
 
