@@ -122,6 +122,12 @@
 
 ---
 
+### 需求 6（2026-11-24 追加，可选）：`chat_messages` 加入 Realtime 发布
+
+- **为什么**：Chat UI 第二波 A 已接好 `chat_messages` 插入订阅（停止生成后等落库的占位），但仓库迁移从未把任何表加入 `supabase_realtime` 发布，订阅收不到事件，目前只靠 2 秒轮询兜底。
+- **变更**：`alter publication supabase_realtime add table public.chat_messages;`（Realtime 仍受 `chat_messages_read` RLS 约束，只推送会话所有者能读的行）。PGlite 测试中若无该发布对象，用 `do $$ … if exists (select 1 from pg_publication where pubname = 'supabase_realtime') …` 包一层。
+- **若 DB3b 已完成**，此项留到下一批，不必返工。
+
 ## 3. 请数据库任务在执行前评审并确认的问题
 
 > 原第 2～4 问已在评审中给出结论，保留在此便于追溯。
