@@ -100,4 +100,30 @@ describe("parseSseStream", () => {
     expect(parseSseBlock('event: unknown_event\ndata: {"x":1}')).toBeNull()
     expect(parseSseBlock('event: text_delta\ndata: ["not-object"]')).toBeNull()
   })
+
+  it("normalizes CRLF split across chunk boundaries without double-splitting frames", async () => {
+    const splitCrlfStream = streamFromChunks([
+      "event: text_delta\r",
+      '\ndata: {"delta":"hello"}\r',
+      "\n\r",
+      "\nevent: done\r\n",
+      'data: {"assistantMessageId":"a1","seq":1,"status":"completed"}\r\n\r\n',
+    ])
+    expect(await collectEvents(splitCrlfStream)).toEqual([
+      { type: "text_delta", delta: "hello" },
+      { type: "done", assistantMessageId: "a1", seq: 1, status: "completed" },
+    ])
+
+    const raw =
+      'event: plan_update\r\ndata: {"steps":[{"id":"1","title":"step-1","status":"in_progress"}]}\r\n\r\n'
+    const byteChunks = Array.from(new TextEncoder().encode(raw)).map(
+      (byte) => new Uint8Array([byte])
+    )
+    expect(await collectEvents(streamFromChunks(byteChunks))).toEqual([
+      {
+        type: "plan_update",
+        steps: [{ id: "1", title: "step-1", status: "in_progress" }],
+      },
+    ])
+  })
 })

@@ -5,6 +5,8 @@ import {
   type ChatMessagePart,
   type ChatStreamEvent,
   HttpTransportError,
+  type PermissionOption,
+  type PlanStepItem,
   type RegenerateTurnRequest,
   type SendTurnRequest,
 } from "@/modules/chat/types"
@@ -13,6 +15,7 @@ interface ActiveMockTurn {
   jobId: string
   sessionId: string
   cancelled: boolean
+  cancelDelayMs: number
   wakeController: AbortController
   donePromise: Promise<void>
   pendingPermission?: {
@@ -54,11 +57,34 @@ async function createStreamRunner(options: {
   target: ChatTurnTarget
   jobId: string
   stepDelayMs: number
+  permissionTimeoutMs: number
+  cancelPersistDelayMs: number
   activeTurns: Map<string, ActiveMockTurn>
   signal?: AbortSignal
 }): Promise<AsyncIterable<ChatStreamEvent>> {
-  const { store, sessionId, userMessageId, userSeq, prompt, runtimeId, target, jobId, stepDelayMs, activeTurns, signal } =
-    options
+  const {
+    store,
+    sessionId,
+    userMessageId,
+    userSeq,
+    prompt,
+    runtimeId,
+    target,
+    jobId,
+    stepDelayMs,
+    permissionTimeoutMs,
+    cancelPersistDelayMs,
+    activeTurns,
+    signal,
+  } = options
+
+  const lowerPrompt = prompt.toLowerCase()
+  const cancelDelayMs =
+    cancelPersistDelayMs > 0
+      ? cancelPersistDelayMs
+      : prompt.includes("延迟停止") || lowerPrompt.includes("slow_cancel")
+        ? 2200
+        : 0
 
   let resolveDone!: () => void
   const donePromise = new Promise<void>((resolve) => {
@@ -69,10 +95,12 @@ async function createStreamRunner(options: {
     jobId,
     sessionId,
     cancelled: false,
+    cancelDelayMs,
     wakeController,
     donePromise,
   }
   activeTurns.set(jobId, turnState)
+  store.setActiveChatTurnJob(sessionId, { jobId, status: "running" })
 
   const listeners = new Set<(ev: ChatStreamEvent) => void>()
   const buffer: ChatStreamEvent[] = []
@@ -90,15 +118,19 @@ async function createStreamRunner(options: {
   void (async () => {
     const reasoningParts: string[] = []
     const textParts: string[] = []
-    const storedParts: ChatMessagePart[] = []
+    let latestPlanPart: Extract<ChatMessagePart, { type: "plan" }> | null = null
+    const toolParts: Extract<ChatMessagePart, { type: "tool_call" }>[] = []
+    const permissionParts: Extract<ChatMessagePart, { type: "permission" }>[] = []
 
     const finalize = (status: "completed" | "cancelled" | "error", errorPart?: ChatMessagePart) => {
       const fullReasoning = reasoningParts.join("")
       const fullText = textParts.join("")
       const parts: ChatMessagePart[] = []
       if (fullReasoning) parts.push({ type: "reasoning", text: fullReasoning })
+      if (latestPlanPart) parts.push(latestPlanPart)
+      parts.push(...toolParts)
+      parts.push(...permissionParts)
       if (fullText) parts.push({ type: "text", text: fullText })
-      parts.push(...storedParts)
       if (errorPart) parts.push(errorPart)
 
       const content =
@@ -126,6 +158,7 @@ async function createStreamRunner(options: {
             : null,
       })
 
+      store.setActiveChatTurnJob(sessionId, null)
       activeTurns.delete(jobId)
       if (errorPart?.type === "error") {
         emit({
@@ -146,6 +179,13 @@ async function createStreamRunner(options: {
       resolveDone()
     }
 
+    const finishCancelled = async () => {
+      if (cancelDelayMs > 0) {
+        await wait(cancelDelayMs)
+      }
+      finalize("cancelled")
+    }
+
     try {
       emit({
         type: "turn_start",
@@ -156,15 +196,14 @@ async function createStreamRunner(options: {
         runtime: runtimeId,
       })
       await wait(stepDelayMs, wakeController.signal)
-      if (turnState.cancelled) return finalize("cancelled")
+      if (turnState.cancelled) return await finishCancelled()
 
-      const lower = prompt.toLowerCase()
-      if (prompt.includes("预算") || lower.includes("budget")) {
+      if (prompt.includes("预算") || lowerPrompt.includes("budget")) {
         const chunk = "正在分析输入内容，准备生成结构化建议…"
         textParts.push(chunk)
         emit({ type: "text_delta", delta: chunk })
         await wait(stepDelayMs, wakeController.signal)
-        if (turnState.cancelled) return finalize("cancelled")
+        if (turnState.cancelled) return await finishCancelled()
         return finalize("error", {
           type: "error",
           code: "budget_exceeded",
@@ -172,18 +211,78 @@ async function createStreamRunner(options: {
         })
       }
 
-      if (prompt.includes("报错") || lower.includes("error")) {
+      if (prompt.includes("报错") || lowerPrompt.includes("error")) {
         const reason = "正在准备调用远端推理接口…"
         reasoningParts.push(reason)
         emit({ type: "reasoning_delta", delta: reason })
         await wait(stepDelayMs, wakeController.signal)
-        if (turnState.cancelled) return finalize("cancelled")
+        if (turnState.cancelled) return await finishCancelled()
         return finalize("error", {
           type: "error",
           code: "upstream_error",
           message: "模拟上游模型流中断，可点击重新生成或切换模型重试。",
-          stack: "Error: Upstream stream closed unexpectedly\n  at MockStreamDriver.next (mock-transport.ts)",
+          stack:
+            "Error: Upstream stream closed unexpectedly\n  at MockStreamDriver.next (mock-transport.ts:185:9)\n  at async runChatTurn (chat-turn.ts:94:15)",
         })
+      }
+
+      if (prompt.includes("权限超时") || lowerPrompt.includes("perm_timeout")) {
+        const reason = "准备触发高风险写操作，等待用户确认（本脚本模拟 5 分钟超时自动按拒绝处理）。"
+        reasoningParts.push(reason)
+        emit({ type: "reasoning_delta", delta: reason })
+        await wait(stepDelayMs, wakeController.signal)
+        if (turnState.cancelled) return await finishCancelled()
+
+        const reqId = `perm-timeout-${Date.now()}`
+        const permSummary = "是否允许发布或入队高成本任务（若超时未操作将自动拒绝）？"
+        const permOptions: PermissionOption[] = [
+          { id: "allow_once", label: "仅本次允许", kind: "allow" },
+          { id: "reject_once", label: "拒绝本次", kind: "deny" },
+        ]
+        emit({
+          type: "permission_request",
+          requestId: reqId,
+          action: "enqueue_content_draft",
+          summary: permSummary,
+          options: permOptions,
+        })
+
+        const decision = await new Promise<"allow" | "deny" | "timeout">((resolve) => {
+          const timer = setTimeout(() => {
+            turnState.pendingPermission = undefined
+            resolve("timeout")
+          }, permissionTimeoutMs)
+          turnState.pendingPermission = {
+            requestId: reqId,
+            resolve: (choice) => {
+              clearTimeout(timer)
+              resolve(choice)
+            },
+          }
+        })
+        turnState.pendingPermission = undefined
+        if (turnState.cancelled) return await finishCancelled()
+
+        permissionParts.push({
+          type: "permission",
+          requestId: reqId,
+          action: "enqueue_content_draft",
+          summary: permSummary,
+          options: permOptions,
+          decision,
+        })
+
+        const answerText =
+          decision === "timeout"
+            ? "⏱️ 权限确认已超时（按拒绝处理），本次高风险操作已自动跳过。"
+            : decision === "allow"
+              ? "✅ 已收到你的**允许**确认，将继续执行后续操作。"
+              : "⛔ 已按你的**拒绝**决定跳过该操作。"
+        textParts.push(answerText)
+        emit({ type: "text_delta", delta: answerText })
+        await wait(stepDelayMs, wakeController.signal)
+        if (turnState.cancelled) return await finishCancelled()
+        return finalize("completed")
       }
 
       if (prompt.includes("权限") || prompt.includes("审批")) {
@@ -191,36 +290,34 @@ async function createStreamRunner(options: {
         reasoningParts.push(r1)
         emit({ type: "reasoning_delta", delta: r1 })
         await wait(stepDelayMs, wakeController.signal)
-        if (turnState.cancelled) return finalize("cancelled")
+        if (turnState.cancelled) return await finishCancelled()
 
         const reqId = `perm-${Date.now()}`
         const permSummary = "是否允许入队后台 content_draft 任务（预计消耗模型额度）？"
+        const permOptions: PermissionOption[] = [
+          { id: "allow_once", label: "仅本次允许", kind: "allow" },
+          { id: "reject_once", label: "拒绝执行", kind: "deny" },
+        ]
         emit({
           type: "permission_request",
           requestId: reqId,
           action: "enqueue_content_draft",
           summary: permSummary,
-          options: [
-            { id: "allow", label: "允许", kind: "allow" },
-            { id: "deny", label: "拒绝", kind: "deny" },
-          ],
+          options: permOptions,
         })
 
         const decision = await new Promise<"allow" | "deny">((resolve) => {
           turnState.pendingPermission = { requestId: reqId, resolve }
         })
         turnState.pendingPermission = undefined
-        if (turnState.cancelled) return finalize("cancelled")
+        if (turnState.cancelled) return await finishCancelled()
 
-        storedParts.push({
+        permissionParts.push({
           type: "permission",
           requestId: reqId,
           action: "enqueue_content_draft",
           summary: permSummary,
-          options: [
-            { id: "allow", label: "允许", kind: "allow" },
-            { id: "deny", label: "拒绝", kind: "deny" },
-          ],
+          options: permOptions,
           decision,
         })
 
@@ -231,7 +328,125 @@ async function createStreamRunner(options: {
         textParts.push(answerText)
         emit({ type: "text_delta", delta: answerText })
         await wait(stepDelayMs, wakeController.signal)
-        if (turnState.cancelled) return finalize("cancelled")
+        if (turnState.cancelled) return await finishCancelled()
+        return finalize("completed")
+      }
+
+      if (
+        prompt.includes("计划") ||
+        prompt.includes("工具") ||
+        lowerPrompt.includes("plan") ||
+        lowerPrompt.includes("tool")
+      ) {
+        const thought = "正在拆分执行步骤，并依次调用工作台只读工具与外部抓取工具。"
+        reasoningParts.push(thought)
+        emit({ type: "reasoning_delta", delta: thought })
+        await wait(stepDelayMs, wakeController.signal)
+        if (turnState.cancelled) return await finishCancelled()
+
+        const steps1: PlanStepItem[] = [
+          { id: "s1", title: "读取当前事项 Brief 与目标", status: "in_progress" },
+          { id: "s2", title: "抓取外部参考信源原文", status: "pending" },
+          { id: "s3", title: "核对平台规范与字数约束", status: "pending" },
+          { id: "s4", title: "生成待人工审阅的提案草稿", status: "pending" },
+        ]
+        latestPlanPart = { type: "plan", steps: steps1 }
+        emit({ type: "plan_update", steps: steps1 })
+
+        const call1Input = '{"work_item_id":"mock-wi-1","include_docs":true}'
+        emit({
+          type: "tool_start",
+          callId: "call-1",
+          name: "read_work_item",
+          inputSummary: call1Input,
+        })
+        await wait(stepDelayMs, wakeController.signal)
+        if (turnState.cancelled) return await finishCancelled()
+
+        const call1Output = "已读取事项《为什么个人内容创作者需要 Agent Harness》及 2 篇关联稿件摘要"
+        emit({
+          type: "tool_end",
+          callId: "call-1",
+          status: "succeeded",
+          outputSummary: call1Output,
+        })
+        toolParts.push({
+          type: "tool_call",
+          callId: "call-1",
+          name: "read_work_item",
+          state: "succeeded",
+          inputSummary: call1Input,
+          outputSummary: call1Output,
+        })
+
+        const steps2: PlanStepItem[] = [
+          { id: "s1", title: "读取当前事项 Brief 与目标", status: "completed" },
+          { id: "s2", title: "抓取外部参考信源原文", status: "in_progress" },
+          { id: "s3", title: "核对平台规范与字数约束", status: "pending" },
+          { id: "s4", title: "生成待人工审阅的提案草稿", status: "pending" },
+        ]
+        latestPlanPart = { type: "plan", steps: steps2 }
+        emit({ type: "plan_update", steps: steps2 })
+
+        const call2Input = '{"url":"https://story.susense.cn/demo","timeout_ms":5000}'
+        emit({
+          type: "tool_start",
+          callId: "call-2",
+          name: "fetch_reference",
+          inputSummary: call2Input,
+        })
+        await wait(stepDelayMs, wakeController.signal)
+        if (turnState.cancelled) return await finishCancelled()
+
+        const call2Output = "HTTP 504 Gateway Timeout"
+        const call2Error = "抓取信源超时：目标站点在 5000ms 内未响应"
+        const call2Stack =
+          "FetchTimeoutError: Request timed out after 5000ms\n" +
+          "  at fetchReferenceTool (workers/agent/handlers/chat-turn.ts:142:11)\n" +
+          "  at async executeToolCall (workers/agent/drivers/pi-cloud.ts:88:14)"
+        emit({
+          type: "tool_end",
+          callId: "call-2",
+          status: "failed",
+          outputSummary: call2Output,
+          error: call2Error,
+          stackTrace: call2Stack,
+        })
+        toolParts.push({
+          type: "tool_call",
+          callId: "call-2",
+          name: "fetch_reference",
+          state: "failed",
+          inputSummary: call2Input,
+          outputSummary: call2Output,
+          error: call2Error,
+          stackTrace: call2Stack,
+        })
+
+        const steps3: PlanStepItem[] = [
+          { id: "s1", title: "读取当前事项 Brief 与目标", status: "completed" },
+          { id: "s2", title: "抓取外部参考信源原文", status: "failed" },
+          { id: "s3", title: "核对平台规范与字数约束", status: "completed" },
+          { id: "s4", title: "生成待人工审阅的提案草稿", status: "pending" },
+        ]
+        latestPlanPart = { type: "plan", steps: steps3 }
+        emit({ type: "plan_update", steps: steps3 })
+        await wait(stepDelayMs, wakeController.signal)
+        if (turnState.cancelled) return await finishCancelled()
+
+        const summaryText =
+          "已完成本地事项读取，但外部参考链接抓取超时；你可以展开上方工具调用栈查看详情，或补充正文摘录后继续。"
+        textParts.push(summaryText)
+        emit({ type: "text_delta", delta: summaryText })
+
+        emit({
+          type: "usage",
+          inputTokens: Math.max(48, prompt.length * 2),
+          outputTokens: Math.max(32, Math.ceil(summaryText.length / 2)),
+          costCents: 0.3,
+          durationMs: Math.max(160, stepDelayMs * 5),
+          model: runtimeId,
+        })
         return finalize("completed")
       }
 
@@ -240,7 +455,7 @@ async function createStreamRunner(options: {
         "2. 组织结构化 Markdown 回答，并遵守仅提案、不越权原则。",
       ]
       for (const tc of thoughtChunks) {
-        if (turnState.cancelled) return finalize("cancelled")
+        if (turnState.cancelled) return await finishCancelled()
         reasoningParts.push(tc)
         emit({ type: "reasoning_delta", delta: tc })
         await wait(stepDelayMs, wakeController.signal)
@@ -254,7 +469,7 @@ async function createStreamRunner(options: {
         "[查看工作台事项](/work-items)",
       ]
       for (const rc of replyChunks) {
-        if (turnState.cancelled) return finalize("cancelled")
+        if (turnState.cancelled) return await finishCancelled()
         textParts.push(rc)
         emit({ type: "text_delta", delta: rc })
         await wait(stepDelayMs, wakeController.signal)
@@ -316,8 +531,12 @@ async function createStreamRunner(options: {
 export function createMockChatTransport(options: {
   store: MemoryChatStore
   stepDelayMs?: number
+  permissionTimeoutMs?: number
+  cancelPersistDelayMs?: number
 }): MockChatTransport {
   const stepDelayMs = options.stepDelayMs ?? 35
+  const permissionTimeoutMs = options.permissionTimeoutMs ?? Math.max(stepDelayMs * 10, 1200)
+  const cancelPersistDelayMs = options.cancelPersistDelayMs ?? 0
   const activeTurns = new Map<string, ActiveMockTurn>()
   let jobSeq = 1
 
@@ -327,6 +546,9 @@ export function createMockChatTransport(options: {
     t.cancelled = true
     t.wakeController.abort()
     t.pendingPermission?.resolve("deny")
+    if (t.cancelDelayMs > 0) {
+      return
+    }
     await t.donePromise
   }
 
@@ -371,6 +593,8 @@ export function createMockChatTransport(options: {
         target,
         jobId,
         stepDelayMs,
+        permissionTimeoutMs,
+        cancelPersistDelayMs,
         activeTurns,
         signal,
       })
@@ -406,6 +630,8 @@ export function createMockChatTransport(options: {
         target,
         jobId,
         stepDelayMs,
+        permissionTimeoutMs,
+        cancelPersistDelayMs,
         activeTurns,
         signal,
       })

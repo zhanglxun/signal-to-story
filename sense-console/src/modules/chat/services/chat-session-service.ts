@@ -23,6 +23,11 @@ export interface UpdateChatSessionPatch {
   runtimeConfig?: ChatRuntimeConfig
 }
 
+export interface ActiveChatTurnJob {
+  jobId: string
+  status: "queued" | "running"
+}
+
 export interface ChatSessionRepository {
   listSessions(organizationId: string): Promise<ChatSession[]>
   createSession(input: CreateChatSessionInput): Promise<ChatSession>
@@ -30,6 +35,8 @@ export interface ChatSessionRepository {
   deleteSession(sessionId: string): Promise<void>
   listMessages(sessionId: string): Promise<ChatMessage[]>
   cancelJob(jobId: string): Promise<void>
+  findActiveChatTurnJob?(sessionId: string): Promise<ActiveChatTurnJob | null>
+  subscribeChatMessages?(sessionId: string, onInsert: () => void): () => void
 }
 
 function asObj(v: unknown): Record<string, unknown> {
@@ -152,6 +159,46 @@ export function createSupabaseChatSessionRepository(): ChatSessionRepository {
     async cancelJob(jobId) {
       await cancelAgentJob(jobId)
     },
+
+    async findActiveChatTurnJob(sessionId) {
+      const client = getSupabaseClient()
+      if (!client) return null
+      const { data, error } = await client
+        .from("agent_jobs")
+        .select("id,status")
+        .eq("kind", "chat_turn")
+        .eq("payload->target->>id", sessionId)
+        .in("status", ["queued", "running"])
+        .order("created_at", { ascending: false })
+        .limit(1)
+        .maybeSingle()
+      if (error || !data) return null
+      const status = data.status === "queued" ? "queued" : "running"
+      return { jobId: String(data.id), status }
+    },
+
+    subscribeChatMessages(sessionId, onInsert) {
+      const client = getSupabaseClient()
+      if (!client) return () => undefined
+      const channel = client
+        .channel(`chat-messages-${sessionId}-${Math.random().toString(36).slice(2, 8)}`)
+        .on(
+          "postgres_changes",
+          {
+            event: "INSERT",
+            schema: "public",
+            table: "chat_messages",
+            filter: `session_id=eq.${sessionId}`,
+          },
+          () => {
+            onInsert()
+          }
+        )
+        .subscribe()
+      return () => {
+        void client.removeChannel(channel)
+      }
+    },
   }
 }
 
@@ -174,6 +221,7 @@ export interface MemoryChatStore extends ChatSessionRepository {
   }): ChatMessage
   getMessageById(sessionId: string, messageId: string): ChatMessage | undefined
   setCancelHandler(fn: (jobId: string) => Promise<void>): void
+  setActiveChatTurnJob(sessionId: string, job: ActiveChatTurnJob | null): void
 }
 
 function sortSessionsDesc(sessions: ChatSession[]): ChatSession[] {
@@ -191,6 +239,7 @@ export function createMemoryChatSessionRepository(options: { seed?: boolean } = 
 
   const sessions = new Map<string, ChatSession>()
   const messagesBySession = new Map<string, ChatMessage[]>()
+  const activeJobsBySession = new Map<string, ActiveChatTurnJob>()
   let cancelHandler: (jobId: string) => Promise<void> = async () => undefined
 
   if (options.seed !== false) {
@@ -395,6 +444,7 @@ export function createMemoryChatSessionRepository(options: { seed?: boolean } = 
     async deleteSession(sessionId) {
       sessions.delete(sessionId)
       messagesBySession.delete(sessionId)
+      activeJobsBySession.delete(sessionId)
     },
 
     async listMessages(sessionId) {
@@ -403,6 +453,11 @@ export function createMemoryChatSessionRepository(options: { seed?: boolean } = 
 
     async cancelJob(jobId) {
       await cancelHandler(jobId)
+    },
+
+    async findActiveChatTurnJob(sessionId) {
+      const job = activeJobsBySession.get(sessionId)
+      return job ? { ...job } : null
     },
 
     insertUserMessage(input) {
@@ -471,6 +526,14 @@ export function createMemoryChatSessionRepository(options: { seed?: boolean } = 
 
     setCancelHandler(fn) {
       cancelHandler = fn
+    },
+
+    setActiveChatTurnJob(sessionId, job) {
+      if (!job) {
+        activeJobsBySession.delete(sessionId)
+      } else {
+        activeJobsBySession.set(sessionId, { ...job })
+      }
     },
   }
 }

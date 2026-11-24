@@ -3,7 +3,6 @@ import {
   AlertTriangleIcon,
   BotIcon,
   BrainIcon,
-  CheckIcon,
   ChevronDownIcon,
   ChevronLeftIcon,
   ChevronRightIcon,
@@ -11,10 +10,8 @@ import {
   FileTextIcon,
   FolderKanbanIcon,
   RotateCcwIcon,
-  ShieldAlertIcon,
   SparklesIcon,
   UserIcon,
-  XIcon,
 } from "lucide-react"
 import { Link } from "react-router"
 
@@ -58,11 +55,16 @@ import {
 } from "@/components/ui/message-scroller"
 import { Spinner } from "@/components/ui/spinner"
 import { renderSafeMarkdown } from "@/lib/safe-markdown"
+import { PermissionQuestionnaireCard } from "@/modules/chat/components/permission-questionnaire-card"
+import { PlanCard } from "@/modules/chat/components/plan-card"
+import { StackTraceBlock } from "@/modules/chat/components/stack-trace-block"
+import { ToolTaskCard } from "@/modules/chat/components/tool-task-card"
 import {
   type ActiveTurnState,
   formatErrorDisplayText,
 } from "@/modules/chat/hooks/use-chat-turn"
 import type { MessageTimelineEntry } from "@/modules/chat/hooks/use-chat-messages"
+import type { PendingTurnPlaceholder } from "@/modules/chat/hooks/use-pending-turn"
 import type {
   ChatContextRefPart,
   ChatMessage,
@@ -80,8 +82,16 @@ const QUICK_STARTER_PROMPTS: ReadonlyArray<{ label: string; prompt: string }> = 
     prompt: "请结合当前工作流原则，帮我梳理 3 个适合公众号与 X 的切入角度。",
   },
   {
+    label: "演示计划与工具失败栈",
+    prompt: "请演示计划步骤、工具执行与失败调用栈。",
+  },
+  {
     label: "演示权限确认卡",
     prompt: "请演示触发出稿审批权限确认卡片的流程。",
+  },
+  {
+    label: "演示权限超时",
+    prompt: "请演示权限超时自动拒绝流程。",
   },
 ]
 
@@ -157,72 +167,6 @@ function ContextRefChips({ refs }: { refs: readonly ChatContextRefPart[] }) {
   )
 }
 
-function PermissionPromptCard({
-  requestId,
-  action,
-  summary,
-  decision,
-  onAnswer,
-}: {
-  requestId: string
-  action: string
-  summary: string
-  decision?: "allow" | "deny" | "timeout"
-  onAnswer?: (requestId: string, decision: "allow" | "deny") => void | Promise<void>
-}) {
-  const [submitting, setSubmitting] = useState(false)
-
-  async function handle(choice: "allow" | "deny") {
-    if (!onAnswer || submitting || decision) return
-    setSubmitting(true)
-    try {
-      await onAnswer(requestId, choice)
-    } finally {
-      setSubmitting(false)
-    }
-  }
-
-  return (
-    <Alert className="bg-card">
-      <ShieldAlertIcon className="size-4" />
-      <AlertTitle className="flex items-center gap-2 text-xs">
-        <span>需要人类确认 · {action}</span>
-        {decision && (
-          <Badge variant={decision === "allow" ? "default" : "outline"} className="text-[10px]">
-            {decision === "allow" ? "已允许" : decision === "timeout" ? "已超时（按拒绝处理）" : "已拒绝"}
-          </Badge>
-        )}
-      </AlertTitle>
-      <AlertDescription className="mt-1 space-y-2 text-xs">
-        <p>{summary}</p>
-        {!decision && onAnswer && (
-          <div className="flex items-center gap-2 pt-1">
-            <Button
-              type="button"
-              size="xs"
-              disabled={submitting}
-              onClick={() => void handle("allow")}
-            >
-              <CheckIcon className="size-3" />
-              允许
-            </Button>
-            <Button
-              type="button"
-              size="xs"
-              variant="outline"
-              disabled={submitting}
-              onClick={() => void handle("deny")}
-            >
-              <XIcon className="size-3" />
-              拒绝
-            </Button>
-          </div>
-        )}
-      </AlertDescription>
-    </Alert>
-  )
-}
-
 function extractPartText(parts: readonly ChatMessagePart[], fallback: string): string {
   const textParts = parts
     .filter((p): p is Extract<ChatMessagePart, { type: "text" }> => p.type === "text")
@@ -275,6 +219,13 @@ function PersistedMessageRow({
     .filter((p): p is Extract<ChatMessagePart, { type: "reasoning" }> => p.type === "reasoning")
     .map((p) => p.text)
     .join("")
+  const planParts = message.parts.filter(
+    (p): p is Extract<ChatMessagePart, { type: "plan" }> => p.type === "plan"
+  )
+  const latestPlan = planParts.at(-1) ?? null
+  const toolCalls = message.parts.filter(
+    (p): p is Extract<ChatMessagePart, { type: "tool_call" }> => p.type === "tool_call"
+  )
   const permissions = message.parts.filter(
     (p): p is Extract<ChatMessagePart, { type: "permission" }> => p.type === "permission"
   )
@@ -308,6 +259,32 @@ function PersistedMessageRow({
         <div className="max-w-[90%] space-y-2">
           <ReasoningCollapsible text={reasoning} />
 
+          {latestPlan && <PlanCard steps={latestPlan.steps} />}
+
+          {toolCalls.map((tool) => (
+            <ToolTaskCard
+              key={tool.callId}
+              callId={tool.callId}
+              name={tool.name}
+              state={tool.state}
+              inputSummary={tool.inputSummary}
+              outputSummary={tool.outputSummary}
+              error={tool.error}
+              stackTrace={tool.stackTrace}
+            />
+          ))}
+
+          {permissions.map((perm) => (
+            <PermissionQuestionnaireCard
+              key={perm.requestId}
+              requestId={perm.requestId}
+              action={perm.action}
+              summary={perm.summary}
+              options={perm.options}
+              decision={perm.decision}
+            />
+          ))}
+
           {bodyText && (
             <Bubble variant="outline" className="max-w-full">
               <BubbleContent className="w-full">
@@ -316,27 +293,20 @@ function PersistedMessageRow({
             </Bubble>
           )}
 
-          {permissions.map((perm) => (
-            <PermissionPromptCard
-              key={perm.requestId}
-              requestId={perm.requestId}
-              action={perm.action}
-              summary={perm.summary}
-              decision={perm.decision}
-            />
-          ))}
-
           {(errorPart || message.status === "error") && (
             <Alert variant="destructive">
               <AlertTriangleIcon className="size-4" />
               <AlertTitle className="text-xs">
                 {errorPart?.code === "budget_exceeded" ? "费用预算超限" : "本轮执行未完成"}
               </AlertTitle>
-              <AlertDescription className="text-xs">
-                {formatErrorDisplayText(
-                  errorPart?.code ?? "error",
-                  errorPart?.message || message.content || "生成过程中发生错误"
-                )}
+              <AlertDescription className="mt-1 space-y-2 text-xs">
+                <p>
+                  {formatErrorDisplayText(
+                    errorPart?.code ?? "error",
+                    errorPart?.message || message.content || "生成过程中发生错误"
+                  )}
+                </p>
+                <StackTraceBlock stack={errorPart?.stack} />
               </AlertDescription>
             </Alert>
           )}
@@ -400,6 +370,7 @@ export interface ChatMessageListProps {
   selectedVersions: Record<string, number>
   onSelectVersion: (replyToMessageId: string, index: number) => void
   activeTurn: ActiveTurnState | null
+  pendingTurn?: PendingTurnPlaceholder | null
   slashCards: SlashCardItem[]
   isLoading: boolean
   onQuickPrompt: (prompt: string) => void
@@ -412,6 +383,7 @@ export function ChatMessageList({
   selectedVersions,
   onSelectVersion,
   activeTurn,
+  pendingTurn = null,
   slashCards,
   isLoading,
   onQuickPrompt,
@@ -427,7 +399,10 @@ export function ChatMessageList({
         : entry.versions.some((v) => v.agentJobId === activeTurn?.jobId)
     )
   const showActiveTurn = Boolean(activeTurn && !persistedActiveJobInTimeline)
-  const isEmpty = timeline.length === 0 && !showActiveTurn && slashCards.length === 0
+  const showPendingTurn = !showActiveTurn && Boolean(pendingTurn)
+  const disableAllRegenerate = Boolean(activeTurn?.isStreaming || pendingTurn)
+  const isEmpty =
+    timeline.length === 0 && !showActiveTurn && !showPendingTurn && slashCards.length === 0
 
   return (
     <MessageScrollerProvider autoScroll defaultScrollPosition="end">
@@ -478,7 +453,7 @@ export function ChatMessageList({
                         <PersistedMessageRow
                           message={m}
                           onRegenerate={onRegenerate}
-                          disableRegenerate={Boolean(activeTurn?.isStreaming)}
+                          disableRegenerate={disableAllRegenerate}
                         />
                       </MessageScrollerItem>
                     )
@@ -502,7 +477,7 @@ export function ChatMessageList({
                           onNext: () => onSelectVersion(entry.replyToMessageId, index + 1),
                         }}
                         onRegenerate={onRegenerate}
-                        disableRegenerate={Boolean(activeTurn?.isStreaming)}
+                        disableRegenerate={disableAllRegenerate}
                       />
                     </MessageScrollerItem>
                   )
@@ -589,6 +564,33 @@ export function ChatMessageList({
                               streaming={activeTurn.isStreaming && !activeTurn.textContent}
                             />
 
+                            <PlanCard steps={activeTurn.planSteps} />
+
+                            {activeTurn.tools.map((tool) => (
+                              <ToolTaskCard
+                                key={tool.callId}
+                                callId={tool.callId}
+                                name={tool.name}
+                                state={tool.state}
+                                inputSummary={tool.inputSummary}
+                                outputSummary={tool.outputSummary}
+                                error={tool.error}
+                                stackTrace={tool.stackTrace}
+                              />
+                            ))}
+
+                            {activeTurn.permissions.map((perm) => (
+                              <PermissionQuestionnaireCard
+                                key={perm.requestId}
+                                requestId={perm.requestId}
+                                action={perm.action}
+                                summary={perm.summary}
+                                options={perm.options}
+                                decision={perm.decision}
+                                onAnswer={onAnswerPermission}
+                              />
+                            ))}
+
                             {activeTurn.textContent && (
                               <Bubble variant="outline" className="max-w-full">
                                 <BubbleContent className="w-full">
@@ -596,17 +598,6 @@ export function ChatMessageList({
                                 </BubbleContent>
                               </Bubble>
                             )}
-
-                            {activeTurn.permissions.map((perm) => (
-                              <PermissionPromptCard
-                                key={perm.requestId}
-                                requestId={perm.requestId}
-                                action={perm.action}
-                                summary={perm.summary}
-                                decision={perm.decision}
-                                onAnswer={onAnswerPermission}
-                              />
-                            ))}
 
                             {activeTurn.error && (
                               <Alert variant="destructive">
@@ -623,6 +614,7 @@ export function ChatMessageList({
                                       activeTurn.error.message
                                     )}
                                   </p>
+                                  <StackTraceBlock stack={activeTurn.error.stack} />
                                   {activeTurn.userMessageId && (
                                     <Button
                                       type="button"
@@ -641,6 +633,37 @@ export function ChatMessageList({
                         </MessageContent>
                       </Message>
                     </div>
+                  </MessageScrollerItem>
+                )}
+
+                {showPendingTurn && pendingTurn && (
+                  <MessageScrollerItem messageId="pending-turn" scrollAnchor>
+                    <Message align="start">
+                      <MessageAvatar className="size-8">
+                        <BotIcon className="size-4 text-primary" />
+                      </MessageAvatar>
+                      <MessageContent>
+                        <MessageHeader className="gap-2">
+                          <span>{pendingTurn.runtimeLabel || "Agent"}</span>
+                          <span className="inline-flex items-center gap-1 text-primary">
+                            <Spinner className="size-3" />
+                            生成中…
+                          </span>
+                        </MessageHeader>
+                        <Bubble variant="outline" className="max-w-full">
+                          <BubbleContent className="flex items-center gap-2 text-xs text-muted-foreground">
+                            <Spinner className="size-3.5 shrink-0 text-primary" />
+                            <span>
+                              {pendingTurn.reason === "stopping"
+                                ? "正在停止，等待助手回复落库…"
+                                : pendingTurn.reason === "queued"
+                                  ? "回合已入队，等待节点认领执行…"
+                                  : "生成中，正在等待结果落库…"}
+                            </span>
+                          </BubbleContent>
+                        </Bubble>
+                      </MessageContent>
+                    </Message>
                   </MessageScrollerItem>
                 )}
               </>

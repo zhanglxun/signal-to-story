@@ -54,6 +54,11 @@ export interface UseChatTurnOptions {
   transport: ChatTransport
   repository: ChatSessionRepository
   onTurnSettled?: (sessionId: string) => void | Promise<void>
+  onStopRequested?: (info: {
+    sessionId: string
+    jobId: string | null
+    runtimeLabel: string
+  }) => void
 }
 
 function formatErrorMessage(err: unknown): { code: string; message: string; retryable?: boolean } {
@@ -85,13 +90,19 @@ export function formatErrorDisplayText(code: string, message: string): string {
   return message
 }
 
-export function useChatTurn({ transport, repository, onTurnSettled }: UseChatTurnOptions) {
+export function useChatTurn({
+  transport,
+  repository,
+  onTurnSettled,
+  onStopRequested,
+}: UseChatTurnOptions) {
   const [activeTurn, setActiveTurn] = useState<ActiveTurnState | null>(null)
   const abortRef = useRef<AbortController | null>(null)
   const targetRef = useRef<ChatTurnTarget | null>(null)
   const mountedRef = useRef(true)
   const activeJobIdRef = useRef<string | null>(null)
   const activeSessionIdRef = useRef<string | null>(null)
+  const activeRuntimeLabelRef = useRef<string>("")
   const isStreamingRef = useRef(false)
 
   // Disconnect on unmount ONLY; never cancel the server/worker turn (frontend.md §5.2 #7).
@@ -127,6 +138,7 @@ export function useChatTurn({ transport, repository, onTurnSettled }: UseChatTur
       isStreamingRef.current = true
       activeSessionIdRef.current = sessionId
       activeJobIdRef.current = null
+      activeRuntimeLabelRef.current = runtimeLabel
 
       setActiveTurn({
         sessionId,
@@ -179,15 +191,26 @@ export function useChatTurn({ transport, repository, onTurnSettled }: UseChatTur
               prev
                 ? {
                     ...prev,
-                    tools: [
-                      ...prev.tools,
-                      {
-                        callId: ev.callId,
-                        name: ev.name,
-                        state: "running",
-                        inputSummary: ev.inputSummary,
-                      },
-                    ],
+                    tools: prev.tools.some((t) => t.callId === ev.callId)
+                      ? prev.tools.map((t) =>
+                          t.callId === ev.callId
+                            ? {
+                                ...t,
+                                name: ev.name,
+                                state: "running",
+                                inputSummary: ev.inputSummary ?? t.inputSummary,
+                              }
+                            : t
+                        )
+                      : [
+                          ...prev.tools,
+                          {
+                            callId: ev.callId,
+                            name: ev.name,
+                            state: "running",
+                            inputSummary: ev.inputSummary,
+                          },
+                        ],
                   }
                 : prev
             )
@@ -382,6 +405,7 @@ export function useChatTurn({ transport, repository, onTurnSettled }: UseChatTur
     if (!isStreamingRef.current && !activeTurn?.isStreaming) return
     const jobId = activeJobIdRef.current ?? activeTurn?.jobId ?? null
     const sessionId = activeSessionIdRef.current ?? activeTurn?.sessionId ?? null
+    const runtimeLabel = activeRuntimeLabelRef.current || activeTurn?.runtimeLabel || ""
     isStreamingRef.current = false
     setActiveTurn((prev) => (prev ? { ...prev, isStopping: true } : prev))
     if (jobId) {
@@ -397,12 +421,13 @@ export function useChatTurn({ transport, repository, onTurnSettled }: UseChatTur
       prev ? { ...prev, isStreaming: false, isStopping: false, finalStatus: "cancelled" } : prev
     )
     if (sessionId) {
+      onStopRequested?.({ sessionId, jobId, runtimeLabel })
       await onTurnSettled?.(sessionId)
     }
     if (mountedRef.current) {
       setActiveTurn((prev) => (prev && !prev.isStreaming && prev.error == null ? null : prev))
     }
-  }, [activeTurn, onTurnSettled, repository])
+  }, [activeTurn, onStopRequested, onTurnSettled, repository])
 
   const answerPermission = useCallback(
     async (requestId: string, decision: "allow" | "deny") => {
