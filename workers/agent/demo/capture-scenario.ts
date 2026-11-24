@@ -3,7 +3,7 @@
  * One link + note -> quick_capture(auto_draft) -> worker drains the queue with fake LLMs.
  */
 import { seedOrganization, type SupabaseTestDb } from "../../../testing/db/pglite-harness"
-import type { LlmClient } from "../../../sense-console/src/harness/llm"
+import type { LlmClient } from "../loop/llm"
 import { SqlBackend } from "../backends/sql-backend"
 import type { SourceFetcher } from "../fetch-source"
 import { processNextJob, type ProcessResult, type WorkerLogger, type WorkerOptions } from "../runner"

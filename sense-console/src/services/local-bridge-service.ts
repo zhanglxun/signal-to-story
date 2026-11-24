@@ -6,7 +6,7 @@ import type {
 import {
   CLOUD_MODEL_PROVIDERS,
   LOCAL_AGENT_CLI_DRIVERS,
-} from "@/services/agent-harness-service"
+} from "@/config/agent-runtimes"
 
 export interface BridgeProviderStatus {
   key: CloudModelProviderKey

@@ -3,9 +3,9 @@ import { mkdtemp, readFile, rm } from "node:fs/promises"
 import { tmpdir } from "node:os"
 import path from "node:path"
 
-import type { LocalAgentCliKey } from "../../../sense-console/src/contracts/agent-harness"
-import { approxTokens, type LlmClient, LlmCallError, type LlmRequest, type LlmResponse } from "../../../sense-console/src/harness/llm"
-import { CLI_ENV_ALLOWLIST, getLocalAgentCliDriver } from "../../../sense-console/src/harness/providers"
+import type { LocalAgentCliKey } from "../loop/contracts/agent-harness"
+import { approxTokens, type LlmClient, LlmCallError, type LlmRequest, type LlmResponse } from "../loop/llm"
+import { CLI_ENV_ALLOWLIST, getLocalAgentCliDriver } from "../loop/providers"
 
 export interface CliLlmConfig {
   cliKey: LocalAgentCliKey

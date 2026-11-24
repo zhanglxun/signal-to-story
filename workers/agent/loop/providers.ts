@@ -4,7 +4,7 @@ import type {
   LocalAgentCliDefinition,
   LocalAgentCliKey,
   SafeContextPack,
-} from "../contracts/agent-harness"
+} from "./contracts/agent-harness"
 
 export const CLOUD_MODEL_PROVIDERS: readonly CloudModelProviderDefinition[] = [
   {

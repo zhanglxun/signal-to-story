@@ -4,7 +4,7 @@
  * -> direct write to content_documents (v2) + pending_review; then a second job that fails 3 rounds -> blocked_needs_human.
  * Set SENSE_LLM_* (and optionally SENSE_EVAL_LLM_*) to use a real model for scenario 1 instead of fakes.
  */
-import type { LlmClient } from "../../../sense-console/src/harness/llm"
+import type { LlmClient } from "../loop/llm"
 import { createSupabaseTestDb } from "../../../testing/db/pglite-harness"
 import { SqlBackend } from "../backends/sql-backend"
 import { buildLlmClientFromEnv } from "../config"

@@ -12,11 +12,11 @@ import {
   type VideoPlanDraft,
   VideoPlanDraftSchema,
   VideoStoryboardPayloadSchema,
-} from "../../sense-console/src/contracts/video-studio"
-import { escapeZoneTags } from "../../sense-console/src/harness/injection"
-import type { HarnessStepKind, HarnessStepRecord } from "../../sense-console/src/harness/job-store"
-import { type ChatMessage, stripCodeFence } from "../../sense-console/src/harness/llm"
-import { LeaseLostError } from "../../sense-console/src/harness/loop-controller"
+} from "./loop/contracts/video-studio"
+import { escapeZoneTags } from "./loop/injection"
+import type { HarnessStepKind, HarnessStepRecord } from "./loop/job-store"
+import { type ChatMessage, stripCodeFence } from "./loop/llm"
+import { LeaseLostError } from "./loop/loop-controller"
 import type { SqlExecutor } from "./backends/sql-backend"
 import { loadVideoKnowledge } from "./knowledge"
 import type { JobHandler, JobHandlerOutcome } from "./job-handlers"

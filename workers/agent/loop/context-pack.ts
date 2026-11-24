@@ -4,7 +4,7 @@ import type {
   InjectionSignal,
   SafeContextPack,
   SafeContextPackInput,
-} from "../contracts/agent-harness"
+} from "./contracts/agent-harness"
 import { detectInjectionSignals, escapeZoneTags } from "./injection"
 
 export const DEFAULT_MEMORY_LIMIT = 20

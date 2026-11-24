@@ -1,4 +1,4 @@
-import type { MandateActionType, MandateGateCheckInput, MandateGateCheckResult } from "../contracts/agent-harness"
+import type { MandateActionType, MandateGateCheckInput, MandateGateCheckResult } from "./contracts/agent-harness"
 
 export const MANDATE_REQUIRED_ACTIONS: ReadonlySet<MandateActionType> = new Set([
   "publish_external",

@@ -1,5 +1,5 @@
-import type { HarnessJob } from "../../sense-console/src/harness/job-store"
-import type { LlmClient } from "../../sense-console/src/harness/llm"
+import type { HarnessJob } from "./loop/job-store"
+import type { LlmClient } from "./loop/llm"
 import type { AgentQueueBackend, ClaimedJobRow } from "./backend"
 
 /** Context handed to a non-content_draft job handler registered in WorkerOptions.jobHandlers. */

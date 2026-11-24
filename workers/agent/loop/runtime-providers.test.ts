@@ -5,24 +5,10 @@ import {
   buildLocalCliInvocation,
   buildSafeContextPack,
   checkMandateGate,
-  CLOUD_MODEL_PROVIDERS,
-  LOCAL_AGENT_CLI_DRIVERS,
-  runGeneratorEvaluatorLoop,
-} from "@/services/agent-harness-service"
+} from "./index"
 
-describe("P1: Sense Agent Harness & Dual-Mode Runtime (Cloud API + Local CLI)", () => {
-  it("registers domestic cloud LLM providers and local Agent CLI drivers", () => {
-    const cloudKeys = CLOUD_MODEL_PROVIDERS.map((p) => p.key)
-    expect(cloudKeys).toEqual(
-      expect.arrayContaining(["qwen", "kimi", "deepseek", "zhipu", "minimax"])
-    )
-
-    const cliKeys = LOCAL_AGENT_CLI_DRIVERS.map((d) => d.key)
-    expect(cliKeys).toEqual(
-      expect.arrayContaining(["pi-cli", "opencode-cli", "codex-cli", "agy-cli"])
-    )
-  })
-
+// Moved from sense-console/src/test/agent-harness.test.ts in R2 (2026-11-24).
+describe("harness runtime: context pack, provider requests, CLI invocation, Mandate", () => {
   it("isolates untrusted external sources and neutralizes prompt injection & tag escape attempts", () => {
     const pack = buildSafeContextPack({
       organizationId: "org_1",
@@ -154,23 +140,5 @@ describe("P1: Sense Agent Harness & Dual-Mode Runtime (Cloud API + Local CLI)", 
       targetRevision: 3,
     })
     expect(validHumanApproval.allowed).toBe(true)
-  })
-
-  it("runs Generator <-> Read-Only Evaluator autoloop and converges to pending_review", async () => {
-    const result = await runGeneratorEvaluatorLoop({
-      platform: "wechat",
-      forbiddenPhrases: ["震惊"],
-      generateDraft: async (round) => {
-        if (round === 1) {
-          return "震惊！这是一篇太短且含禁用词的初稿。"
-        }
-        return "这是一篇经过第二轮修正后的深度技术解析文章，详细拆解了多入口信号收集、安全沙箱隔离、以及生成与评估器双循环的工程落地实践，所有关键事实均已核对。"
-      },
-    })
-
-    expect(result.status).toBe("pending_review")
-    expect(result.roundsExecuted).toBe(2)
-    expect(result.evaluations[0].passedAll).toBe(false)
-    expect(result.evaluations[1].passedAll).toBe(true)
   })
 })

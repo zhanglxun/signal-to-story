@@ -19,6 +19,29 @@ export default defineConfig([
       globals: globals.browser,
     },
   },
+  // Project boundaries (docs/architecture.md §4, R2): browser code never imports workers / supabase / the
+  // reader site, and never uses Node built-ins (no spawn in the browser). dev/, e2e/ and scripts/ are tooling.
+  {
+    files: ['src/**/*.{ts,tsx}'],
+    rules: {
+      'no-restricted-imports': ['error', {
+        patterns: [
+          { group: ['**/workers/**', '**/sense-site/**', '**/supabase/functions/**'], message: 'sense-console must not import other projects (docs/architecture.md §4).' },
+          { group: ['node:*', 'fs', 'fs/*', 'path', 'os', 'child_process', 'net', 'http', 'https', 'worker_threads'], message: 'Browser code must not use Node built-ins.' },
+        ],
+      }],
+    },
+  },
+  {
+    files: ['src/test/**/*.{ts,tsx}', 'src/**/*.test.{ts,tsx}'],
+    rules: {
+      'no-restricted-imports': ['error', {
+        patterns: [
+          { group: ['**/workers/**', '**/sense-site/**', '**/supabase/functions/**'], message: 'sense-console must not import other projects (docs/architecture.md §4).' },
+        ],
+      }],
+    },
+  },
   {
     files: ['src/components/ui/**/*.{ts,tsx}'],
     rules: {

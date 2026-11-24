@@ -1,4 +1,4 @@
-import type { DraftEvaluationReport, EvaluationCriterionResult } from "../contracts/agent-harness"
+import type { DraftEvaluationReport, EvaluationCriterionResult } from "./contracts/agent-harness"
 
 export const MIN_SUBSTANCE_CHARS = 60
 export const X_MAX_CHARS = 2000

@@ -1,4 +1,4 @@
-import { type HarnessJob, type HarnessStepRecord, type HarnessTerminalStatus, readJobLimits, readJobTarget, type WriteDraftInput, type WriteDraftResult } from "../../sense-console/src/harness/job-store"
+import { type HarnessJob, type HarnessStepRecord, type HarnessTerminalStatus, readJobLimits, readJobTarget, type WriteDraftInput, type WriteDraftResult } from "./loop/job-store"
 
 /** Raw rows the worker reads to build a Context Pack (snake_case, as stored). */
 export interface DraftContextRows {

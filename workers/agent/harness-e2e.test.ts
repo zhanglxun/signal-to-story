@@ -4,7 +4,7 @@ import { writeFileSync } from "node:fs"
 import type { spawn } from "node:child_process"
 import { afterEach, beforeEach, describe, expect, it } from "vitest"
 
-import { FakeLlmClient, LlmCallError } from "../../sense-console/src/harness/llm"
+import { FakeLlmClient, LlmCallError } from "./loop/llm"
 import { createSupabaseTestDb, type SupabaseTestDb } from "../../testing/db/pglite-harness"
 import { SqlBackend } from "./backends/sql-backend"
 import { buildChildEnv, CliLlmClient } from "./drivers/cli-driver"

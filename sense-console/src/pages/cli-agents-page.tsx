@@ -25,7 +25,7 @@ import { Input } from "@/components/ui/input"
 import { RunnerNodesCard } from "@/components/runner-nodes/runner-nodes-card"
 import { getContentWorkspace } from "@/services/content-workspace-service"
 import type { LocalAgentCliKey } from "@/contracts/agent-harness"
-import { LOCAL_AGENT_CLI_DRIVERS } from "@/services/agent-harness-service"
+import { LOCAL_AGENT_CLI_DRIVERS } from "@/config/agent-runtimes"
 import {
   CLI_INSTALL_GUIDES,
   getLocalBridgeStatus,

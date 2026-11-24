@@ -12,8 +12,8 @@ import {
   runDeterministicPrecheck,
   runHarnessJob,
   selectScopedMemories,
-} from "@/harness"
-import type { DecisionMemoryItem } from "@/contracts/agent-harness"
+} from "./index"
+import type { DecisionMemoryItem } from "./contracts/agent-harness"
 
 const ORG = "org-1"
 
