@@ -1,13 +1,13 @@
 # R2～R3 并行开发分工与合并规则
 
-> 2026-11-24 · 状态：**执行中**。设计依据见 [../modules/chat.md](../modules/chat.md)（第 5 节为已确认决定）、[db3b-chat-runtime-catalog.md](db3b-chat-runtime-catalog.md)、[r1-to-r3-plan.md](r1-to-r3-plan.md)。全部合并验收后，结论写回模块文档，本文与各简报删除（文档维护规则第 4 条）。
+> 2026-11-24 · 状态：**执行中**（前端第一波已于 2026-11-24 验收合并；数据库第一波执行中；Worker 的 R2 待 Codex 交叉评审，R3 内核在 `feat/r3-core`）。设计依据见 [../modules/chat.md](../modules/chat.md)（第 5 节为已确认决定）、[db3b-chat-runtime-catalog.md](db3b-chat-runtime-catalog.md)、[r1-to-r3-plan.md](r1-to-r3-plan.md)。全部合并验收后，结论写回模块文档，本文与各简报删除（文档维护规则第 4 条）。
 
 ## 1. 三条轨道
 
 | 轨道 | 执行者 | 分支 / worktree | 第一波（现在） | 第二波（等通知） | 简报 |
 | --- | --- | --- | --- | --- | --- |
 | 数据库 | Codex | `feat/db3b` · `../sts-db` | 阶段 0（执行 step5 + 部署）→ DB3b → `0.5.0-step6.sql` | ACP 驱动、Vite 桥退役、模型 / CLI 配置页 | [brief-codex.md](brief-codex.md) |
-| Worker 核心 | Claude | `feat/r2-loop` · `../sts-worker` | R2（内核迁入 `workers/agent/loop` + ESLint 门禁） | `AgentSessionDriver` 接口 → R3.0 端到端细切片 → R3-A | —（由 Claude 自行执行） |
+| Worker 核心 | Claude | `feat/r2-loop` → `feat/r3-core`（叠在 R2 上）· `../sts-worker` | R2（内核迁入 `workers/agent/loop` + ESLint 门禁） | `AgentSessionDriver` 接口 → R3.0 端到端细切片 → R3-A | —（由 Claude 自行执行） |
 | 前端 | Gemini 4 | `feat/chat-ui` · `../sts-chat-ui` | Pi 厂商兼容 spike（只交结论）→ Chat UI Phase 1（假传输） | 接真实 HTTP/SSE；Phase 2 组件 | [brief-gemini.md](brief-gemini.md) |
 
 **合并与验收：Claude。** 每个分支交付后由 Claude 评审、在本地合并到 `0.5.0`、跑全套门禁，通过后才提交；不合格就退回并写明原因。Claude 自己的分支由 Codex 交叉评审。

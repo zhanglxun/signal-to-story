@@ -70,6 +70,14 @@
 | `error` | `code`, `message`, `retryable`, `stack?` | `{ type: "error", code, message, stack? }` + `status = "error"` | 显示错误提示、`Stack Trace` 与「重试」按钮 |
 | `done` | `assistantMessageId`, `seq`, `status` | — | 刷新 TanStack Query 缓存并恢复输入态 |
 
+**字段取值（2026-11-24 补充冻结，合并 Chat UI 第一波时发现原表未写死）**：
+
+- `plan` 步骤 `status`：`"pending" | "in_progress" | "completed" | "failed"`（与 ACP `plan` 条目取值一致，多一个 `failed`）。
+- `permission_request.options`：`[{ id, label, kind: "allow" | "deny" }]`（ACP 的 `allow_once` 等映射为 `allow`，`reject_*` 映射为 `deny`；MVP 不展示「总是允许」）。前端可以只渲染固定的允许 / 拒绝两个按钮，回答时只回 `decision`。
+- `permission` part 的 `decision`：`"allow" | "deny" | "timeout"`（`timeout` 只由 worker 写入，按拒绝处理，见 2.5）。
+- `tool_start.inputSummary`、`tool_end.outputSummary`、`error.retryable` 由 worker 必填；前端按可选字段容错解析。
+- 运行时 `kind`（`capabilities.runtimes[].kind`）：`"api" | "acp" | "exec"`，与 DB3b 的 `id` 格式校验一致，不再另设 `cli`。
+
 #### 2) 停止生成、错误重试与重新生成（Regenerate）
 
 - **停止生成**：用户点击「停止」时，浏览器调用 `cancel_agent_job`（写 `cancel_requested_at`），**然后**再断开 SSE。worker 两路感知取消：SSE 连接关闭（同一节点内立即触发 `AbortSignal` / ACP `session/cancel`）与心跳返回 `cancel_requested`（兜底）。已产出部分以 `status = "cancelled"` 落库，不丢失半截回复。
@@ -249,6 +257,12 @@ flowchart TB
 **评审修订：R3-A 只把 Pi 用在 Chat，不同时替换出稿的 `LlmClient`。** 原稿让 `pi-cloud.ts` 同时实现 `LlmClient`（`content_draft` / `video_storyboard`）与 `AgentSessionDriver`。出稿链路 2026-11-23 刚真实跑通，同时换底层会让两条链路的回归问题搅在一起。建议：R3-A 中 `PiCloudDriver` 只实现 `AgentSessionDriver`；`cloud-llm.ts` 保持不动；等 Chat 稳定后再单独一步把 `LlmClient` 切到 `pi-ai` 并对比出稿结果。
 
 **评审补充：Pi 依赖风险与 spike。** `pi-ai` / `pi-agent-core` 是单人维护、迭代很快的库：① 锁定精确版本（不用 `^`），升级单独提交；② `pi-*` 类型只允许出现在 `drivers/pi-cloud.ts` 内，`loop/` 只认自己的 `ChatStreamEvent`，以便将来替换；③ 动工前先做半天 spike，用真实 Key 逐个验证 Qwen（DashScope 兼容模式）、DeepSeek Reasoner、Kimi、GLM 的流式文本、思考字段（如 `reasoning_content`）与工具调用是否被正确解析，不兼容的厂商先不进目录。
+
+**Spike 结论（2026-11-24，详见 [../tasks/pi-spike-result.md](../tasks/pi-spike-result.md)）**：
+
+- 实测包为 `@mariozechner/pi-*@0.73.1`，该包名已废弃（2026-05 起停更），后续在 **`@earendil-works/pi-ai` / `@earendil-works/pi-agent-core`** 继续发布（当前 1.x）。**决定**：R3-A 引入新包名，锁定一个发布满两周的精确版本；动工前先按 spike 的最小片段对该版本复核 API（`agentLoop` 位置参数、`message_update` 下的细粒度事件、`message_end` 上的 usage），有差异先更新 spike 报告再写驱动。
+- 首批目录：Qwen `qwen3.8-flash`、DeepSeek `deepseek-chat` / `deepseek-reasoner`（5 项全通过）。Kimi、GLM 与 `qwen3.7-max` 未实测，不进首批。
+- 驱动必须处理的坑：① DashScope 端点必须显式传完整 `compat`（否则 `system` 被改写为 `developer` 报 400）；② 思考型模型 `model.reasoning` 恒为 `true`，用户选「关闭思考」时只把本轮 `reasoning` 传 `undefined`；③ 中止不抛异常，以 `stopReason = "aborted"` 结束，驱动据此返回 `cancelled`；④ 自定义模型 `cost` 默认为 0，单价由节点配置注入，否则只受 `max_rounds` 约束（目录标 `priced: false`）。
 
 **MVP 最小工具集（首批只挂 3 个只读/提案级工具，保持极简可控）**：
 1. `capture_intake`：将对话中的链接或灵感结构化写入 `intake_events`（进收件箱，不越权发外链）；
