@@ -48,3 +48,37 @@ React 19、TypeScript strict、Vite、React Router 7、Tailwind CSS 4、TanStack
 
 - 表单字段统一使用 `@/components/ui/field`（`Field` / `FieldGroup` / `FieldLabel`），主工作区禁止裸用原生 `<details>`/`<summary>`（改用 `Collapsible`、`Accordion`、`Dialog` 或 `Tabs`）。
 - 下拉切换统一用 `Select`（必传 `items`）或 `DropdownMenu`；空态用 `Empty`，加载态用 `Spinner` / `Skeleton`，卡片操作与页脚充分利用 `CardAction` / `CardFooter`，颜色仅使用 `index.css` 语义变量。
+
+## 5. AI Chat 与 AI Elements（Base UI）组件规范
+
+> 适用于 `sense-console/src/modules/chat`（`/chat` 与 `/h5/chat`）以及事项详情页嵌入的 AI 助手区。详见模块设计 [../modules/chat.md](../modules/chat.md)。
+
+### 5.1 基座现状（事实）
+
+- `sense-console` 基于 `shadcn@4.19.0` + `@shadcn/react@0.3.0` + `@base-ui/react`（`components.json` 中 `style: "base-nova"`）。
+- `src/components/ui/` 中**已安装**可用于 Chat 的官方组件原语：
+  - 消息容器与自动吸底滚动：`message.tsx`、`message-scroller.tsx`
+  - 气泡与附件卡片：`bubble.tsx`、`attachment.tsx`、`marker.tsx`
+  - 结构化反问 / 多项选择：`questionnaire.tsx`（直接适配 Agent 提问或人工确认交互）
+  - 基础容器与输入组合：`input-group.tsx`、`command.tsx`、`combobox.tsx`、`collapsible.tsx`、`sheet.tsx`、`drawer.tsx`、`scroll-area.tsx`
+
+### 5.2 避坑清单（强制遵守）
+
+1. **禁止混入第二套底层原语库（Radix vs Base UI）**：Vercel AI Elements 生态已并入 shadcn 体系，但部分社区/旧版配方依赖 `@radix-ui/*` 与 `asChild` 属性。本项目锁定 `@base-ui/react`，引入或移植 `Model Selector`、`Prompt Input`、`Reasoning`、`Plan`、`Task`、`Stack Trace` 等 AI Elements 组件时，**一律改写为 Base UI `render={...}` 与项目现有 `src/components/ui/` 原语**，严禁引入 `@radix-ui/*`。
+2. **Base UI `Select` 必传 `items`**：Model / Node 选择若使用 `Select`，遵循第 3 节要求传 `items`；多级模型搜索与分组优先基于已有的 `Combobox` / `Command` / `DropdownMenu` 组合。
+3. **Markdown 渲染必须走安全消毒**：Chat 流式正文、思考摘要和代码块严禁直接拼接未消毒 HTML，统一复用 `renderSafeMarkdown` + `.console-prose`（或受控安全渲染器）。
+4. **语义 Token 约束**：不给不同模型厂家（Qwen / DeepSeek / Codex 等）硬编码品牌色或 raw 颜色；状态统一使用 `primary` / `muted` / `destructive` / `border` 等语义变量。
+5. **桌面与 H5 共用一套实现**：`/chat` 与 `/h5/chat` 共用核心组件，窄屏下左侧历史会话栏自动收敛为 `Sheet` / `Drawer`，不单独维护第二套移动 Chat 页面代码。
+6. **流式读取用 `fetch`，不用 `EventSource`**：节点 HTTP 入口是 `POST` 且必须带 `Authorization: Bearer <Supabase JWT>`，原生 `EventSource` 只支持 GET、不能设请求头。统一封装一个 `fetch` + `ReadableStream` 的 SSE 解析 Hook（放在 `modules/chat`，忽略 `: ping` 注释行），各组件只消费解析后的 `ChatStreamEvent`。
+7. **断开 ≠ 停止**：组件卸载、切页、H5 切后台只断开读取流，**不要**顺手调 `cancel_agent_job`；只有用户点「停止」才调用（见 [../modules/chat.md](../modules/chat.md) 2.3）。重新进入会话时，对 `running` 的回合显示「生成中」占位并等待落库结果。
+
+### 5.3 按需引入三阶段清单
+
+遵循「场景需要时再引入，不一开始全量堆砌」的原则：
+
+| 阶段 | 引入组件 | 承担职责 | 对应数据来源 |
+| --- | --- | --- | --- |
+| **Phase 1（MVP 必选）** | 会话侧栏、`MessageScroller`、`Message` / `Bubble`、`Prompt Input`、`Model Selector` | 持久会话切换、流式消息滚动、多行输入/附件/Slash 命令/`@` 引用/停止按钮、在线节点 API/CLI 与思考模式选择 | `chat_sessions`、`chat_messages`、`runner_nodes.capabilities` |
+| **Phase 2（过程透明化）** | `Reasoning`、`Plan`、`Task` / `Tool`、`Questionnaire` | 流式折叠思考过程、多步执行计划、单步工具调用与后台任务进度、Agent 反问与高风险权限/Mandate 确认卡 | `chat_messages.parts`、SSE 事件流、`approval_requests` |
+| **Phase 3（排错与审计）** | `Stack Trace`、`Artifact` 预览链接 | 仅在工具报错、CLI 非零退出或 Harness 熔断时折叠展开调用栈与错误上下文；关联跳转已生成稿件/分镜 | `chat_messages.parts`（`error` / `stack_trace`）、`agent_job_steps` |
+
