@@ -99,6 +99,69 @@ describe("context assembly (chat.md 2.6)", () => {
   })
 })
 
+describe("context budget is a hard guarantee (review fix)", () => {
+  it("truncates an oversized system prompt instead of overflowing", () => {
+    const ctx = buildChatContext({ systemPrompt: "系".repeat(10_000), references: [], history: [], current: "问", contextWindow: 4000, maxOutputTokens: 1000 })
+    expect(ctx.estimatedInputTokens).toBeLessThanOrEqual(ctx.inputBudget)
+    expect(ctx.truncated).toBe(true)
+    expect(ctx.messages.at(-1)?.content).toBe("问")
+  })
+
+  it("drops trailing references when there are too many small ones", () => {
+    const refs = Array.from({ length: 400 }, (_, i) => ({ label: `r${i}`, content: "资料".repeat(10) }))
+    const ctx = buildChatContext({ systemPrompt: "s", references: refs, history: [], current: "问", contextWindow: 4000, maxOutputTokens: 1000 })
+    expect(ctx.estimatedInputTokens).toBeLessThanOrEqual(ctx.inputBudget)
+    expect(ctx.messages[0].content).toContain('label="r0"')
+    expect(ctx.messages[0].content).not.toContain('label="r399"')
+  })
+
+  it("never exceeds the budget across random shapes", () => {
+    let seed = 42
+    const rnd = (n: number) => { seed = (seed * 1103515245 + 12345) % 2 ** 31; return seed % n }
+    const text = (n: number) => (rnd(2) ? "中" : "a").repeat(n)
+    for (let k = 0; k < 200; k++) {
+      const ctx = buildChatContext({
+        systemPrompt: text(rnd(20_000)),
+        references: Array.from({ length: rnd(30) }, (_, i) => ({ label: `r${i}`, content: text(rnd(10_000)) })),
+        history: Array.from({ length: rnd(20) }, (_, i) => ({ role: (i % 2 ? "assistant" : "user") as "user" | "assistant", content: text(rnd(3_000)) })),
+        current: text(1 + rnd(30_000)),
+        contextWindow: 1_000 + rnd(30_000),
+        maxOutputTokens: 200 + rnd(800),
+      })
+      expect(ctx.estimatedInputTokens).toBeLessThanOrEqual(ctx.inputBudget)
+      expect(ctx.messages[0].role).toBe("system")
+      expect(ctx.messages.at(-1)?.role).toBe("user")
+    }
+  })
+})
+
+describe("parts size is a hard guarantee (review fix)", () => {
+  it("fits huge tool inputs, permission summaries and plans under the column limit", () => {
+    const acc = new PartsAccumulator()
+    for (let i = 0; i < 40; i++) acc.apply({ type: "tool_start", callId: `c${i}`, name: "read_work_item", inputSummary: "x".repeat(10_000) })
+    acc.apply({ type: "permission_request", requestId: "r", action: "a", summary: "y".repeat(50_000), options: [] })
+    acc.apply({ type: "plan_update", steps: Array.from({ length: 200 }, (_, i) => ({ id: String(i), title: "z".repeat(300), status: "pending" as const })) })
+    acc.apply({ type: "text_delta", delta: "答" })
+    const m = acc.finalize("completed")
+    expect(new TextEncoder().encode(JSON.stringify(m.parts)).length).toBeLessThanOrEqual(250_000)
+    expect(m.truncated).toBe(true)
+    expect(m.content).toBe("答")
+  })
+
+  it("still fits when everything is text split by tool calls", () => {
+    const acc = new PartsAccumulator()
+    for (let i = 0; i < 30; i++) {
+      acc.apply({ type: "text_delta", delta: "正".repeat(30_000) })
+      acc.apply({ type: "tool_start", callId: `c${i}`, name: "read_work_item", inputSummary: "{}" })
+    }
+    acc.apply({ type: "error", code: "driver_failed", message: "m".repeat(10_000), retryable: false })
+    const m = acc.finalize("error")
+    expect(new TextEncoder().encode(JSON.stringify(m.parts)).length).toBeLessThanOrEqual(250_000)
+    expect(m.content.length).toBeLessThanOrEqual(200_000)
+    expect(m.parts.some((p) => p.type === "error")).toBe(true)
+  })
+})
+
 describe("turn budget", () => {
   it("clamps limits like the database", () => {
     expect(new TurnBudget({ budgetCents: 9999, maxRounds: 99 })).toMatchObject({ budgetCents: 500, maxRounds: 20 })

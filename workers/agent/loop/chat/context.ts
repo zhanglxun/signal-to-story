@@ -90,24 +90,33 @@ export function buildChatContext(input: ChatContextInput): ChatContext {
   const inputBudget = Math.max(window - maxOut - (input.toolOverheadTokens ?? 0), 256)
   let truncated = false
 
-  const system = input.systemPrompt
-  const systemTokens = estimateTokens(system)
+  let system = input.systemPrompt
   let current = input.current
   let references = input.references.map((r) => ({ ...r }))
 
-  // Fit current + references into what the system prompt leaves. Shrink the largest piece first.
-  const fixedBudget = Math.max(inputBudget - systemTokens, 64)
-  const required = () => estimateTokens(current) + estimateTokens(renderReferences(references))
-  for (let guard = 0; required() > fixedBudget && guard < 32; guard++) {
+  // Fit system + references + current into the whole input budget. Shrink the largest piece first;
+  // once every piece is small, drop references from the end (their wrappers alone can overflow).
+  const fixedTokens = () => estimateTokens(system + renderReferences(references)) + estimateTokens(current)
+  const MIN_PIECE = 64
+  for (let guard = 0; fixedTokens() > inputBudget && guard < 1_000; guard++) {
     truncated = true
-    const pieces = [{ key: -1, tokens: estimateTokens(current) }, ...references.map((r, i) => ({ key: i, tokens: estimateTokens(r.content) }))]
-    pieces.sort((a, b) => b.tokens - a.tokens)
+    const over = fixedTokens() - inputBudget
+    const pieces = [
+      { key: "system" as const, index: -1, tokens: estimateTokens(system) },
+      { key: "current" as const, index: -1, tokens: estimateTokens(current) },
+      ...references.map((r, index) => ({ key: "reference" as const, index, tokens: estimateTokens(r.content) })),
+    ].sort((a, b) => b.tokens - a.tokens)
     const largest = pieces[0]
-    const over = required() - fixedBudget
-    const target = Math.max(Math.floor(largest.tokens - over - 16), 16)
-    if (largest.key === -1) current = truncateMiddle(current, target)
-    else references = references.map((r, i) => (i === largest.key ? { ...r, content: truncateMiddle(r.content, target) } : r))
-    if (largest.tokens <= 16) break
+    if (largest.tokens > MIN_PIECE) {
+      const target = Math.max(largest.tokens - over - 16, MIN_PIECE - 16)
+      if (largest.key === "system") system = truncateMiddle(system, target)
+      else if (largest.key === "current") current = truncateMiddle(current, target)
+      else references = references.map((r, i) => (i === largest.index ? { ...r, content: truncateMiddle(r.content, target) } : r))
+    } else if (references.length) {
+      references = references.slice(0, -1)
+    } else {
+      break // system and current are both ≤ MIN_PIECE; inputBudget ≥ 256 makes this unreachable
+    }
   }
 
   const systemMessage: ChatMessage = { role: "system", content: system + renderReferences(references) }

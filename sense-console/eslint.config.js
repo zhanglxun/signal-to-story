@@ -33,6 +33,16 @@ export default defineConfig([
     },
   },
   {
+    files: ['src/**/*.{ts,tsx}'],
+    rules: {
+      // no-restricted-imports does not see import() or require().
+      'no-restricted-syntax': ['error',
+        { selector: "ImportExpression[source.value=/(^|\\/)(workers|sense-site|supabase\\/functions)\\//]", message: 'sense-console must not import other projects (docs/architecture.md §4).' },
+        { selector: "CallExpression[callee.name='require']", message: 'Browser code must not use require().' },
+      ],
+    },
+  },
+  {
     files: ['src/test/**/*.{ts,tsx}', 'src/**/*.test.{ts,tsx}'],
     rules: {
       'no-restricted-imports': ['error', {

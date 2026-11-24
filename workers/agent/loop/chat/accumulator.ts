@@ -107,6 +107,40 @@ export class PartsAccumulator {
     })
     shrink((p) => p.type === "error", (p) => { delete (p as ErrorPart).stack })
     shrink((p) => p.type === "text", (p) => { (p as { text: string }).text = (p as { text: string }).text.slice(0, 20_000) + "…（完整正文见 content）" })
+    const cap = (s: string, n: number) => (s.length > n ? s.slice(0, n) + "…" : s)
+    shrink((p) => p.type === "tool_call", (p) => {
+      const t = p as ToolCallPart
+      t.inputSummary = cap(t.inputSummary, 500)
+      if (t.error) t.error = cap(t.error, 500)
+    })
+    shrink((p) => p.type === "permission", (p) => { (p as PermissionPart).summary = cap((p as PermissionPart).summary, 1000) })
+    shrink((p) => p.type === "plan", (p) => {
+      const plan = p as { steps: { title: string }[] }
+      plan.steps = plan.steps.slice(0, 50).map((s) => ({ ...s, title: cap(s.title, 120) }))
+    })
+    shrink((p) => p.type === "error", (p) => { (p as ErrorPart).message = cap((p as ErrorPart).message, 2000) })
+
+    // Hard guarantee: drop the largest non-error part until it fits (content keeps the full answer).
+    for (let guard = 0; byteSize(parts) > MAX_PARTS_BYTES && guard < 10_000; guard++) {
+      truncated = true
+      let largest = -1
+      let largestSize = -1
+      parts.forEach((p, i) => {
+        if (p.type === "error") return
+        const size = byteSize(p)
+        if (size > largestSize) {
+          largest = i
+          largestSize = size
+        }
+      })
+      if (largest === -1) {
+        // Only error parts left: keep the last one, trimmed.
+        const last = parts.filter((p): p is ErrorPart => p.type === "error").at(-1)
+        parts.splice(0, parts.length, ...(last ? [{ type: "error" as const, code: last.code, message: cap(last.message, 2000) }] : []))
+        break
+      }
+      parts.splice(largest, 1)
+    }
 
     return { content, parts, truncated }
   }
