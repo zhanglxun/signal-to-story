@@ -1,6 +1,6 @@
 # R2～R3 并行开发分工与合并规则
 
-> 2026-11-24 · 状态：**执行中**（前端第一波、第二波 A 已验收合并；数据库第一波执行中；Worker 的 R2 + R3 内核经 Gemini 交叉评审（9 项问题均已修复并加回归测试）后已合并；`AgentSessionDriver` 以合并后的 `workers/agent/loop/chat/driver.ts` 为准）。设计依据见 [../modules/chat.md](../modules/chat.md)（第 5 节为已确认决定）、[db3b-chat-runtime-catalog.md](db3b-chat-runtime-catalog.md)、[r1-to-r3-plan.md](r1-to-r3-plan.md)。全部合并验收后，结论写回模块文档，本文与各简报删除（文档维护规则第 4 条）。
+> 2026-11-24 · 状态：**第一阶段已结束**（R2、R3 回合内核、Chat UI 第一 / 二波 A 已合并；step5 数据库已上线）。**下一阶段的任务与调度见 [next-phase.md](next-phase.md) 与 [orchestration.md](orchestration.md)**；本文第 3～5 节（目录归属、分支规则、交付报告格式）继续有效，第 1～2 节仅作历史记录。
 
 ## 1. 三条轨道
 
@@ -8,7 +8,7 @@
 | --- | --- | --- | --- | --- | --- |
 | 数据库 | Codex | `feat/db3b` → `feat/codex-wave2` · `../sts-db` | 阶段 0：step5 **数据库已完成**（2026-11-24 核对通过），前端部署待补 | 部署补齐 → DB3b → ACP 驱动 → 配置页改读节点目录（一次性） | [brief-codex.md](brief-codex.md) · [收尾](brief-codex-wave2.md) |
 | Worker 核心 | Claude | `feat/r2-loop` → `feat/r3-core`（叠在 R2 上）· `../sts-worker` | R2（内核迁入 `workers/agent/loop` + ESLint 门禁） | `AgentSessionDriver` 接口 → R3.0 端到端细切片 → R3-A | —（由 Claude 自行执行） |
-| 前端 | Gemini 4 | `feat/chat-ui`、`feat/chat-ui-2`（均已合并）· `../sts-chat-ui` | Pi 厂商兼容 spike（只交结论）→ Chat UI Phase 1（假传输）**已合并** | 2A：Phase 2 组件 + 评审遗留 **已合并**；评审 Claude 的 R2 + R3 内核；2B：接真实 HTTP/SSE（等 DB3b 与 HTTP 入口），并按 chat.md 2.4 结束规则改为以 `done` 为终止事件 | [brief-gemini.md](brief-gemini.md) · [2A](brief-gemini-wave2a.md) |
+| 前端 | Gemini 4 | `feat/chat-ui`、`feat/chat-ui-2`（均已合并）· `../sts-chat-ui` | Pi 厂商兼容 spike（只交结论）→ Chat UI Phase 1（假传输）**已合并** | 2A：Phase 2 组件 + 评审遗留 **已合并**；评审 Claude 的 R2 + R3 内核；2B：接真实 HTTP/SSE（等 DB3b 与 HTTP 入口），并按 chat.md 2.4 结束规则改为以 `done` 为终止事件 | （已完成，简报已删除） |
 
 **合并与验收：Claude。** 每个分支交付后由 Claude 评审、在本地合并到 `0.5.0`、跑全套门禁，通过后才提交；不合格就退回并写明原因。Claude 自己的分支由 Codex 交叉评审。
 

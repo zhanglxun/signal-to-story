@@ -1,0 +1,95 @@
+# 下一阶段剩余工作（R3 收尾：Chat 上线）
+
+> 2026-11-24 · 状态：**待执行**。调度方式见 [orchestration.md](orchestration.md)。设计依据：[../modules/chat.md](../modules/chat.md)（第 5 节为已确认决定）、[db3b-chat-runtime-catalog.md](db3b-chat-runtime-catalog.md)、[../ACP-info.md](../ACP-info.md)。全部完成后结论并入模块文档，本文删除。
+
+## 1. 已完成（截至 `0.5.0` 提交 `14c16e1`）
+
+| 项 | 结果 |
+| --- | --- |
+| step5 线上数据库 | 已执行，README 9 项核对全部通过（Claude 只读核对） |
+| R2 | `sense-console/src/harness` → `workers/agent/loop`，ESLint 边界规则两侧生效 |
+| R3 回合内核 | `workers/agent/loop/chat`：`AgentSessionDriver`（已冻结）、事件与 parts、上下文与预算、`runChatTurn`；Gemini 交叉评审 9 项已修 |
+| Chat UI | `sense-console/src/modules/chat`，Phase 1 + 2，假传输可完整演示（`/chat-next`） |
+| Pi 选型 | `@earendil-works/pi-*@1.5.2`，API 已复核（[pi-spike-result.md](pi-spike-result.md) 第 5 节） |
+
+**已知问题**：线上控制台 `story.susense.cn` 仍是 V1 构建（2026-10-08），**0.5 前端未部署，线上控制台当前不可用**；库内快照未建立。
+
+## 2. 依赖关系
+
+```mermaid
+flowchart LR
+  T0["T0 补部署（人在场）"] --> T6
+  T1["T1 DB3b / step6"] --> T3B["T3b HTTP 入口 + chat-turn"]
+  T3A["T3a PiCloudDriver + 运行时目录"] --> T3B
+  T1 --> T4["T4 配置页读节点目录"]
+  T3B --> T5["T5 前端接真实接口 + 切路由"]
+  T2["T2 ACP 驱动"] --> T6["T6 上线集成与验收"]
+  T5 --> T6
+  T4 --> T6
+```
+
+第一波可同时开工：**T0、T1、T2、T3a、T4**（T4 按任务书的列定义先写，T1 合并后再接真实类型）。第二波：T1 与 T3a 合并后做 **T3b**；T3b 合并后做 **T5**；最后 **T6**。
+
+## 3. 任务清单
+
+每个任务都在自己的分支 / worktree 完成，交付时附 [parallel-plan.md](parallel-plan.md) 第 5 节格式的交付报告；门禁一律按 CLAUDE.md（涉及哪个项目就跑哪个项目的 typecheck / lint / test / build）。
+
+### T0 · 补齐 step5 的部署（线上，需要人在场）
+
+- **内容**：[brief-codex-wave2.md](brief-codex-wave2.md) 阶段 A：回答三个事实问题（备份是否做成、agent worker 运行的提交、视频 worker 在哪）；从 `0.5.0` 构建并部署控制台与读者站（自检：主 JS 含 `/work-items`、`/chat-next`，不含 `content_projects`，自检失败即回滚）；用新代码重启两个 worker。
+- **需要人**：部署凭据 / 方式；确认读者站域名。
+- **完成标准**：线上控制台可登录并打开「事项」页；读者站首页 200；`runner_nodes.last_seen_at` 2 分钟内。
+- **之后由人完成**：README「执行后验收」5 项（会真实发布文章，Agent 不代做），见 [../../supabase/release/README.md](../../supabase/release/README.md) 第 5 批。
+
+### T1 · DB3b 迁移与 step6（仓库 + PGlite，不上线）
+
+- **内容**：[db3b-chat-runtime-catalog.md](db3b-chat-runtime-catalog.md) 需求 0～6 全部；[brief-codex.md](brief-codex.md) 任务 B 的实现要点与测试清单；生成 `0.5.0-step6.sql`，step1～5 逐字节不变。
+- **目录**：`supabase/migrations/`、`supabase/tests/db/`、`supabase/release/`、`testing/db/`。
+- **完成标准**：任务书第 4 节 1～5 条全部有测试且通过；根目录门禁通过。
+
+### T2 · ACP 驱动（R3.4）
+
+- **内容**：[brief-codex-wave2.md](brief-codex-wave2.md) 阶段 C：`drivers/acp-driver.ts` + `drivers/acp-registry.ts`，严格按 `workers/agent/loop/chat/driver.ts` 规则 1～6 与 [../ACP-info.md](../ACP-info.md) 第 7 节；仓库内假 ACP Agent 覆盖全部协议路径；本机真机验证 `opencode`、`codex-acp`（未安装如实写未验证）。
+- **目录**：`workers/agent/drivers/acp-*`、`workers/agent/drivers/testing/`；根 `package.json` 加 `@agentclientprotocol/sdk`（精确版本、发布满两周）。
+- **不碰**：`workers/agent/loop/**`（接口问题写进报告）。
+
+### T3a · `PiCloudDriver` 与运行时目录（不依赖 T1）
+
+- **内容**：
+  1. 根 `package.json` 加 `@earendil-works/pi-ai@1.5.2`、`@earendil-works/pi-agent-core@1.5.2`（精确版本）。
+  2. `drivers/pi-cloud.ts` 实现 `AgentSessionDriver`：按 spike 第 5 节的 6 处 API 差异接线；`finishTurn` 做预算闸门（首个请求前先检查一次）；平台工具经 `host.executeTool`，**不用** `beforeToolCall` 做权限；Qwen 显式完整 `compat`；思考模型 `model.reasoning` 恒为 `true`；`stopReason = "aborted"` → `cancelled`；usage 换算 `costCents`（单价来自节点配置，无单价按 0 并标 `priced: false`）。
+  3. 单测用**假 `streamFn`**（不需要真实 Key）覆盖：流式正文 / 思考、多轮工具、预算在第 2 轮截停且不重试、取消、上游报错。
+  4. `workers/agent/runtime-registry.ts`：从环境变量读取多个 API Profile（命名约定写进 `workers/agent/README.md`），构造脱敏目录（chat.md 3.4 的 JSON 形状，含 `context_window` / `max_output_tokens` / `priced`），绝不含 Key；上报函数先写成接口 + 假实现，T1 合并后接 `node_report_capabilities`。
+- **目录**：`workers/agent/drivers/pi-*`、`workers/agent/runtime-registry.ts`、`workers/agent/README.md`。
+
+### T3b · HTTP 入口与 `chat-turn` 处理器（依赖 T1、T3a 合并）
+
+- **内容**：按 chat.md 2.4「HTTP 接口约定 v1」与时序实现 `workers/agent/entry/http.ts`（4 个端点、JWT 验签、以用户身份调 `send_chat_message` / `regenerate_chat_turn`、`node_claim_job` 认领、SSE 线格式与 15 秒 ping、CORS 白名单、每用户并发 / 速率限制、权限回答端点）；`workers/agent/handlers/chat-turn.ts`（`node_chat_context` → `buildChatContext` → `runChatTurn`，端口接 `node_record_step` / `node_append_chat_message(p_finish)` / 心跳续租与 `cancel_requested_at`；3 个 MVP 工具以用户身份调用对应 RPC）；`runner.ts` 整理为 `entry/queue.ts`，`p_job_types` 不含 `chat_turn`；`main.ts` 同时启动两个入口；节点启动与定时上报 `node_report_capabilities`。
+- **测试**：PGlite + 假驱动的 HTTP 集成测试（发送、重新生成、单活跃回合 409、断开不取消、停止、权限往返、`persist_failed`）。
+- **目录**：`workers/agent/entry/`、`workers/agent/handlers/chat-turn*`、`workers/agent/main.ts`、`workers/agent/backends/`。
+
+### T4 · 配置页改读节点目录（R3.5 前半）
+
+- **内容**：[brief-codex-wave2.md](brief-codex-wave2.md) 阶段 D：模型页、CLI 页改读在线节点的 `capabilities.runtimes`，不再写 `.env.local`；只删 `/__sense_bridge/env`。复用 `sense-console/src/modules/chat/services/runtime-catalog-service.ts` 的读取逻辑，不另写一套。
+- **目录**：两个页面、相关 service、`dev/local-bridge-plugin.ts`。
+
+### T5 · 前端接真实接口并切换路由（依赖 T3b）
+
+- **内容**：`http-transport` 接所选节点；Model Selector 读真实目录；按 chat.md 2.4 结束规则以 `done` 为终止事件；`/chat`、`/h5/chat` 切到新 `ChatPage`（在 `RequireAuth` 内），删除 `/chat-next` 与旧 `chat-assistant-page.tsx`、`local-bridge-service.ts`、`dev/local-bridge-plugin.ts` 的 `/__sense_bridge/chat`；Playwright 用本地假节点跑一条端到端（发送、停止、重新生成、刷新后历史仍在）。
+- **目录**：`sense-console/src/modules/chat/**`、`App.tsx`、旧页面与 bridge 文件、`sense-console/e2e/`。
+
+### T6 · 上线集成与验收（需要人）
+
+1. 人确认后执行 `0.5.0-step6.sql`（流程同前几批：预检 → 执行 → 核对）。
+2. 部署带 HTTP 端口的 `workers/agent`：本机节点走隧道或云端容器，配 HTTPS 与 CORS；`runner_nodes.capabilities` 能看到目录。
+3. 用真实 Key 在 `@earendil-works/pi-*@1.5.2` 上重跑 spike 的 5 项（`deepseek-chat`、`deepseek-reasoner`、`qwen3.8-flash`），结果补进 [pi-spike-result.md](pi-spike-result.md) 第 5 节。
+4. 部署新控制台，人在线上走一遍：发消息流式回复、停止、重新生成、`/capture`、`@` 引用、刷新后历史仍在、H5。
+5. 收尾文档：结论并入 `docs/modules/chat.md` 与 `docs/status.md`，删除 `docs/tasks/` 下已完成的过程文档。
+
+## 4. 需要人做的事（汇总）
+
+| 时机 | 事项 |
+| --- | --- |
+| T0 | 部署凭据 / 方式、读者站域名；部署后走 README 5 项验收 |
+| T2 | 本机是否安装 `opencode`、`codex-acp`（决定能否真机验证） |
+| T6 | 批准执行 step6；HTTP 节点的公网方式（隧道或云端）；提供可用的模型 Key（当前百炼 Key 免费额度已用完，`.env.local` 旧 Key 已被封，建议删除） |

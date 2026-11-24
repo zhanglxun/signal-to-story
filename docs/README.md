@@ -28,7 +28,10 @@
 
 - [db3b-chat-runtime-catalog.md](tasks/db3b-chat-runtime-catalog.md)：DB3b 数据库增量改造任务书（交数据库任务评审与执行）
 - [r1-to-r3-plan.md](tasks/r1-to-r3-plan.md)：R1 → R3 六大断层分析与可执行任务计划
-- [parallel-plan.md](tasks/parallel-plan.md)：R2～R3 三轨并行分工、目录归属、分支与合并规则（附 [Codex 简报](tasks/brief-codex.md)、[Codex 收尾](tasks/brief-codex-wave2.md)、[Gemini 简报](tasks/brief-gemini.md)、[Gemini 第二波 A](tasks/brief-gemini-wave2a.md)、[Gemini 评审 R2](tasks/brief-gemini-review-r2.md)）
+- [next-phase.md](tasks/next-phase.md)：**下一阶段剩余工作**（R3 收尾：Chat 上线，T0～T6）
+- [orchestration.md](tasks/orchestration.md)：下一阶段分工与调度（T3 Code：Opus 主会话统筹 + 跨模型子代理）
+- [parallel-plan.md](tasks/parallel-plan.md)：目录归属、分支规则与交付报告格式（第一阶段分工记录）；Codex 在途简报：[brief-codex.md](tasks/brief-codex.md)、[brief-codex-wave2.md](tasks/brief-codex-wave2.md)
+- [pi-spike-result.md](tasks/pi-spike-result.md)：Pi 厂商兼容与 1.5.2 API 复核
 
 ## 维护规则
 
