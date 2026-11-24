@@ -182,6 +182,67 @@ describe("useChatTurn", () => {
     const msgs = await store.listMessages(session.id)
     expect(msgs.at(-1)?.content).toContain("允许")
   })
+
+  it("records single latest plan part, tool calls with stackTrace, and permission timeout decision", async () => {
+    const store = createMemoryChatSessionRepository({ seed: false })
+    const session = await store.createSession({
+      organizationId: "org-1",
+      ownerId: "user-1",
+    })
+    const transport = createMockChatTransport({
+      store,
+      stepDelayMs: 1,
+      permissionTimeoutMs: 20,
+    })
+    const { result } = renderHook(() =>
+      useChatTurn({ transport, repository: store })
+    )
+
+    await act(async () => {
+      await result.current.sendTurn({
+        sessionId: session.id,
+        content: "请演示计划和工具",
+        target: TARGET,
+        runtimeId: "api:qwen:qwen3.8-flash",
+        runtimeLabel: "Qwen",
+      })
+    })
+
+    const afterPlan = await store.listMessages(session.id)
+    const planReply = afterPlan.at(-1)!
+    const planParts = planReply.parts.filter((p) => p.type === "plan")
+    const toolParts = planReply.parts.filter((p) => p.type === "tool_call")
+    expect(planParts).toHaveLength(1)
+    expect(toolParts).toHaveLength(2)
+    expect(toolParts[0]).toMatchObject({ name: "read_work_item", state: "succeeded" })
+    expect(toolParts[1]).toMatchObject({ name: "fetch_reference", state: "failed" })
+    if (toolParts[1].type === "tool_call") {
+      expect(toolParts[1].stackTrace).toContain("FetchTimeoutError")
+    }
+
+    await act(async () => {
+      await result.current.sendTurn({
+        sessionId: session.id,
+        content: "触发权限超时 perm_timeout",
+        target: TARGET,
+        runtimeId: "api:qwen:qwen3.8-flash",
+        runtimeLabel: "Qwen",
+      })
+    })
+
+    const afterTimeout = await store.listMessages(session.id)
+    const permReply = afterTimeout.at(-1)!
+    const permPart = permReply.parts.find((p) => p.type === "permission")
+    expect(permPart).toMatchObject({
+      type: "permission",
+      decision: "timeout",
+      options: [
+        { id: "allow_once", label: "仅本次允许", kind: "allow" },
+        { id: "reject_once", label: "拒绝本次", kind: "deny" },
+      ],
+    })
+    expect(permReply.content).toContain("已超时（按拒绝处理）")
+  })
 })
 
 describe("groupMessageTimeline", () => {

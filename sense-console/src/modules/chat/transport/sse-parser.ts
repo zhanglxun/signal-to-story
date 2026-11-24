@@ -69,6 +69,27 @@ export async function* parseSseStream(
   const reader = stream.getReader()
   const decoder = new TextDecoder("utf-8")
   let buffer = ""
+  let pendingCr = false
+
+  const appendNormalized = (chunkText: string) => {
+    if (!chunkText) return
+    let text = chunkText
+    if (pendingCr) {
+      pendingCr = false
+      if (text.startsWith("\n")) {
+        text = text.slice(1)
+      }
+      buffer += "\n"
+      if (!text) return
+    }
+    if (text.endsWith("\r")) {
+      pendingCr = true
+      text = text.slice(0, -1)
+    }
+    if (text) {
+      buffer += text.replace(/\r\n/g, "\n").replace(/\r/g, "\n")
+    }
+  }
 
   const abortError = () => new DOMException("Aborted", "AbortError")
   const onAbort = () => {
@@ -87,8 +108,7 @@ export async function* parseSseStream(
       if (signal?.aborted) throw abortError()
       if (done) break
 
-      buffer += decoder.decode(value, { stream: true })
-      buffer = buffer.replace(/\r\n/g, "\n").replace(/\r/g, "\n")
+      appendNormalized(decoder.decode(value, { stream: true }))
 
       let sepIndex = buffer.indexOf("\n\n")
       while (sepIndex !== -1) {
@@ -101,8 +121,11 @@ export async function* parseSseStream(
     }
     if (signal?.aborted) throw abortError()
 
-    buffer += decoder.decode()
-    buffer = buffer.replace(/\r\n/g, "\n").replace(/\r/g, "\n")
+    appendNormalized(decoder.decode())
+    if (pendingCr) {
+      buffer += "\n"
+      pendingCr = false
+    }
     if (buffer.trim()) {
       for (const block of buffer.split("\n\n")) {
         const event = parseSseBlock(block)

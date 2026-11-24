@@ -1,4 +1,4 @@
-import { useCallback, useContext, useEffect, useMemo, useState } from "react"
+import { useCallback, useContext, useEffect, useMemo, useRef, useState } from "react"
 import {
   ArrowLeftIcon,
   FolderKanbanIcon,
@@ -7,13 +7,12 @@ import {
   SmartphoneIcon,
   SparklesIcon,
 } from "lucide-react"
-import { Link, Navigate, useSearchParams } from "react-router"
+import { Link, useSearchParams } from "react-router"
 import { toast } from "sonner"
 
 import { Alert, AlertDescription } from "@/components/ui/alert"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
-import { Spinner } from "@/components/ui/spinner"
 import { AuthContext } from "@/features/auth/auth-context"
 import { getContentWorkspace } from "@/services/content-workspace-service"
 import { ChatMessageList } from "@/modules/chat/components/chat-message-list"
@@ -23,6 +22,7 @@ import { WorkItemPickerDialog } from "@/modules/chat/components/work-item-picker
 import { useChatMessages } from "@/modules/chat/hooks/use-chat-messages"
 import { useChatSessions } from "@/modules/chat/hooks/use-chat-sessions"
 import { useChatTurn } from "@/modules/chat/hooks/use-chat-turn"
+import { usePendingTurn } from "@/modules/chat/hooks/use-pending-turn"
 import {
   listReferenceOptions,
   parseSlashCommand,
@@ -60,6 +60,8 @@ export interface ChatPageProps {
   catalogLoader?: (organizationId?: string | null) => Promise<RuntimeNodeCatalog[]>
   organizationId?: string
   ownerId?: string
+  pendingPollIntervalMs?: number
+  pendingMaxWaitMs?: number
 }
 
 export function ChatPage(props: ChatPageProps = {}) {
@@ -179,11 +181,34 @@ export function ChatPage(props: ChatPageProps = {}) {
     [activeSessionId, refreshMessages, refreshSessions]
   )
 
+  const stopHookRef = useRef<
+    ((sessionId: string, jobId: string | null, runtimeLabel?: string) => void) | null
+  >(null)
+
   const turnState = useChatTurn({
     transport,
     repository,
     onTurnSettled,
+    onStopRequested: ({ sessionId, jobId, runtimeLabel }) => {
+      stopHookRef.current?.(sessionId, jobId, runtimeLabel)
+    },
   })
+
+  const pendingTurnState = usePendingTurn({
+    repository,
+    sessionId: activeSessionId,
+    messages: messageState.messages,
+    isStreamingLocally: turnState.isStreaming,
+    onSettled: onTurnSettled,
+    pollIntervalMs: props.pendingPollIntervalMs,
+    maxWaitMs: props.pendingMaxWaitMs,
+  })
+
+  useEffect(() => {
+    stopHookRef.current = pendingTurnState.beginWaitingAfterStop
+  }, [pendingTurnState.beginWaitingAfterStop])
+
+  const isTurnBusy = turnState.isStreaming || Boolean(pendingTurnState.pendingTurn)
 
   const activeSlashCards = activeSessionId
     ? slashCardsBySession[activeSessionId] ?? []
@@ -277,7 +302,7 @@ export function ChatPage(props: ChatPageProps = {}) {
   const executePrompt = useCallback(
     async (rawText: string) => {
       const trimmed = rawText.trim()
-      if (!trimmed || turnState.isStreaming) return
+      if (!trimmed || isTurnBusy) return
 
       const slash = parseSlashCommand(trimmed)
       if (slash) {
@@ -379,6 +404,7 @@ export function ChatPage(props: ChatPageProps = {}) {
       contextRefs,
       effectiveMockMode,
       handleCreateSession,
+      isTurnBusy,
       resolvedOrgId,
       resolvedTarget,
       sessionState,
@@ -389,7 +415,7 @@ export function ChatPage(props: ChatPageProps = {}) {
 
   const handleRegenerate = useCallback(
     async (userMessageId: string) => {
-      if (!activeSessionId || !resolvedTarget || turnState.isStreaming) return
+      if (!activeSessionId || !resolvedTarget || isTurnBusy) return
       messageState.clearSelectedVersion(userMessageId)
       await turnState.regenerateTurn({
         sessionId: activeSessionId,
@@ -405,7 +431,7 @@ export function ChatPage(props: ChatPageProps = {}) {
           : undefined,
       })
     },
-    [activeSessionId, messageState, resolvedTarget, thinkingEffort, turnState]
+    [activeSessionId, isTurnBusy, messageState, resolvedTarget, thinkingEffort, turnState]
   )
 
   const handleQuickCaptureUrl = useCallback(
@@ -434,21 +460,6 @@ export function ChatPage(props: ChatPageProps = {}) {
       )?.label ?? activeWorkItemId
     )
   }, [activeWorkItemId, referenceOptions])
-
-  if (!effectiveMockMode && auth?.isLoading) {
-    return (
-      <main className="grid min-h-svh place-items-center bg-background">
-        <div className="flex items-center gap-2 text-sm text-muted-foreground">
-          <Spinner className="size-4" />
-          正在检查登录会话…
-        </div>
-      </main>
-    )
-  }
-
-  if (!effectiveMockMode && auth && !auth.user) {
-    return <Navigate to="/login" replace state={{ from: "/chat-next" }} />
-  }
 
   return (
     <div
@@ -582,6 +593,7 @@ export function ChatPage(props: ChatPageProps = {}) {
               ? turnState.activeTurn
               : null
           }
+          pendingTurn={pendingTurnState.pendingTurn}
           slashCards={activeSlashCards}
           isLoading={messageState.isLoading}
           onQuickPrompt={(prompt) => void executePrompt(prompt)}
@@ -614,11 +626,34 @@ export function ChatPage(props: ChatPageProps = {}) {
             thinkingEffort={thinkingEffort}
             onSelectRuntime={handleSelectRuntime}
             onThinkingEffortChange={handleThinkingChange}
-            isStreaming={turnState.isStreaming}
-            isStopping={turnState.activeTurn?.isStopping}
+            isStreaming={isTurnBusy}
+            isStopping={Boolean(
+              turnState.activeTurn?.isStopping ||
+                pendingTurnState.pendingTurn?.reason === "stopping"
+            )}
             disabled={!resolvedOrgId && !effectiveMockMode}
             onSubmit={() => void executePrompt(inputValue)}
-            onStop={() => void turnState.stopTurn()}
+            onStop={() => {
+              if (turnState.isStreaming) {
+                void turnState.stopTurn()
+                return
+              }
+              const pending = pendingTurnState.pendingTurn
+              if (pending?.jobId && pending.reason !== "stopping") {
+                void repository
+                  .cancelJob(pending.jobId)
+                  .then(() => {
+                    pendingTurnState.beginWaitingAfterStop(
+                      pending.sessionId,
+                      pending.jobId,
+                      pending.runtimeLabel
+                    )
+                  })
+                  .catch((err) => {
+                    toast.error(err instanceof Error ? err.message : "停止生成失败")
+                  })
+              }
+            }}
             onQuickCaptureUrl={handleQuickCaptureUrl}
           />
         </footer>

@@ -26,14 +26,32 @@ beforeAll(() => {
   }
 })
 
-function renderChatPage(initialPath = "/chat-next") {
+function renderChatPage(
+  initialPath = "/chat-next",
+  options?: {
+    permissionTimeoutMs?: number
+    cancelPersistDelayMs?: number
+    stepDelayMs?: number
+    pendingPollIntervalMs?: number
+  }
+) {
   const store = createMemoryChatSessionRepository({ seed: true })
-  const transport = createMockChatTransport({ store, stepDelayMs: 1 })
+  const transport = createMockChatTransport({
+    store,
+    stepDelayMs: options?.stepDelayMs ?? 1,
+    permissionTimeoutMs: options?.permissionTimeoutMs,
+    cancelPersistDelayMs: options?.cancelPersistDelayMs,
+  })
   return {
     store,
     ...render(
       <MemoryRouter initialEntries={[initialPath]}>
-        <ChatPage mockMode repository={store} transport={transport} />
+        <ChatPage
+          mockMode
+          repository={store}
+          transport={transport}
+          pendingPollIntervalMs={options?.pendingPollIntervalMs}
+        />
       </MemoryRouter>
     ),
   }
@@ -151,5 +169,53 @@ describe("ChatPage (Phase 1 Mock Mode)", () => {
     expect(await screen.findByText("已收录到收件箱（Mock）")).toBeInTheDocument()
     const afterCount = (await store.listMessages("mock-session-1")).length
     expect(afterCount).toBe(beforeCount)
+  })
+
+  it("renders Phase 2 plan, tool cards, stack trace, and permission timeout in ChatPage", async () => {
+    const user = userEvent.setup()
+    renderChatPage("/chat-next", { permissionTimeoutMs: 150 })
+
+    expect(await screen.findByText("版本 2 / 2")).toBeInTheDocument()
+    const textarea = screen.getByLabelText("聊天消息输入框")
+    await user.type(textarea, "请演示计划步骤、工具执行与失败调用栈{enter}")
+
+    await waitFor(() => {
+      expect(screen.getByText(/已完成本地事项读取/)).toBeInTheDocument()
+      expect(screen.getByRole("button", { name: "发送" })).toBeInTheDocument()
+    })
+
+    expect(screen.getByText("执行计划")).toBeInTheDocument()
+    expect(screen.getByText("read_work_item")).toBeInTheDocument()
+    expect(screen.getByText("fetch_reference")).toBeInTheDocument()
+    expect(screen.getByText("抓取信源超时：目标站点在 5000ms 内未响应")).toBeInTheDocument()
+
+    await user.click(screen.getByRole("button", { name: /工具错误调用栈/ }))
+    expect(screen.getByText(/FetchTimeoutError/)).toBeVisible()
+
+    await user.type(textarea, "请演示权限超时自动拒绝流程{enter}")
+    expect(await screen.findByRole("button", { name: "仅本次允许" })).toBeInTheDocument()
+    expect(await screen.findByText("已超时（按拒绝处理）")).toBeInTheDocument()
+  })
+
+  it("shows stopping placeholder after stop and resolves once delayed assistant message lands", async () => {
+    const user = userEvent.setup()
+    renderChatPage("/chat-next", {
+      stepDelayMs: 25,
+      cancelPersistDelayMs: 70,
+      pendingPollIntervalMs: 15,
+    })
+
+    expect(await screen.findByText("版本 2 / 2")).toBeInTheDocument()
+    const textarea = screen.getByLabelText("聊天消息输入框")
+    await user.type(textarea, "请验证停止后延迟落库占位{enter}")
+
+    const stopBtn = await screen.findByRole("button", { name: "停止" })
+    await user.click(stopBtn)
+
+    expect(await screen.findByText("正在停止，等待助手回复落库…")).toBeInTheDocument()
+    expect(await screen.findByText("已停止")).toBeInTheDocument()
+    await waitFor(() => {
+      expect(screen.queryByText("正在停止，等待助手回复落库…")).not.toBeInTheDocument()
+    })
   })
 })
