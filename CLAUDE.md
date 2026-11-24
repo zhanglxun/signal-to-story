@@ -18,7 +18,7 @@ Also follow:
 - Media binaries belong in object storage; Postgres stores metadata and relationships.
 - Long-running tasks run only in `workers/` processes (outbound-only, claim jobs from the database); they are never part of a Web bundle.
 - No npm workspaces or published packages. Shared code is plain source referenced by relative path / tsconfig alias (`supabase/functions/_shared/`); the repo root `package.json` serves the runtime side (workers, Supabase tests, `testing/`), and each Web app keeps its own.
-- Dependency direction: `sense-console` never imports `workers`; `workers` never import `sense-console` (temporary exception until R2, which moves `sense-console/src/{harness,contracts}` into `workers/agent/loop`); `supabase/functions/*` import only `supabase/functions/_shared`; `sense-site` imports nothing from other projects.
+- Dependency direction: `sense-console` never imports `workers`; `workers` never import `sense-console` (R2 done 2026-11-24: the harness core lives in `workers/agent/loop`, which may not import anything outside `loop/`; enforced by ESLint in both projects); `supabase/functions/*` import only `supabase/functions/_shared`; `sense-site` imports nothing from other projects.
 - Mandate and publishing gates must be enforced by the database (triggers/RPC); frontend checks are UX only, not gates.
 - `sense-site/` is the approved sibling reader-site project; it must not share code via packages.
 - Navigation has at most two levels, and the project uses one shadcn/ui Base UI component system.

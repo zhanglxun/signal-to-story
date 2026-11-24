@@ -73,7 +73,7 @@ signal-to-story/
 │
 ├── workers/                       L5，独立进程 ← sense-console/workers【R1 已完成】
 │   ├── agent/                     Agent 执行面，所有模型 Key 和 CLI 调用只在这里
-│   │   ├── loop/                  【R2 起】← sense-console/src/{harness,contracts}：循环、预检、评估、Context Pack、
+│   │   ├── loop/                  【R2 已完成】← sense-console/src/{harness,contracts}：循环、预检、评估、Context Pack、
 │   │   │                          预算；接口 LlmClient / SessionDriver / JobStore / ChannelSender；
 │   │   │                          纯逻辑：不读 process.env、不联网、不引用 drivers/ entry/
 │   │   ├── entry/                 【R3】http.ts（SSE 流式）与 queue.ts（认领 agent_jobs）两个入口适配器
@@ -134,7 +134,7 @@ signal-to-story/
 **禁止的调用方向**（用 ESLint `no-restricted-imports` 和各自的 tsconfig 强制执行）：
 
 - `sense-console` 不能引用 `workers`，也不能 `spawn` 子进程。
-- `workers` 不能引用 `sense-console`。**过渡例外（R2 前）**：`workers/agent` 仍以相对路径引用 `sense-console/src/{harness,contracts}`，R2 迁入 `workers/agent/loop`。（`supabase/tests/db` 对 `knowledge-seed` 的引用已随知识表删除而消除。）
+- `workers` 不能引用 `sense-console`（R2 于 2026-11-24 完成：worker 侧契约副本在 `workers/agent/loop/contracts/`，两边不共享代码；静态与动态 `import()`、`require()` 均由 ESLint 拦截）。
 - `workers/agent/loop` 不得引用 `drivers/`、`entry/`，不得读 `process.env`，用 ESLint `no-restricted-imports` 强制，保证可用假模型单测。
 - `workers` 可以引用 `supabase/functions/_shared`（纯 TS、Deno 兼容）：IM 协议在 Edge Function 收消息和 worker 发通知两处都要用，只能放在 Deno 能打包的位置。
 - `supabase/functions` 只能引用 `supabase/functions/_shared`。
@@ -164,7 +164,7 @@ flowchart TB
    - 抽出 `testing/`，把 worker 的 demo 归位；
    - 同步修改 CLAUDE.md、README 与 docker-compose 中的路径和边界说明；
    - 实际做法：根目录新增 `package.json`（运行时一侧），Docker 镜像按进程拆开（`sense-console/Dockerfile` 只剩 Web，`workers/*/Dockerfile` 以仓库根为构建上下文），数据库与 migration 未改动。
-3. **R2 并入 `workers/agent`**：先做依赖盘点（`sense-console` 页面/服务是否用到 `src/contracts` 类型；如用到，类型改用数据库生成类型或接口返回字段，Mandate 界面提示改为接口返回「可执行动作」，仅 UX），再把 `sense-console/src/{harness,contracts}` 迁入 `workers/agent/loop`，消除 worker 对 console 的反向引用，并加 import 规则检查。
+3. ~~**R2 并入 `workers/agent`**~~（2026-11-24 完成，Gemini 交叉评审）：先做依赖盘点（`sense-console` 页面/服务是否用到 `src/contracts` 类型；如用到，类型改用数据库生成类型或接口返回字段，Mandate 界面提示改为接口返回「可执行动作」，仅 UX），再把 `sense-console/src/{harness,contracts}` 迁入 `workers/agent/loop`，消除 worker 对 console 的反向引用，并加 import 规则检查。
 4. **R3 桥接统一并让 Chat 能在生产使用**：在 `workers/agent/loop` 新建统一 Agent 循环，加 `chat-turn` handler 和 HTTP 入口（SSE 流式；长任务仍走队列），删掉 Vite 里的 `spawn`。
 5. **R4 前端按模块重组**：和看板一起做，不单独大挪动。
 6. **R5 按模块确认表的归属**：已提前完成规划，见 [database.md](database.md)；实施按其中 DB0～DB7，与 R2～R4 交错推进。
@@ -262,4 +262,4 @@ Chat、harness 出稿、`agent_session` 改稿共用同一套 Agent 循环：har
 4. ~~DB0～DB2c-2 实施与线上第 1～3 批推送~~（已完成，线上库至 `20261124100000`，详见 [database.md](database.md) 与 [status.md](status.md)）。
 5. ~~DB2c-3 第 4 批~~（2026-11-23 上线核对通过）。
 6. ~~DB3 建表、DB4、DB5、V1 退役~~（代码完成，合并为最终批次 `0.5.0-step5.sql`，见 [database.md](database.md) DB-D17，待 Codex 执行）。
-7. 下一步：执行最终批次并部署 0.5 控制台与读者站 → **R2**（将 `sense-console/src/{harness,contracts}` 迁入 `workers/agent/loop`，加 ESLint `no-restricted-imports` 门禁，消除过渡例外）→ **R3**（Chat 循环与 HTTP/SSE 入口；表与 RPC 已就绪）。
+7. 下一步：执行最终批次并部署 0.5 控制台与读者站 → ~~R2~~（已完成）→ **R3**：回合内核已在 `workers/agent/loop/chat`；下一步 DB3b（`node_claim_job` 等）与 HTTP/SSE 入口、`PiCloudDriver`，分工见 [tasks/parallel-plan.md](tasks/parallel-plan.md)。

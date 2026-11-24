@@ -56,7 +56,7 @@ npm --prefix sense-site run dev:demo          # 读者站演示数据
 
 **没有做**
 
-- **R2**：将 `sense-console/src/{harness,contracts}` 迁入 `workers/agent/loop`，完成前端 contracts 依赖拆分并启用 ESLint `no-restricted-imports` 门禁。
+- ~~**R2**~~：已完成（2026-11-24）。`sense-console/src/harness` 迁入 `workers/agent/loop`，worker 不再引用控制台；旧 Chat 页去掉浏览器内循环；ESLint 边界规则在根目录与控制台两侧生效。
 - **R3**：统一 Agent 循环、`chat-turn` handler、HTTP/SSE 入口（表与 RPC 已由 DB3 建好）、删除 Vite 开发期 `spawn`。
 - **R4**：前端按域重组与看板、mock 页标为演示或下线。
 - `workers/video` 切换节点令牌（当前仍用 `service_role`）。
