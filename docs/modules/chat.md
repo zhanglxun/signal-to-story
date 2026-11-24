@@ -109,6 +109,22 @@ sequenceDiagram
 4. **SSE 客户端**：原生 `EventSource` 只支持 GET 且不能带 `Authorization` 头，前端统一用 `fetch` + `ReadableStream` 解析 SSE（如 `@microsoft/fetch-event-source` 或手写约 50 行解析器）；服务端每 15 秒发一次 `: ping` 注释行防代理超时。
 5. **HTTP 入口安全**：CORS 只放行控制台域名与 `localhost`；JWT 用 Supabase `getUser` / JWKS 验签；按用户与组织做并发与速率限制（例如每用户同时 2 个回合）。
 
+#### HTTP 接口约定（v1，2026-11-24 冻结；前端与 worker 并行开发以此为准，改动须先改本节）
+
+基地址取自所选节点的 `runner_nodes.capabilities.http_endpoint_hint`。所有请求带 `Authorization: Bearer <Supabase access token>` 与 `Content-Type: application/json`。
+
+| 方法与路径 | 请求体 | 成功响应 | 说明 |
+| --- | --- | --- | --- |
+| `POST /v1/chat/turns` | `{ session_id, content, parts?, runtime_id, thinking_effort? }` | `200 text/event-stream` | 发送一轮并流式返回；`parts` 为 user 消息的 `@` 引用芯片 |
+| `POST /v1/chat/turns/regenerate` | `{ session_id, user_message_id, runtime_id, thinking_effort? }` | `200 text/event-stream` | 重新生成，事件同上 |
+| `POST /v1/chat/turns/{job_id}/permissions/{request_id}` | `{ decision: "allow" \| "deny" }` | `204` | 回答 `permission_request` |
+| `GET /v1/health` | — | `200 { protocol_version: 1, node_id }` | 前端判断节点是否可达，无需鉴权 |
+
+- `thinking_effort` 取值 `"off" | "low" | "medium" | "high"`，运行时不支持时忽略。
+- **SSE 线格式**：每个事件为 `event: <类型>\ndata: <单行 JSON>\n\n`，类型与字段见 2.3 表；保活为 `: ping\n\n`；流以 `done` 或 `error` 事件结束后服务端关闭连接。`data` 中字段名用 camelCase。
+- **流开始前的错误**用普通 HTTP 状态码 + `{ code, message }` JSON 返回：`401 unauthorized`、`403 forbidden`（无 `agent.dispatch` 等）、`409 turn_in_progress`（会话已有活跃回合）、`409 claim_failed`、`422 invalid_request`（含未知 `runtime_id`）、`429 rate_limited`、`503 runtime_unavailable`。流开始后的错误一律走 `error` 事件。
+- `parts` 元素形状与 2.3 表「落库 `parts[]` 元素」列一致；user 消息的引用芯片为 `{ type: "context_ref", kind: "work_item" | "document", id, label }`。
+
 ### 2.5 工具身份与权限确认回传（评审新增）
 
 1. **工具以谁的身份执行**：HTTP 路径下 worker 手里有用户 JWT，但**模型永远拿不到它**。工具是 `handlers/chat-turn` 里写死的函数白名单（4.2 的 3 个工具），每个工具内部调用固定的一个 RPC；不提供「通用 RPC / SQL / HTTP 调用」类工具。原因：用户 JWT 拥有批准、发布等权限，若模型能任意调用 RPC，数据库门禁就形同虚设（门禁只验证「是不是这个人」，不验证「是不是这个人亲手点的」）。批准 / 发布类 RPC 必须在工具层显式禁止，并加一条单测枚举工具清单。

@@ -28,6 +28,7 @@
 
 - [db3b-chat-runtime-catalog.md](tasks/db3b-chat-runtime-catalog.md)：DB3b 数据库增量改造任务书（交数据库任务评审与执行）
 - [r1-to-r3-plan.md](tasks/r1-to-r3-plan.md)：R1 → R3 六大断层分析与可执行任务计划
+- [parallel-plan.md](tasks/parallel-plan.md)：R2～R3 三轨并行分工、目录归属、分支与合并规则（附 [Codex 简报](tasks/brief-codex.md)、[Gemini 简报](tasks/brief-gemini.md)）
 
 ## 维护规则
 
