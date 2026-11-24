@@ -78,3 +78,22 @@ for await (const ev of stream) {
 3. **包名迁移与版本锁定**：`@mariozechner/pi-*@0.73.1` 已提示迁移至 `@earendil-works/pi-*`。R3.0 正式引入根目录 `package.json` 时建议核对新包名并去掉 `^` 精确锁版本，且把 `pi-*` 类型完全封死在 `workers/agent/drivers/pi-cloud.ts` 内部。
 4. **Abort 处理**：`AbortController.abort()` 触发后 `agentLoop` 不会向外抛异常，而是平稳结束流并在最后的 `message_end` 发出 `stopReason === "aborted"` 的消息；上层 `chat-turn` 应据此判断取消并落库已收到的半截文本。
 5. **`cost` 计价字段为 0**：自定义模型配置若未填 `model.cost.{input,output}`，则 `usage.cost.total` 恒为 `0`，预算核算需按节点配置单价或由 `RuntimeRegistry` 注入 `cost` 表。
+
+## 5. 新包名 1.5.2 复核（Claude，2026-11-24，只做 API 与依赖核对，未用真实 Key）
+
+**选型**：`@earendil-works/pi-ai@1.5.2` + `@earendil-works/pi-agent-core@1.5.2`（2026-11-10 发布，满两周的最新版；1.6.0 发布于 2026-11-20，暂不用）。在仓库外临时目录 `--ignore-scripts` 安装，按下列改动后最小片段 `tsc --strict` 通过，`agentLoop` / `streamSimple` 运行时可正常导入。
+
+| # | 0.73.1（第 2 节）的写法 | 1.5.2 的实际 API | 对 `PiCloudDriver` 的影响 |
+| --- | --- | --- | --- |
+| 1 | `agentLoop(prompts, context, config, signal?)` | `agentLoop(prompts, context, config, signal \| undefined, streamFn)`，**第 5 个参数必填** | 传 `streamSimple`（从 `@earendil-works/pi-ai/compat` 导入，主入口不导出） |
+| 2 | `context.systemPrompt` | `AgentContext` 只有 `{ messages, tools? }`；系统提示是 `role: "system"` 的消息，且所有消息必须带 `timestamp` | 与 `TurnInput.messages`（首条为 system）直接对应，逐条补 `timestamp` |
+| 3 | `import { Type } from "pi-ai"`（TypeBox） | 不再导出 `Type`；schema 构造器移到 `@earendil-works/pi-schema`；`Tool.parameters` 类型为任意 `object` | `ChatToolSpec.inputSchema`（JSON Schema）原样作为 `parameters`，不引入 schema 库 |
+| 4 | `convertToLlm` 过滤 `custom` 角色 | `Message` 新增 `SystemMessage`；不使用自定义消息时可直接透传 | 透传即可 |
+| 5 | — | 新增 `beforeToolCall(ctx) → { block, reason }` | `TurnHost.requestPermission` 在这里接：拒绝即 `block: true` |
+| 6 | — | 新增 `finishTurn(turn) → { action: "continue" \| "end" }`，在每次助手回合（含工具结果）之后、下一次请求之前调用 | `TurnHost.beforeModelCall()` 在这里接：不通过就 `end`；首个请求前由驱动先调一次 |
+
+其余（`message_update` 下的 `text_delta` / `thinking_delta`、`tool_execution_*`、`message_end` 上的 `usage` 与 `stopReason`、`Model<"openai-completions">` 的 `compat` 字段）类型层面与第 2 节一致。
+
+**依赖面**：`pi-ai@1.5.2` 依赖 Anthropic、OpenAI、Google GenAI、AWS Bedrock 四家 SDK（另有 lazy 入口按需加载），worker 镜像会变大；`@earendil-works/pi-telemetry` 只是本地遥测 schema 与观察钩子，源码中无任何网络调用或环境变量开关，不外发数据。
+
+**仍需 R3.0 真机复测**：第 3 节的 5 项厂商实测是在 0.73.1 上做的。R3.0 接线后用 `deepseek-chat` / `deepseek-reasoner` / `qwen3.8-flash` 在 1.5.2 上重跑这 5 项（尤其是 Qwen `compat` 与 DeepSeek `reasoning` 两个坑），结果补到本节。

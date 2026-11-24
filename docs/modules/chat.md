@@ -260,7 +260,7 @@ flowchart TB
 
 **Spike 结论（2026-11-24，详见 [../tasks/pi-spike-result.md](../tasks/pi-spike-result.md)）**：
 
-- 实测包为 `@mariozechner/pi-*@0.73.1`，该包名已废弃（2026-05 起停更），后续在 **`@earendil-works/pi-ai` / `@earendil-works/pi-agent-core`** 继续发布（当前 1.x）。**决定**：R3-A 引入新包名，锁定一个发布满两周的精确版本；动工前先按 spike 的最小片段对该版本复核 API（`agentLoop` 位置参数、`message_update` 下的细粒度事件、`message_end` 上的 usage），有差异先更新 spike 报告再写驱动。
+- 实测包为 `@mariozechner/pi-*@0.73.1`，该包名已废弃（2026-05 起停更），后续在 **`@earendil-works/pi-ai` / `@earendil-works/pi-agent-core`** 继续发布（当前 1.x）。**决定**：R3-A 引入新包名并锁定 **`@earendil-works/pi-ai@1.5.2` / `@earendil-works/pi-agent-core@1.5.2`**。API 已复核，与 0.73.1 有 6 处差异（`streamFn` 必填、系统提示改为消息、不再导出 `Type`、新增 `beforeToolCall` / `finishTurn` 钩子等），见 spike 报告第 5 节；权限确认接 `beforeToolCall`，预算闸门接 `finishTurn`，`AgentSessionDriver` 接口不需要改。
 - 首批目录：Qwen `qwen3.8-flash`、DeepSeek `deepseek-chat` / `deepseek-reasoner`（5 项全通过）。Kimi、GLM 与 `qwen3.7-max` 未实测，不进首批。
 - 驱动必须处理的坑：① DashScope 端点必须显式传完整 `compat`（否则 `system` 被改写为 `developer` 报 400）；② 思考型模型 `model.reasoning` 恒为 `true`，用户选「关闭思考」时只把本轮 `reasoning` 传 `undefined`；③ 中止不抛异常，以 `stopReason = "aborted"` 结束，驱动据此返回 `cancelled`；④ 自定义模型 `cost` 默认为 0，单价由节点配置注入，否则只受 `max_rounds` 约束（目录标 `priced: false`）。
 
