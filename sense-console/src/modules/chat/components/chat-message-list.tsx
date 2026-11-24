@@ -167,7 +167,7 @@ function PermissionPromptCard({
   requestId: string
   action: string
   summary: string
-  decision?: "allow" | "deny"
+  decision?: "allow" | "deny" | "timeout"
   onAnswer?: (requestId: string, decision: "allow" | "deny") => void | Promise<void>
 }) {
   const [submitting, setSubmitting] = useState(false)
@@ -189,7 +189,7 @@ function PermissionPromptCard({
         <span>需要人类确认 · {action}</span>
         {decision && (
           <Badge variant={decision === "allow" ? "default" : "outline"} className="text-[10px]">
-            {decision === "allow" ? "已允许" : "已拒绝"}
+            {decision === "allow" ? "已允许" : decision === "timeout" ? "已超时（按拒绝处理）" : "已拒绝"}
           </Badge>
         )}
       </AlertTitle>

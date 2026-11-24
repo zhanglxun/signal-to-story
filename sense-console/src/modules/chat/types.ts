@@ -1,3 +1,10 @@
+/** chat.md 2.3: ACP allow_* → "allow", reject_* → "deny". */
+export interface PermissionOption {
+  id: string
+  label: string
+  kind: "allow" | "deny"
+}
+
 export type ThinkingEffort = "off" | "low" | "medium" | "high"
 
 export type ChatMessageRole = "user" | "assistant" | "system" | "tool"
@@ -46,8 +53,8 @@ export type ChatMessagePart =
       requestId: string
       action: string
       summary: string
-      options?: string[]
-      decision?: "allow" | "deny"
+      options?: PermissionOption[]
+      decision?: "allow" | "deny" | "timeout"
     }
   | {
       type: "error"
@@ -106,7 +113,7 @@ export type ChatStreamEvent =
       requestId: string
       action: string
       summary: string
-      options?: string[]
+      options?: PermissionOption[]
     }
   | {
       type: "usage"
@@ -133,7 +140,7 @@ export type ChatStreamEvent =
 export interface ChatRuntimeConfig {
   node_id?: string
   runtime_id?: string
-  driver_kind?: "api" | "acp" | "exec" | "cli"
+  driver_kind?: "api" | "acp" | "exec"
   model?: string
   thinking_effort?: ThinkingEffort
 }
@@ -176,7 +183,7 @@ export interface RuntimeCapabilityFlags {
 
 export interface RuntimeEntry {
   id: string
-  kind: "api" | "acp" | "exec" | "cli"
+  kind: "api" | "acp" | "exec"
   provider: string
   model: string
   label: string

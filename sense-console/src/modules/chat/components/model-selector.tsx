@@ -101,8 +101,7 @@ export function ModelSelector({
         >
           <span className="flex min-w-0 items-center gap-1.5">
             {selected?.runtime.kind === "acp" ||
-            selected?.runtime.kind === "exec" ||
-            selected?.runtime.kind === "cli" ? (
+            selected?.runtime.kind === "exec" ? (
               <TerminalSquareIcon className="size-3.5 shrink-0 text-primary" />
             ) : (
               <BotIcon className="size-3.5 shrink-0 text-primary" />

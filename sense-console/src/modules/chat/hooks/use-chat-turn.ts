@@ -7,6 +7,7 @@ import {
   type ChatStreamEvent,
   type ChatUsage,
   HttpTransportError,
+  type PermissionOption,
   type PlanStepItem,
   type ThinkingEffort,
 } from "@/modules/chat/types"
@@ -25,8 +26,8 @@ export interface LivePermissionItem {
   requestId: string
   action: string
   summary: string
-  options: string[]
-  decision?: "allow" | "deny"
+  options: PermissionOption[]
+  decision?: "allow" | "deny" | "timeout"
 }
 
 export interface ActiveTurnState {
@@ -220,7 +221,10 @@ export function useChatTurn({ transport, repository, onTurnSettled }: UseChatTur
                         requestId: ev.requestId,
                         action: ev.action,
                         summary: ev.summary,
-                        options: ev.options ?? ["allow", "deny"],
+                        options: ev.options ?? [
+                          { id: "allow", label: "允许", kind: "allow" },
+                          { id: "deny", label: "拒绝", kind: "deny" },
+                        ],
                       },
                     ],
                   }

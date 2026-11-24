@@ -200,7 +200,10 @@ async function createStreamRunner(options: {
           requestId: reqId,
           action: "enqueue_content_draft",
           summary: permSummary,
-          options: ["allow", "deny"],
+          options: [
+            { id: "allow", label: "允许", kind: "allow" },
+            { id: "deny", label: "拒绝", kind: "deny" },
+          ],
         })
 
         const decision = await new Promise<"allow" | "deny">((resolve) => {
@@ -214,7 +217,10 @@ async function createStreamRunner(options: {
           requestId: reqId,
           action: "enqueue_content_draft",
           summary: permSummary,
-          options: ["allow", "deny"],
+          options: [
+            { id: "allow", label: "允许", kind: "allow" },
+            { id: "deny", label: "拒绝", kind: "deny" },
+          ],
           decision,
         })
 
