@@ -1,7 +1,7 @@
 // @vitest-environment node
 import { afterEach, beforeEach, describe, expect, it } from "vitest"
 
-import { FakeLlmClient } from "../../sense-console/src/harness/llm"
+import { FakeLlmClient } from "./loop/llm"
 import { createSupabaseTestDb, type SupabaseTestDb } from "../../testing/db/pglite-harness"
 import { seedVideoWorkspace, type VideoWorkspace } from "../../testing/db/video-studio-seed"
 import { SqlBackend } from "./backends/sql-backend"

@@ -1,8 +1,8 @@
 import { hostname } from "node:os"
 
-import type { LocalAgentCliKey } from "../../sense-console/src/contracts/agent-harness"
-import type { LlmClient } from "../../sense-console/src/harness/llm"
-import { getCloudModelProvider, LOCAL_AGENT_CLI_DRIVERS } from "../../sense-console/src/harness/providers"
+import type { LocalAgentCliKey } from "./loop/contracts/agent-harness"
+import type { LlmClient } from "./loop/llm"
+import { getCloudModelProvider, LOCAL_AGENT_CLI_DRIVERS } from "./loop/providers"
 import { CliLlmClient } from "./drivers/cli-driver"
 import { CloudLlmClient } from "./drivers/cloud-llm"
 

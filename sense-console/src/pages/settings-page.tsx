@@ -11,7 +11,7 @@ import {
   CLOUD_MODEL_PROVIDERS,
   DEFAULT_HARNESS_LOOP_CONFIG,
   LOCAL_AGENT_CLI_DRIVERS,
-} from "@/services/agent-harness-service"
+} from "@/config/agent-runtimes"
 import { getContentWorkspace } from "@/services/content-workspace-service"
 import { BUILTIN_KNOWLEDGE_BASE_ENTRIES } from "@/services/knowledge-base-service"
 import { getStorageProviderConfigs, setDefaultStorageProvider } from "@/services/storage-provider-service"

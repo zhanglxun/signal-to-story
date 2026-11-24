@@ -1,4 +1,4 @@
-import { type LlmClient, LlmCallError, type LlmRequest, type LlmResponse } from "../../../sense-console/src/harness/llm"
+import { type LlmClient, LlmCallError, type LlmRequest, type LlmResponse } from "../loop/llm"
 
 export interface CloudLlmConfig {
   /** e.g. "qwen", "deepseek", "openai-compatible" — used only for labelling. */

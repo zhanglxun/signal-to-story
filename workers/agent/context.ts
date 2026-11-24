@@ -1,7 +1,7 @@
-import type { DecisionMemoryItem, KnowledgeTrustLevel } from "../../sense-console/src/contracts/agent-harness"
-import { buildSafeContextPack } from "../../sense-console/src/harness/context-pack"
-import type { HarnessJob } from "../../sense-console/src/harness/job-store"
-import type { HarnessDraftContext } from "../../sense-console/src/harness/loop-controller"
+import type { DecisionMemoryItem, KnowledgeTrustLevel } from "./loop/contracts/agent-harness"
+import { buildSafeContextPack } from "./loop/context-pack"
+import type { HarnessJob } from "./loop/job-store"
+import type { HarnessDraftContext } from "./loop/loop-controller"
 import type { DraftContextRows } from "./backend"
 
 const PLATFORM_SOP: Record<string, string> = {

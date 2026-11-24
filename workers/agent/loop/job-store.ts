@@ -1,4 +1,4 @@
-import type { JobLimits, JobTarget } from "../contracts/agent-job"
+import type { JobLimits, JobTarget } from "./contracts/agent-job"
 import type { LlmUsage } from "./llm"
 
 export type HarnessStepKind = "context" | "fetch" | "generate" | "precheck" | "evaluate" | "persist"
@@ -26,7 +26,7 @@ export interface HarnessStepRecord {
   error?: string | null
 }
 
-export { DEFAULT_JOB_LIMITS, type JobLimits, type JobTarget, readJobLimits, readJobTarget } from "../contracts/agent-job"
+export { DEFAULT_JOB_LIMITS, type JobLimits, type JobTarget, readJobLimits, readJobTarget } from "./contracts/agent-job"
 
 /** Subset of public.agent_jobs the loop controller needs. */
 export interface HarnessJob {

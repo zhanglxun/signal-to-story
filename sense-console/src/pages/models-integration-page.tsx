@@ -24,7 +24,7 @@ import {
 } from "@/components/ui/card"
 import { Input } from "@/components/ui/input"
 import type { CloudModelProviderKey } from "@/contracts/agent-harness"
-import { CLOUD_MODEL_PROVIDERS } from "@/services/agent-harness-service"
+import { CLOUD_MODEL_PROVIDERS } from "@/config/agent-runtimes"
 import {
   formatEnvLocalSnippet,
   getLocalBridgeStatus,

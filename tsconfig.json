@@ -1,7 +1,6 @@
 {
   // Runtime side: workers, shared test infra, Supabase tests and Edge Function shared code.
-  // sense-console / sense-site have their own tsconfig. Until R2 extracts core/, workers
-  // import sense-console/src/{harness,contracts} by relative path.
+  // sense-console / sense-site have their own tsconfig; workers never import from them (R2).
   "compilerOptions": {
     "target": "es2023",
     "lib": ["ES2023", "DOM"],

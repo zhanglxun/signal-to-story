@@ -2,12 +2,10 @@ import { useState } from "react"
 import { useQuery } from "@tanstack/react-query"
 import {
   BotIcon,
-  CheckCircle2Icon,
   ExternalLinkIcon,
   InboxIcon,
   SendIcon,
   Settings2Icon,
-  ShieldCheckIcon,
   SmartphoneIcon,
   SparklesIcon,
   TerminalSquareIcon,
@@ -28,23 +26,16 @@ import {
 import { Input } from "@/components/ui/input"
 import type {
   CloudModelProviderKey,
-  DraftEvaluationReport,
   ExecutionDriverMode,
   LocalAgentCliKey,
 } from "@/contracts/agent-harness"
-import {
-  buildSafeContextPack,
-  CLOUD_MODEL_PROVIDERS,
-  LOCAL_AGENT_CLI_DRIVERS,
-  runGeneratorEvaluatorLoop,
-} from "@/services/agent-harness-service"
-import { selectRelevantKnowledgeSnippets } from "@/services/knowledge-base-service"
+import { CLOUD_MODEL_PROVIDERS, LOCAL_AGENT_CLI_DRIVERS } from "@/config/agent-runtimes"
 import {
   getLocalBridgeStatus,
   sendBridgeChat,
 } from "@/services/local-bridge-service"
 
-type AssistantWorkMode = "chat_test" | "quick_capture" | "harness_draft"
+type AssistantWorkMode = "chat_test" | "quick_capture"
 
 interface ChatMessageItem {
   id: string
@@ -54,8 +45,6 @@ interface ChatMessageItem {
   content: string
   createdAt: string
   durationMs?: number
-  evaluations?: DraftEvaluationReport[]
-  sanitizedWarnings?: string[]
   error?: boolean
 }
 
@@ -73,11 +62,6 @@ const QUICK_PROMPTS: Array<{
     label: "📥 极简速记：收录 AI 趋势线索",
     mode: "quick_capture",
     text: "https://story.susense.cn/demo 看到一篇关于多模态 Agent Harness 自动化的案例，想从个人创作者降本增效的角度切入做一期选题。",
-  },
-  {
-    label: "🛡️ Harness 3轮自循环：生成公众号草案",
-    mode: "harness_draft",
-    text: "主题：为什么个人内容创作者需要「指令数据分离 + 生成评估自循环」的内容工厂？请输出结构化公众号短文草案。",
   },
 ]
 
@@ -136,7 +120,6 @@ export function ChatAssistantPage({
         : `${cliKey} (${activeCliStatus?.binary ?? "cli"})`
 
     const nowTime = new Date().toLocaleTimeString()
-    const nowIso = new Date().toISOString()
     const userMsg: ChatMessageItem = {
       id: `user-${++messageSeq}`,
       role: "user",
@@ -149,69 +132,7 @@ export function ChatAssistantPage({
     setIsSending(true)
 
     try {
-      if (activeMode === "harness_draft") {
-        // 运行 P1 + P2 Harness 自循环引擎
-        const snippets = selectRelevantKnowledgeSnippets({
-          categories: ["sop", "brand_voice"],
-          tags: ["article", "wechat", "fact-check"],
-          limit: 3,
-        })
-        const contextPack = buildSafeContextPack({
-          organizationId: "org_local",
-          taskGoal: text,
-          platform: "wechat",
-          systemSop:
-            "输出结构清晰的 Markdown 草案，包含核心观点、论据支撑与待核实标记，不少于 100 字。",
-          knowledgeSnippets: snippets,
-          untrustedSources: [
-            {
-              sourceId: "chat_input_1",
-              channel: standaloneH5 ? "h5_chat" : "console_chat",
-              rawText: text,
-              capturedAt: nowIso,
-            },
-          ],
-        })
-
-        let totalDuration = 0
-        const loopResult = await runGeneratorEvaluatorLoop({
-          platform: "wechat",
-          forbiddenPhrases: ["震惊", "赶紧收藏不然被删"],
-          generateDraft: async (round, feedback) => {
-            const promptForRound = feedback
-              ? `${contextPack.userPayloadPrompt}\n\n[第 ${round} 轮评估修正要求]: ${feedback}`
-              : contextPack.userPayloadPrompt
-
-            const res = await sendBridgeChat({
-              driverMode,
-              providerKey,
-              cliKey,
-              systemPrompt: contextPack.systemPrompt,
-              prompt: promptForRound,
-            })
-            totalDuration += res.durationMs ?? 0
-            if (!res.ok) {
-              throw new Error(res.error || "生成调用失败")
-            }
-            return res.reply || ""
-          },
-        })
-
-        setMessages((prev) => [
-          ...prev,
-          {
-            id: `ai-${++messageSeq}`,
-            role: "assistant",
-            mode: activeMode,
-            engineLabel: `${currentEngineLabel} · Harness (${loopResult.roundsExecuted}轮审查)`,
-            content: `${loopResult.finalDraft}\n\n---\n✅ **Harness 结论**：${loopResult.terminationReason}`,
-            createdAt: new Date().toLocaleTimeString(),
-            durationMs: totalDuration,
-            evaluations: loopResult.evaluations,
-            sanitizedWarnings: contextPack.sanitizedWarnings,
-          },
-        ])
-      } else if (activeMode === "quick_capture") {
+      if (activeMode === "quick_capture") {
         const captureSystemPrompt =
           "你是星火工厂的极简速记解析助手。请从用户输入中提取：1. 候选选题标题；2. 核心链接（如有）；3. 建议切入角度；4. 推荐发布平台（X / 公众号 / 视频号）。以简洁要点输出。"
         const res = await sendBridgeChat({
@@ -435,7 +356,7 @@ export function ChatAssistantPage({
             <span className="font-semibold text-muted-foreground">
               3. 选择工作模式
             </span>
-            <div className="grid grid-cols-3 gap-1">
+            <div className="grid grid-cols-2 gap-1">
               <button
                 type="button"
                 onClick={() => setWorkMode("chat_test")}
@@ -457,17 +378,6 @@ export function ChatAssistantPage({
                 }`}
               >
                 📥 极简速记
-              </button>
-              <button
-                type="button"
-                onClick={() => setWorkMode("harness_draft")}
-                className={`rounded-lg border px-2 py-2 font-medium transition ${
-                  workMode === "harness_draft"
-                    ? "border-primary bg-primary/10 text-primary"
-                    : "hover:border-primary/40"
-                }`}
-              >
-                🛡️ 自循环出稿
               </button>
             </div>
           </div>
@@ -568,42 +478,6 @@ export function ChatAssistantPage({
                     {m.content}
                   </div>
 
-                  {/* Harness Evaluations Trace */}
-                  {m.evaluations && m.evaluations.length > 0 && (
-                    <div className="mt-3 space-y-2 border-t pt-2.5 text-xs">
-                      <div className="flex items-center gap-1.5 font-semibold text-primary">
-                        <ShieldCheckIcon className="size-4" />
-                        只读评估器 (Read-Only Evaluator) 审查轨迹：
-                      </div>
-                      {m.evaluations.map((ev) => (
-                        <div
-                          key={ev.round}
-                          className="rounded border bg-muted/40 p-2"
-                        >
-                          <div className="flex items-center justify-between font-medium">
-                            <span>第 {ev.round} 轮审查</span>
-                            <Badge
-                              variant={ev.passedAll ? "default" : "outline"}
-                            >
-                              得分 {ev.score} ·{" "}
-                              {ev.passedAll ? "全部通过" : "打回重改"}
-                            </Badge>
-                          </div>
-                          <div className="mt-1 flex flex-wrap gap-2 text-muted-foreground">
-                            {ev.criteria.map((c) => (
-                              <span
-                                key={c.criterionKey}
-                                className="inline-flex items-center gap-1"
-                              >
-                                <CheckCircle2Icon className="size-3 text-primary" />
-                                {c.criterionKey}: {c.passed ? "通过" : c.feedback}
-                              </span>
-                            ))}
-                          </div>
-                        </div>
-                      ))}
-                    </div>
-                  )}
                 </div>
               </div>
             ))}
@@ -633,9 +507,7 @@ export function ChatAssistantPage({
               placeholder={
                 workMode === "quick_capture"
                   ? "粘贴文章链接或输入一句话灵感，回车即刻解析收录…"
-                  : workMode === "harness_draft"
-                    ? "输入创作主题与要求，触发 3 轮生成-审查自循环出稿…"
-                    : "输入消息测试当前大模型 API 或本地 Agent CLI…"
+                  : "输入消息测试当前大模型 API 或本地 Agent CLI…"
               }
               className="flex-1"
             />

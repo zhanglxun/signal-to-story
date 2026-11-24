@@ -2,8 +2,8 @@
  * Shared fixtures for the harness end-to-end test and `npm run demo:harness`.
  * Everything runs against PGlite with the real migrations applied.
  */
-import { type JobUsage, mapAgentJobStep, summarizeJobUsage } from "../../../sense-console/src/contracts/agent-job"
-import { FakeLlmClient, type LlmRequest } from "../../../sense-console/src/harness/llm"
+import { type JobUsage, mapAgentJobStep, summarizeJobUsage } from "../loop/contracts/agent-job"
+import { FakeLlmClient, type LlmRequest } from "../loop/llm"
 import { seedOrganization, type SupabaseTestDb } from "../../../testing/db/pglite-harness"
 
 export interface DemoWorkspace {

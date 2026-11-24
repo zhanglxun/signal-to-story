@@ -1,6 +1,6 @@
 import { z } from "zod"
 
-import type { DraftEvaluationReport, SafeContextPack } from "../contracts/agent-harness"
+import type { DraftEvaluationReport, SafeContextPack } from "./contracts/agent-harness"
 import { escapeZoneTags } from "./injection"
 import type { HarnessJob, HarnessProgress, HarnessStepKind, HarnessStepRecord, HarnessTerminalStatus, JobStore } from "./job-store"
 import { type ChatMessage, type LlmClient, stripCodeFence } from "./llm"

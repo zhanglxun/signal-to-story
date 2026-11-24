@@ -1,4 +1,4 @@
-import { type HarnessJob, type HarnessStepRecord, type HarnessTerminalStatus, StaleRevisionError, type WriteDraftInput, type WriteDraftResult } from "../../../sense-console/src/harness/job-store"
+import { type HarnessJob, type HarnessStepRecord, type HarnessTerminalStatus, StaleRevisionError, type WriteDraftInput, type WriteDraftResult } from "../loop/job-store"
 import { type AgentQueueBackend, type ClaimedJobRow, type DraftContextRows, rowToStep, stepToRow } from "../backend"
 import { loadRepositoryKnowledge } from "../knowledge"
 

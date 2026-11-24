@@ -1,6 +1,6 @@
 import { z } from "zod"
 
-import type { DraftEvaluationReport, EvaluationCriterionResult } from "../contracts/agent-harness"
+import type { DraftEvaluationReport, EvaluationCriterionResult } from "./contracts/agent-harness"
 import { escapeZoneTags } from "./injection"
 import { type ChatMessage, type LlmClient, type LlmUsage, stripCodeFence } from "./llm"
 import { summarize } from "./precheck"

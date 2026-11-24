@@ -1,5 +1,5 @@
 /** Fixtures for the video storyboard worker test and `npm run demo:video` (fake LLM, PGlite). */
-import { FakeLlmClient } from "../../../sense-console/src/harness/llm"
+import { FakeLlmClient } from "../loop/llm"
 import type { SupabaseTestDb } from "../../../testing/db/pglite-harness"
 import type { VideoWorkspace } from "../../../testing/db/video-studio-seed"
 
