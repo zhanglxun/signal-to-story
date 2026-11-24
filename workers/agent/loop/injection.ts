@@ -39,3 +39,13 @@ export function detectInjectionSignals(text: string): string[] {
 export function escapeZoneTags(text: string): string {
   return text.replace(ZONE_TAG, "[ESCAPED_TAG]")
 }
+
+const ZONE_TAG_OPENER = new RegExp(ZONE_TAG.source.replace(String.raw`\b[^>]*>`, String.raw`\b`), "gi")
+
+/**
+ * Stricter variant for text placed inside a zone by a template: also neutralizes a zone-tag opener that
+ * has no closing ">", because the surrounding template could supply one (review finding #3, 2026-11-24).
+ */
+export function escapeZoneTagsStrict(text: string): string {
+  return escapeZoneTags(text).replace(ZONE_TAG_OPENER, "[ESCAPED_TAG]")
+}

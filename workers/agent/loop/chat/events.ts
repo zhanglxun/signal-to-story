@@ -105,4 +105,7 @@ export const TURN_ERROR_CODES = {
   maxRounds: "max_rounds",
   driverFailed: "driver_failed",
   cancelled: "cancelled",
+  persistFailed: "persist_failed",
+  toolNotAllowed: "tool_not_allowed",
+  permissionDenied: "permission_denied",
 } as const

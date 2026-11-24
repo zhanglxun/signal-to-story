@@ -42,7 +42,7 @@ export class FakeAgentSessionDriver implements AgentSessionDriver {
         case "tool": {
           host.emit({ type: "tool_start", callId: step.callId, name: step.name, inputSummary: JSON.stringify(step.input).slice(0, 200) })
           const r = await host.executeTool(step.name, step.input, signal)
-          host.emit({ type: "tool_end", callId: step.callId, status: r.ok ? "succeeded" : "failed", outputSummary: r.outputSummary, ...(r.error ? { error: r.error } : {}) })
+          host.emit({ type: "tool_end", callId: step.callId, status: r.ok ? "succeeded" : "failed", outputSummary: r.outputSummary, ...(r.error ? { error: r.error } : {}), ...(r.stackTrace ? { stackTrace: r.stackTrace } : {}) })
           break
         }
         case "permission": {

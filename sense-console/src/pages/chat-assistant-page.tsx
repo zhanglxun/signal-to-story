@@ -2,12 +2,10 @@ import { useState } from "react"
 import { useQuery } from "@tanstack/react-query"
 import {
   BotIcon,
-  CheckCircle2Icon,
   ExternalLinkIcon,
   InboxIcon,
   SendIcon,
   Settings2Icon,
-  ShieldCheckIcon,
   SmartphoneIcon,
   SparklesIcon,
   TerminalSquareIcon,
@@ -28,7 +26,6 @@ import {
 import { Input } from "@/components/ui/input"
 import type {
   CloudModelProviderKey,
-  DraftEvaluationReport,
   ExecutionDriverMode,
   LocalAgentCliKey,
 } from "@/contracts/agent-harness"
@@ -48,8 +45,6 @@ interface ChatMessageItem {
   content: string
   createdAt: string
   durationMs?: number
-  evaluations?: DraftEvaluationReport[]
-  sanitizedWarnings?: string[]
   error?: boolean
 }
 
@@ -483,42 +478,6 @@ export function ChatAssistantPage({
                     {m.content}
                   </div>
 
-                  {/* Harness Evaluations Trace */}
-                  {m.evaluations && m.evaluations.length > 0 && (
-                    <div className="mt-3 space-y-2 border-t pt-2.5 text-xs">
-                      <div className="flex items-center gap-1.5 font-semibold text-primary">
-                        <ShieldCheckIcon className="size-4" />
-                        只读评估器 (Read-Only Evaluator) 审查轨迹：
-                      </div>
-                      {m.evaluations.map((ev) => (
-                        <div
-                          key={ev.round}
-                          className="rounded border bg-muted/40 p-2"
-                        >
-                          <div className="flex items-center justify-between font-medium">
-                            <span>第 {ev.round} 轮审查</span>
-                            <Badge
-                              variant={ev.passedAll ? "default" : "outline"}
-                            >
-                              得分 {ev.score} ·{" "}
-                              {ev.passedAll ? "全部通过" : "打回重改"}
-                            </Badge>
-                          </div>
-                          <div className="mt-1 flex flex-wrap gap-2 text-muted-foreground">
-                            {ev.criteria.map((c) => (
-                              <span
-                                key={c.criterionKey}
-                                className="inline-flex items-center gap-1"
-                              >
-                                <CheckCircle2Icon className="size-3 text-primary" />
-                                {c.criterionKey}: {c.passed ? "通过" : c.feedback}
-                              </span>
-                            ))}
-                          </div>
-                        </div>
-                      ))}
-                    </div>
-                  )}
                 </div>
               </div>
             ))}

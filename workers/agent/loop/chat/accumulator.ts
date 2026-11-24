@@ -86,7 +86,8 @@ export class PartsAccumulator {
       truncated = true
     }
     if (!content.trim()) {
-      content = status === "cancelled" ? "（已停止生成）" : status === "error" ? `（生成失败：${error?.message ?? "未知错误"}）`.slice(0, 2000) : "（无文本输出）"
+      const errorMessage = error?.message ?? parts.filter((p): p is ErrorPart => p.type === "error").at(-1)?.message ?? "未知错误"
+      content = status === "cancelled" ? "（已停止生成）" : status === "error" ? `（生成失败：${errorMessage}）`.slice(0, 2000) : "（无文本输出）"
     }
 
     // Shrink parts to fit: reasoning first, then tool outputs / stack traces, then text copies.
@@ -106,8 +107,12 @@ export class PartsAccumulator {
       if (t.outputSummary && t.outputSummary.length > 500) t.outputSummary = t.outputSummary.slice(0, 500) + "…"
     })
     shrink((p) => p.type === "error", (p) => { delete (p as ErrorPart).stack })
-    shrink((p) => p.type === "text", (p) => { (p as { text: string }).text = (p as { text: string }).text.slice(0, 20_000) + "…（完整正文见 content）" })
-    const cap = (s: string, n: number) => (s.length > n ? s.slice(0, n) + "…" : s)
+    const TEXT_PART_KEEP = 20_000
+    shrink((p) => p.type === "text" && Array.from((p as { text: string }).text).length > TEXT_PART_KEEP, (p) => {
+      const t = p as { text: string }
+      t.text = Array.from(t.text).slice(0, TEXT_PART_KEEP).join("") + "…（完整正文见 content）"
+    })
+    const cap = (s: string, n: number) => { const c = Array.from(s); return c.length > n ? c.slice(0, n).join("") + "…" : s }
     shrink((p) => p.type === "tool_call", (p) => {
       const t = p as ToolCallPart
       t.inputSummary = cap(t.inputSummary, 500)
@@ -133,6 +138,12 @@ export class PartsAccumulator {
           largestSize = size
         }
       })
+      const big = largest === -1 ? undefined : parts[largest]
+      if (big && big.type === "text" && Array.from(big.text).length > 2_000) {
+        const c = Array.from(big.text.replace(/…（完整正文见 content）$/, ""))
+        big.text = c.slice(0, Math.floor(c.length / 2)).join("") + "…（完整正文见 content）"
+        continue
+      }
       if (largest === -1) {
         // Only error parts left: keep the last one, trimmed.
         const last = parts.filter((p): p is ErrorPart => p.type === "error").at(-1)
