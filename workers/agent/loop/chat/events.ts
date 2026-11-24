@@ -10,7 +10,7 @@ export type TurnStatus = "completed" | "cancelled" | "error"
 export interface PlanStep {
   id: string
   title: string
-  status: "pending" | "running" | "done" | "failed"
+  status: "pending" | "in_progress" | "completed" | "failed"
 }
 
 // ── SSE events (field names camelCase on the wire) ───────────────────────────────────────────────
