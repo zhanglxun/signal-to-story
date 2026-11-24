@@ -64,7 +64,7 @@
 | `text_delta` | `delta` | `{ type: "text", text }` | 流式追加到 `Message` / `Bubble`，走安全 Markdown 渲染 |
 | `plan_update` | `steps: [{ id, title, status }]` | `{ type: "plan", steps }` | 更新 `Plan` 卡片状态 |
 | `tool_start` | `callId`, `name`, `inputSummary` | `{ type: "tool_call", callId, name, state: "running", ... }` | 插入或更新 `Task` 卡片为运行中 |
-| `tool_end` | `callId`, `status`, `outputSummary`, `error?` | 更新对应 `tool_call` 项（含 `stackTrace?`） | `Task` 卡片完成；若失败可折叠查看 `Stack Trace` |
+| `tool_end` | `callId`, `status`, `outputSummary`, `error?`, `stackTrace?` | 更新对应 `tool_call` 项（含 `stackTrace?`） | `Task` 卡片完成；若失败可折叠查看 `Stack Trace` |
 | `permission_request` | `requestId`, `action`, `summary`, `options` | `{ type: "permission", ... }` | 渲染 `Questionnaire` / 确认按钮供用户选择放行或拒绝 |
 | `usage` | `inputTokens`, `outputTokens`, `costCents`, `durationMs`, `model` | 写入 `agent_job_steps.usage` | 显示在消息页脚元数据 |
 | `error` | `code`, `message`, `retryable`, `stack?` | `{ type: "error", code, message, stack? }` + `status = "error"` | 显示错误提示、`Stack Trace` 与「重试」按钮 |
@@ -129,7 +129,7 @@ sequenceDiagram
 | `GET /v1/health` | — | `200 { protocol_version: 1, node_id }` | 前端判断节点是否可达，无需鉴权 |
 
 - `thinking_effort` 取值 `"off" | "low" | "medium" | "high"`，运行时不支持时忽略。
-- **SSE 线格式**：每个事件为 `event: <类型>\ndata: <单行 JSON>\n\n`，类型与字段见 2.3 表；保活为 `: ping\n\n`；流以 `done` 或 `error` 事件结束后服务端关闭连接。`data` 中字段名用 camelCase。
+- **SSE 线格式**：每个事件为 `event: <类型>\ndata: <单行 JSON>\n\n`，类型与字段见 2.3 表；保活为 `: ping\n\n`；**结束规则（2026-11-24 评审后修订）**：worker 先落库再宣布结果——回合出错时依次发 `error`、`done(status: "error")`；正常或中断时只发 `done`。因此 **`done` 是唯一的正常终止事件**，收到 `done` 时消息已在库里；只有落库本身失败时，流以 `error`（`code: "persist_failed"`）结束且没有 `done`。前端收到 `error` 后应继续读到 `done` 或流结束为止（第一波实现收到 `error` 即停止读取，因 worker 已先落库所以结果正确，第二波 B 统一改为以 `done` 为准）。`data` 中字段名用 camelCase。
 - **流开始前的错误**用普通 HTTP 状态码 + `{ code, message }` JSON 返回：`401 unauthorized`、`403 forbidden`（无 `agent.dispatch` 等）、`409 turn_in_progress`（会话已有活跃回合）、`409 claim_failed`、`422 invalid_request`（含未知 `runtime_id`）、`429 rate_limited`、`503 runtime_unavailable`。流开始后的错误一律走 `error` 事件。
 - `parts` 元素形状与 2.3 表「落库 `parts[]` 元素」列一致；user 消息的引用芯片为 `{ type: "context_ref", kind: "work_item" | "document", id, label }`。
 
@@ -260,7 +260,7 @@ flowchart TB
 
 **Spike 结论（2026-11-24，详见 [../tasks/pi-spike-result.md](../tasks/pi-spike-result.md)）**：
 
-- 实测包为 `@mariozechner/pi-*@0.73.1`，该包名已废弃（2026-05 起停更），后续在 **`@earendil-works/pi-ai` / `@earendil-works/pi-agent-core`** 继续发布（当前 1.x）。**决定**：R3-A 引入新包名并锁定 **`@earendil-works/pi-ai@1.5.2` / `@earendil-works/pi-agent-core@1.5.2`**。API 已复核，与 0.73.1 有 6 处差异（`streamFn` 必填、系统提示改为消息、不再导出 `Type`、新增 `beforeToolCall` / `finishTurn` 钩子等），见 spike 报告第 5 节；权限确认接 `beforeToolCall`，预算闸门接 `finishTurn`，`AgentSessionDriver` 接口不需要改。
+- 实测包为 `@mariozechner/pi-*@0.73.1`，该包名已废弃（2026-05 起停更），后续在 **`@earendil-works/pi-ai` / `@earendil-works/pi-agent-core`** 继续发布（当前 1.x）。**决定**：R3-A 引入新包名并锁定 **`@earendil-works/pi-ai@1.5.2` / `@earendil-works/pi-agent-core@1.5.2`**。API 已复核，与 0.73.1 有 6 处差异（`streamFn` 必填、系统提示改为消息、不再导出 `Type`、新增 `beforeToolCall` / `finishTurn` 钩子等），见 spike 报告第 5 节；预算闸门接 `finishTurn`。**平台工具的权限确认由 worker 的回合编排在执行工具前统一处理**（白名单 + `enqueue_content_draft` 等高成本工具先发 `permission_request`），驱动不使用 `beforeToolCall` 做这件事；`requestPermission` 只给 ACP CLI 自身的敏感动作用。2026-11-24 交叉评审后 `AgentSessionDriver` 增加了 `sessionId` 与本轮原始输入 `turn`（见 `workers/agent/loop/chat/driver.ts` 规则 1～6）。
 - 首批目录：Qwen `qwen3.8-flash`、DeepSeek `deepseek-chat` / `deepseek-reasoner`（5 项全通过）。Kimi、GLM 与 `qwen3.7-max` 未实测，不进首批。
 - 驱动必须处理的坑：① DashScope 端点必须显式传完整 `compat`（否则 `system` 被改写为 `developer` 报 400）；② 思考型模型 `model.reasoning` 恒为 `true`，用户选「关闭思考」时只把本轮 `reasoning` 传 `undefined`；③ 中止不抛异常，以 `stopReason = "aborted"` 结束，驱动据此返回 `cancelled`；④ 自定义模型 `cost` 默认为 0，单价由节点配置注入，否则只受 `max_rounds` 约束（目录标 `priced: false`）。
 
