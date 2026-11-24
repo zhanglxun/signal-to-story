@@ -6,7 +6,7 @@
 
 | 轨道 | 执行者 | 分支 / worktree | 第一波（现在） | 第二波（等通知） | 简报 |
 | --- | --- | --- | --- | --- | --- |
-| 数据库 | Codex | `feat/db3b` · `../sts-db` | 阶段 0（执行 step5 + 部署）→ DB3b → `0.5.0-step6.sql` | ACP 驱动、Vite 桥退役、模型 / CLI 配置页 | [brief-codex.md](brief-codex.md) |
+| 数据库 | Codex | `feat/db3b` → `feat/codex-wave2` · `../sts-db` | 阶段 0：step5 **数据库已完成**（2026-11-24 核对通过），前端部署待补 | 部署补齐 → DB3b → ACP 驱动 → 配置页改读节点目录（一次性） | [brief-codex.md](brief-codex.md) · [收尾](brief-codex-wave2.md) |
 | Worker 核心 | Claude | `feat/r2-loop` → `feat/r3-core`（叠在 R2 上）· `../sts-worker` | R2（内核迁入 `workers/agent/loop` + ESLint 门禁） | `AgentSessionDriver` 接口 → R3.0 端到端细切片 → R3-A | —（由 Claude 自行执行） |
 | 前端 | Gemini 4 | `feat/chat-ui`、`feat/chat-ui-2`（均已合并）· `../sts-chat-ui` | Pi 厂商兼容 spike（只交结论）→ Chat UI Phase 1（假传输）**已合并** | 2A：Phase 2 组件 + 评审遗留 **已合并**；评审 Claude 的 R2 + R3 内核；2B：接真实 HTTP/SSE（等 DB3b 与 HTTP 入口），并按 chat.md 2.4 结束规则改为以 `done` 为终止事件 | [brief-gemini.md](brief-gemini.md) · [2A](brief-gemini-wave2a.md) |
 
