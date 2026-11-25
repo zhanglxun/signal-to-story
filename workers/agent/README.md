@@ -2,7 +2,7 @@
 
 独立进程，消费 `public.agent_jobs`，执行「Context Pack → 生成 → 确定性预检 → 独立 LLM 评估 → 重写（≤ max_rounds）→ 直接写入草稿 / 转人工」。设计与接口见 [docs/modules/harness.md](../../docs/modules/harness.md)。
 
-- 只做 outbound 连接（Supabase HTTPS + 模型 API），没有监听端口。
+- 队列入口（`entry/queue.ts`）只做 outbound 连接（Supabase HTTPS + 模型 API）；只有设置了 `SENSE_HTTP_PORT` 时才额外监听 Chat 的 HTTP/SSE 端口（`entry/http.ts`，见下方「Chat HTTP 入口」）。
 - 只持有**公开 key + 节点令牌**（DB2c-2），所有读写都走 `node_*` RPC：只能认领本组织的任务、只能写自己正在执行的任务；不能批准、不能写知识库/决定记忆、不能写发布记录（数据库拒绝）。不需要也不应该配置 `service_role`。
 - 产出经 `node_write_document_draft` 校验 `base_revision` 后直接写入 `content_documents` 新草稿版本（DB2c-3；若期间人工改过稿件则拒绝覆盖并转失败 `stale_target`），任务置为 `pending_review`，人工在控制台复核通过后任务自动转为 `succeeded`。
 
@@ -72,7 +72,34 @@ SENSE_RUNTIME_DEEPSEEK_REASONER_MODEL=deepseek-reasoner
 SENSE_RUNTIME_DEEPSEEK_REASONER_REASONING=true
 ```
 
-节点上报的能力目录只含 `id / kind / provider / model / label / capabilities / context_window / max_output_tokens / priced / status`，不含 Key、Base URL 与令牌（构造后再按已配置的 Key 逐一比对兜底）。上报接口 `CapabilityReporter` 目前只有内存假实现，接 `node_report_capabilities` 在 T3b 完成。
+节点上报的能力目录只含 `id / kind / provider / model / label / capabilities / context_window / max_output_tokens / priced / status`，不含 Key、Base URL 与令牌（构造后再按已配置的 Key 逐一比对兜底）。worker 启动时经 `node_report_capabilities` 上报一次，之后每 5 分钟刷新（`NodeCapabilityReporter` + `entry/capabilities.ts`）；`SENSE_ACP_CLIS` 中的本机 CLI 以 `acp:<cli>`（`status: "unverified"`）一并列出，HTTP 入口开启时带 `supports_http_sse: true` 与 `http_endpoint_hint`。
+
+## Chat HTTP 入口
+
+接口与事件格式以 [docs/modules/chat.md](../../docs/modules/chat.md) 2.4「HTTP 接口约定 v1」为准：`POST /v1/chat/turns`、`POST /v1/chat/turns/regenerate`、`POST /v1/chat/turns/{job_id}/permissions/{request_id}`、`GET /v1/health`。每轮：校验用户 JWT（Supabase `getUser`）→ 以**用户 JWT**（RLS 生效）调 `send_chat_message` / `regenerate_chat_turn`（`p_target_node_id` = 本节点）→ 以**节点令牌**调 `node_claim_job` → SSE 流式输出（`handlers/chat-turn.ts`）。认领失败时以用户身份 `cancel_agent_job` 释放会话，返回 `409 claim_failed`。浏览器断开不等于取消，回合跑完照常落库；停止只认 `cancel_agent_job`（心跳每 lease/3 检查）。Chat 工具（`capture_intake` / `read_work_item` / `enqueue_content_draft`）以用户身份各调一个固定 RPC，模型拿不到 JWT。
+
+| 变量 | 必填 | 说明 |
+| --- | --- | --- |
+| `SENSE_HTTP_PORT` | 否 | 设置后开启 HTTP 入口；不设则只跑队列 |
+| `SENSE_HTTP_HOST` | 否 | 监听地址，默认 `127.0.0.1`（走隧道）；容器内填 `0.0.0.0` |
+| `SENSE_NODE_ID` | 开 HTTP 时必填 | 本节点在控制台「执行节点」里的 id（uuid），写进回合的 `target_node_id`；填错会导致每轮 `409 claim_failed` |
+| `SENSE_HTTP_PUBLIC_URL` | 否 | 浏览器访问本节点的公网地址（HTTPS / 隧道），上报为 `http_endpoint_hint`；默认 `http://localhost:<port>` |
+| `SENSE_HTTP_ALLOWED_ORIGINS` | 否 | 逗号分隔的控制台来源（如 `https://<console-domain>`），只写协议 + 域名 + 端口；`localhost` / `127.0.0.1` 任意端口始终放行 |
+| `SENSE_HTTP_MAX_TURNS_PER_USER` | 否 | 每用户同时进行的回合数，默认 2 |
+| `SENSE_HTTP_TURNS_PER_MINUTE` | 否 | 每用户每分钟发起回合数，默认 20 |
+| `SENSE_CHAT_BUDGET_CENTS` / `SENSE_CHAT_MAX_ROUNDS` | 否 | 单轮费用上限（分）/ 模型调用轮次，经 `p_runtime` 传给数据库（夹紧到 1–500 / 1–20）；不设用数据库默认 50 / 8 |
+| `SENSE_ACP_CLIS` 等 | 否 | 本机 ACP CLI，见 `drivers/acp-config.ts`；仅在 HTTP 入口开启时创建 |
+
+示例（占位值）：
+
+```bash
+SENSE_HTTP_PORT=8787
+SENSE_NODE_ID=<runner-node-uuid>
+SENSE_HTTP_PUBLIC_URL=https://<tunnel-or-node-domain>
+SENSE_HTTP_ALLOWED_ORIGINS=https://<console-domain>
+```
+
+未配置 `SENSE_LLM_*` 但开启了 HTTP 入口时，只跑 Chat、不认领队列任务。队列入口的任务类型（`SENSE_WORKER_JOB_TYPES`）不允许包含 `chat_turn`，启动即报错。
 
 ## 本地演示 / 验收
 

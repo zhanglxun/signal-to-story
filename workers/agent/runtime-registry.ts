@@ -49,9 +49,20 @@ export interface RuntimeCatalog {
 /** Same rule as node_report_capabilities (DB3b requirement 5). */
 export const RUNTIME_ID_PATTERN = /^(api|acp|exec):[a-z0-9._:-]{1,120}$/
 
-/** Pushes the catalog to the database. The real one (node_report_capabilities) arrives with T3b. */
+/** Pushes the catalog to the database (NodeCapabilityReporter → node_report_capabilities). */
 export interface CapabilityReporter {
   report(catalog: RuntimeCatalog): Promise<void>
+}
+
+/** The real reporter: node_report_capabilities with the node token (the database re-checks for secrets). */
+export class NodeCapabilityReporter implements CapabilityReporter {
+  private readonly push: (capabilities: Record<string, unknown>) => Promise<void>
+  constructor(push: (capabilities: Record<string, unknown>) => Promise<void>) {
+    this.push = push
+  }
+  async report(catalog: RuntimeCatalog): Promise<void> {
+    await this.push(catalog as unknown as Record<string, unknown>)
+  }
 }
 
 export class InMemoryCapabilityReporter implements CapabilityReporter {
