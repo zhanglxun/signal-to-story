@@ -1,6 +1,6 @@
 # 标准 Chat Agent 入口设计（`modules/chat`）
 
-> 2026-11-24 · 状态：**设计已确认（决定见第 5 节），待实施**；第 4.2 节涉及的 Pi / ACP 具体 API 待 R3.0 spike 与 R3-B 真机验证。涵盖「工作台 → 智能对话与速记」（`/chat` 与 `/h5/chat`）的产品定位、交互协议、Runtime & Model Catalog 机制，以及 Pi 精简 MVP 内核与部署边界探讨。
+> 2026-11-24 · 状态：**设计已确认（决定见第 5 节）；代码已实现（2026-11-25，T1～T5），待上线联调（T6）**。`/chat`、`/h5/chat` 已切到新页面，前端按 2.4「结束规则」以 `done` 为终止事件；前端另有只在客户端使用的错误码 `node_unreachable`、`node_mismatch`、`empty_stream`，不属于线上协议；第 4.2 节涉及的 Pi / ACP 具体 API 待 R3.0 spike 与 R3-B 真机验证。涵盖「工作台 → 智能对话与速记」（`/chat` 与 `/h5/chat`）的产品定位、交互协议、Runtime & Model Catalog 机制，以及 Pi 精简 MVP 内核与部署边界探讨。
 
 ## 1. 现状事实与目标定位
 

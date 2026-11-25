@@ -9,10 +9,11 @@
 | step5 线上数据库 | 已执行，README 9 项核对全部通过（Claude 只读核对） |
 | R2 | `sense-console/src/harness` → `workers/agent/loop`，ESLint 边界规则两侧生效 |
 | R3 回合内核 | `workers/agent/loop/chat`：`AgentSessionDriver`（已冻结）、事件与 parts、上下文与预算、`runChatTurn`；Gemini 交叉评审 9 项已修 |
-| Chat UI | `sense-console/src/modules/chat`，Phase 1 + 2，假传输可完整演示（`/chat-next`） |
+| Chat UI | `sense-console/src/modules/chat`，Phase 1 + 2，已接真实节点传输（T5），`/chat`、`/h5/chat` 已切到新页面 |
 | Pi 选型 | `@earendil-works/pi-*@1.5.2`，API 已复核（[pi-spike-result.md](pi-spike-result.md) 第 5 节） |
 | T1 DB3b | 已合并（`61e4572`）：迁移、17 个 PGlite 用例、`0.5.0-step6.sql`（未上线） |
 | T2 ACP 驱动 | 已合并（`162bccf`）：`@agentclientprotocol/sdk@2.6.0`，假 ACP Agent 29 个用例；真机未验证（本机有 `opencode` 2.4.1，无 `codex-acp`） |
+| T5 前端切换 | 已合并（`fdea61f`）：真实传输 + 健康检查、以 `done` 为终止、错误码映射、按目录选节点、`runtime_config` 恢复；删除旧 Chat 页与 Vite `spawn` 桥（`dev/` 已删除）；Playwright 端到端（假 Supabase + 假节点）：`npx playwright test -c e2e/chat.playwright.config.ts` |
 | T3b HTTP 入口 | 已合并（`9f915af`）：4 个端点、JWT 用 `getUser` 校验、用户身份 RPC、`node_claim_job`、SSE、CORS 白名单、限流；`chat-turn` 处理器与 3 个 MVP 工具；队列入口不认领 `chat_turn`；能力目录每 5 分钟上报。只用假驱动验证过 |
 | T4 配置页 | 已合并（`9258edb`）：模型页、CLI 页只读展示节点上报的目录，与 Chat 的 Model Selector 共用 `listRuntimeCatalog`；`/__sense_bridge/env` 已删。控制台单元测试已与本机 `.env.local` 隔离（`894e53a`） |
 | T3a Pi 驱动 | 已合并（`bc7bf72`）：`PiCloudDriver` + 运行时目录（`SENSE_API_RUNTIMES` / `SENSE_RUNTIME_<PROFILE>_*`）；未用真实 Key |
@@ -41,7 +42,7 @@ flowchart LR
 
 ### T0 · 补齐 step5 的部署（线上，需要人在场）
 
-- **内容**：[brief-codex-wave2.md](brief-codex-wave2.md) 阶段 A：回答三个事实问题（备份是否做成、agent worker 运行的提交、视频 worker 在哪）；从 `0.5.0` 构建并部署控制台与读者站（自检：主 JS 含 `/work-items`、`/chat-next`，不含 `content_projects`，自检失败即回滚）；用新代码重启两个 worker。
+- **内容**：[brief-codex-wave2.md](brief-codex-wave2.md) 阶段 A：回答三个事实问题（备份是否做成、agent worker 运行的提交、视频 worker 在哪）；从 `0.5.0` 构建并部署控制台与读者站（自检：主 JS 含 `/work-items`、`/h5/chat`，不含 `content_projects`，自检失败即回滚）；用新代码重启两个 worker。
 - **需要人**：部署凭据 / 方式；确认读者站域名。
 - **完成标准**：线上控制台可登录并打开「事项」页；读者站首页 200；`runner_nodes.last_seen_at` 2 分钟内。
 - **之后由人完成**：README「执行后验收」5 项（会真实发布文章，Agent 不代做），见 [../../supabase/release/README.md](../../supabase/release/README.md) 第 5 批。

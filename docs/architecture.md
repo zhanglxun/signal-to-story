@@ -103,7 +103,7 @@ signal-to-story/
 │       ├── components/ui/         只放 shadcn
 │       ├── components/shared/     跨域复用（category-select 等）
 │       └── lib/                   supabase client、safe-markdown、query-client
-│   （dev/ 只留开发期自检，CLI 调用逻辑改为引用 workers/agent/drivers；e2e/ scripts/ 保留；
+│   （dev/ 已于 R3 删除（Vite spawn 桥退役，2026-11-25）；e2e/ scripts/ 保留；
 │     e2e/support/intake-send.mjs ← adapters/intake/send.mjs，只剩 e2e 在用）
 │
 ├── sense-site/                    保留：L1 读者站，与 console 零共享代码
@@ -165,7 +165,7 @@ flowchart TB
    - 同步修改 CLAUDE.md、README 与 docker-compose 中的路径和边界说明；
    - 实际做法：根目录新增 `package.json`（运行时一侧），Docker 镜像按进程拆开（`sense-console/Dockerfile` 只剩 Web，`workers/*/Dockerfile` 以仓库根为构建上下文），数据库与 migration 未改动。
 3. ~~**R2 并入 `workers/agent`**~~（2026-11-24 完成，Gemini 交叉评审）：先做依赖盘点（`sense-console` 页面/服务是否用到 `src/contracts` 类型；如用到，类型改用数据库生成类型或接口返回字段，Mandate 界面提示改为接口返回「可执行动作」，仅 UX），再把 `sense-console/src/{harness,contracts}` 迁入 `workers/agent/loop`，消除 worker 对 console 的反向引用，并加 import 规则检查。
-4. **R3 桥接统一并让 Chat 能在生产使用**：在 `workers/agent/loop` 新建统一 Agent 循环，加 `chat-turn` handler 和 HTTP 入口（SSE 流式；长任务仍走队列），删掉 Vite 里的 `spawn`。
+4. **R3 桥接统一并让 Chat 能在生产使用**（代码已完成 2026-11-25：回合内核、Pi / ACP 驱动、HTTP 入口、前端切换；Vite `spawn` 已删除；待 T6 上线）：在 `workers/agent/loop` 新建统一 Agent 循环，加 `chat-turn` handler 和 HTTP 入口（SSE 流式；长任务仍走队列），删掉 Vite 里的 `spawn`。
 5. **R4 前端按模块重组**：和看板一起做，不单独大挪动。
 6. **R5 按模块确认表的归属**：已提前完成规划，见 [database.md](database.md)；实施按其中 DB0～DB7，与 R2～R4 交错推进。
 

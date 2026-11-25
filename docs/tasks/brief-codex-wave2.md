@@ -28,7 +28,7 @@
    - agent worker 现在由哪个目录、哪个提交启动（`git -C <目录> log -1 --format=%h` 的短 hash 即可，不写路径）。
    - 视频 worker 运行在哪里（本机进程 / 容器 / 未运行）、用哪个提交或镜像构建。
 2. **部署控制台**：从 `0.5.0` 当前提交构建 `sense-console`（`npm --prefix sense-console ci && npm --prefix sense-console run build`），按现有方式替换 `story.susense.cn`。
-   - 自检：`curl -s https://story.susense.cn/` 取主 JS，确认其中能找到 `/work-items` 与 `/chat-next`、找不到 `content_projects`；响应头 `Last-Modified` 为今天。
+   - 自检：`curl -s https://story.susense.cn/` 取主 JS，确认其中能找到 `/work-items` 与 `/h5/chat`、找不到 `content_projects`；响应头 `Last-Modified` 为今天。
 3. **部署读者站**：从同一提交构建 `sense-site`（`VITE_SITE_DEMO` 必须为空，变量见 `supabase/release/README.md` 第 5 批第 6 步），按现有方式替换线上读者站。报告里写明读者站的**线上域名**与自检结果（首页 200、无演示数据）。
 4. **重启 worker**：agent worker 用 `0.5.0` 当前提交重启（`npm run worker:agent`）；视频 worker 若在运行，用同一提交重建后重启。重启后用只读 SQL 确认 `runner_nodes.last_seen_at` 在 2 分钟内。
 5. **停止条件**：构建失败；部署后自检不通过（立即回滚到部署前的产物，并汇报）。

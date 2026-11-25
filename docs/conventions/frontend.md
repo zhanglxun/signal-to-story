@@ -68,7 +68,7 @@ React 19、TypeScript strict、Vite、React Router 7、Tailwind CSS 4、TanStack
 2. **Base UI `Select` 必传 `items`**：Model / Node 选择若使用 `Select`，遵循第 3 节要求传 `items`；多级模型搜索与分组优先基于已有的 `Combobox` / `Command` / `DropdownMenu` 组合。
 3. **Markdown 渲染必须走安全消毒**：Chat 流式正文、思考摘要和代码块严禁直接拼接未消毒 HTML，统一复用 `renderSafeMarkdown` + `.console-prose`（或受控安全渲染器）。
 4. **语义 Token 约束**：不给不同模型厂家（Qwen / DeepSeek / Codex 等）硬编码品牌色或 raw 颜色；状态统一使用 `primary` / `muted` / `destructive` / `border` 等语义变量。
-5. **桌面与 H5 共用一套实现**：`/chat` 与 `/h5/chat` 共用核心组件，窄屏下左侧历史会话栏自动收敛为 `Sheet` / `Drawer`，不单独维护第二套移动 Chat 页面代码。
+5. **桌面与 H5 共用一套实现**：`/chat`（AppShell 内）与 `/h5/chat`（独立全屏，同样在 `RequireAuth` 内）渲染同一个 `ChatPage`，用 `variant` 区分，不用 `?h5=1` 参数；窄屏下左侧历史会话栏自动收敛为 `Sheet` / `Drawer`，不单独维护第二套移动 Chat 页面代码。
 6. **流式读取用 `fetch`，不用 `EventSource`**：节点 HTTP 入口是 `POST` 且必须带 `Authorization: Bearer <Supabase JWT>`，原生 `EventSource` 只支持 GET、不能设请求头。统一封装一个 `fetch` + `ReadableStream` 的 SSE 解析 Hook（放在 `modules/chat`，忽略 `: ping` 注释行），各组件只消费解析后的 `ChatStreamEvent`。
 7. **断开 ≠ 停止**：组件卸载、切页、H5 切后台只断开读取流，**不要**顺手调 `cancel_agent_job`；只有用户点「停止」才调用（见 [../modules/chat.md](../modules/chat.md) 2.3）。重新进入会话时，对 `running` 的回合显示「生成中」占位并等待落库结果。
 
