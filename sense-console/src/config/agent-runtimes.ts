@@ -1,8 +1,8 @@
 /**
- * Display metadata for the cloud model providers and local Agent CLIs shown on the system
- * configuration pages. Data only: request building, CLI invocation and API keys live in
- * workers/agent/loop/providers.ts (R2, 2026-11-24). Once DB3b lands, the pages read what each
- * online node actually reports in runner_nodes.capabilities instead (docs/modules/chat.md 3.4).
+ * Static reference metadata for cloud model providers and the legacy exec CLI drivers. Data only:
+ * request building, CLI invocation and API keys live in workers/agent (R2, 2026-11-24). The system
+ * configuration pages show what each node actually reports in runner_nodes.capabilities
+ * (docs/modules/chat.md 3.4) and use this list only as reference text (valid provider keys).
  */
 import type {
   CloudModelProviderDefinition,

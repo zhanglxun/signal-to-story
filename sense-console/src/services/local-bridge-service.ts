@@ -36,14 +36,6 @@ export interface LocalBridgeStatusResponse {
   cliDrivers: BridgeCliDriverStatus[]
 }
 
-export interface SaveProviderEnvInput {
-  providerKey: CloudModelProviderKey
-  apiKey?: string
-  baseUrl: string
-  model: string
-  setAsDefault?: boolean
-}
-
 export interface BridgeChatRequest {
   driverMode: ExecutionDriverMode
   providerKey?: CloudModelProviderKey
@@ -170,25 +162,6 @@ export async function getLocalBridgeStatus(): Promise<LocalBridgeStatusResponse>
   }
 }
 
-export async function saveProviderEnvConfig(
-  input: SaveProviderEnvInput
-): Promise<{ ok: boolean; maskedKey?: string | null; error?: string }> {
-  const res = await fetch("/__sense_bridge/env", {
-    method: "POST",
-    headers: bridgePostHeaders(),
-    body: JSON.stringify(input),
-  })
-  const data = (await res.json().catch(() => null)) as {
-    ok?: boolean
-    maskedKey?: string | null
-    error?: string
-  } | null
-  if (!res.ok || !data?.ok) {
-    throw new Error(data?.error || `保存 .env.local 失败 (HTTP ${res.status})`)
-  }
-  return { ok: true, maskedKey: data.maskedKey }
-}
-
 export async function sendBridgeChat(
   input: BridgeChatRequest
 ): Promise<BridgeChatResponse> {
@@ -205,40 +178,4 @@ export async function sendBridgeChat(
     }
   }
   return data
-}
-
-/**
- * 生成可下载或复制的 .env.local 环境变量模板片段
- */
-export function formatEnvLocalSnippet(options: {
-  providerKey: CloudModelProviderKey
-  apiKey: string
-  baseUrl: string
-  model: string
-  setAsDefault?: boolean
-}): string {
-  const prefixMap: Record<CloudModelProviderKey, string> = {
-    qwen: "SENSE_LLM_QWEN",
-    kimi: "SENSE_LLM_KIMI",
-    deepseek: "SENSE_LLM_DEEPSEEK",
-    zhipu: "SENSE_LLM_ZHIPU",
-    minimax: "SENSE_LLM_MINIMAX",
-    "openai-compatible": "SENSE_LLM_CUSTOM",
-  }
-  const prefix = prefixMap[options.providerKey]
-  const lines = [
-    `# 星火工厂 (${options.providerKey}) 模型配置`,
-    `${prefix}_API_KEY=${JSON.stringify(options.apiKey || "sk-your-key-here")}`,
-    `${prefix}_BASE_URL=${JSON.stringify(options.baseUrl)}`,
-    `${prefix}_MODEL=${JSON.stringify(options.model)}`,
-  ]
-  if (options.setAsDefault) {
-    lines.push(
-      `SENSE_DEFAULT_LLM_PROVIDER=${JSON.stringify(options.providerKey)}`,
-      `CONTENT_AI_API_KEY=${JSON.stringify(options.apiKey || "sk-your-key-here")}`,
-      `CONTENT_AI_BASE_URL=${JSON.stringify(options.baseUrl)}`,
-      `CONTENT_AI_MODEL=${JSON.stringify(options.model)}`
-    )
-  }
-  return lines.join("\n")
 }
