@@ -1,280 +1,75 @@
-import { useState } from "react"
-import { useQuery, useQueryClient } from "@tanstack/react-query"
-import {
-  CheckCircle2Icon,
-  CopyIcon,
-  MessageSquareTextIcon,
-  PlayIcon,
-  RefreshCwIcon,
-  TerminalSquareIcon,
-} from "lucide-react"
+import { MessageSquareTextIcon, RefreshCwIcon } from "lucide-react"
 import { Link } from "react-router"
-import { toast } from "sonner"
 
 import { PageHeader } from "@/components/page-header"
-import { Badge } from "@/components/ui/badge"
-import { Button } from "@/components/ui/button"
-import {
-  Card,
-  CardContent,
-  CardDescription,
-  CardHeader,
-  CardTitle,
-} from "@/components/ui/card"
-import { Input } from "@/components/ui/input"
 import { RunnerNodesCard } from "@/components/runner-nodes/runner-nodes-card"
-import { getContentWorkspace } from "@/services/content-workspace-service"
-import type { LocalAgentCliKey } from "@/contracts/agent-harness"
-import { LOCAL_AGENT_CLI_DRIVERS } from "@/config/agent-runtimes"
-import {
-  CLI_INSTALL_GUIDES,
-  getLocalBridgeStatus,
-  sendBridgeChat,
-} from "@/services/local-bridge-service"
+import { RuntimeNodeGroups } from "@/components/runtime-catalog/runtime-node-groups"
+import { useRuntimeCatalog } from "@/components/runtime-catalog/use-runtime-catalog"
+import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
+import { Button } from "@/components/ui/button"
+import { filterCatalogByKind } from "@/modules/chat/services/runtime-catalog-service"
 
+/**
+ * Local Agent CLIs (ACP runtimes, id `acp:<cliKey>`) reported by execution nodes
+ * (runner_nodes.capabilities, docs/modules/chat.md 3.4). The browser never spawns or probes CLIs.
+ */
 export function CliAgentsPage() {
-  const queryClient = useQueryClient()
-  const workspace = useQuery({ queryKey: ["content-workspace"], queryFn: getContentWorkspace })
-  const organizationId = workspace.data?.organization?.id
-  const bridgeQuery = useQuery({
-    queryKey: ["local-bridge-status"],
-    queryFn: getLocalBridgeStatus,
-  })
-
-  const [prompts, setPrompts] = useState<Record<string, string>>({})
-  const [testResults, setTestResults] = useState<
-    Record<
-      string,
-      { loading: boolean; ok?: boolean; text?: string; durationMs?: number }
-    >
-  >({})
-
-  async function handleRefreshScan() {
-    await queryClient.invalidateQueries({ queryKey: ["local-bridge-status"] })
-    toast.success("已重新扫描本机 Agent CLI 安装状态")
-  }
-
-  function copyCommand(cmd: string) {
-    void navigator.clipboard?.writeText(cmd)
-    toast.success(`已复制命令: ${cmd}`)
-  }
-
-  async function handleTestCli(cliKey: LocalAgentCliKey) {
-    const promptText =
-      (prompts[cliKey] ?? "").trim() ||
-      "请用一句话确认星火工厂本地 Agent CLI 调用正常。"
-
-    setTestResults((prev) => ({
-      ...prev,
-      [cliKey]: { loading: true },
-    }))
-
-    try {
-      const res = await sendBridgeChat({
-        driverMode: "local_cli",
-        cliKey,
-        prompt: promptText,
-      })
-      if (res.ok) {
-        setTestResults((prev) => ({
-          ...prev,
-          [cliKey]: {
-            loading: false,
-            ok: true,
-            text: res.reply,
-            durationMs: res.durationMs,
-          },
-        }))
-        toast.success(`${cliKey} 调用测试完成`)
-      } else {
-        setTestResults((prev) => ({
-          ...prev,
-          [cliKey]: {
-            loading: false,
-            ok: false,
-            text: res.error || "调用失败",
-          },
-        }))
-        toast.error(res.error || "CLI 调用失败")
-      }
-    } catch (err) {
-      setTestResults((prev) => ({
-        ...prev,
-        [cliKey]: {
-          loading: false,
-          ok: false,
-          text: err instanceof Error ? err.message : "调用异常",
-        },
-      }))
-    }
-  }
-
-  const cliStatusMap = new Map(
-    (bridgeQuery.data?.cliDrivers ?? []).map((item) => [item.key, item])
-  )
+  const { workspace, organizationId, catalog } = useRuntimeCatalog()
+  const nodes = filterCatalogByKind(catalog.data ?? [], "acp")
 
   return (
     <div className="space-y-6">
       <PageHeader
         eyebrow="Local Agent CLI"
         title="本地 CLI 接入"
-        description="检测、安装并验证本机已订阅的 Codex CLI、Antigravity (agy) CLI、Pi 与 OpenCode。无需额外部署即可将本地 Agent 能力接入星火工厂。"
+        description="这里展示各执行节点上报的本机 Agent CLI（ACP）。CLI 的安装、登录与启用都在运行 workers/agent 的机器上完成，控制台只读展示。"
         actions={
-          <div className="flex flex-wrap gap-2">
-            <Button
-              variant="outline"
-              disabled={bridgeQuery.isFetching}
-              onClick={() => void handleRefreshScan()}
-            >
+          <>
+            <Button variant="outline" disabled={catalog.isFetching} onClick={() => void catalog.refetch()}>
               <RefreshCwIcon />
-              重新扫描本机 CLI
+              刷新
             </Button>
             <Button nativeButton={false} render={<Link to="/chat" />}>
               <MessageSquareTextIcon />
               打开智能对话台测试
             </Button>
-          </div>
+          </>
         }
       />
 
-      {organizationId && <RunnerNodesCard organizationId={organizationId} canManage={Boolean(workspace.data?.canManageOrganization)} />}
+      {organizationId && (
+        <RunnerNodesCard organizationId={organizationId} canManage={Boolean(workspace.data?.canManageOrganization)} />
+      )}
 
-      <div className="grid gap-5 lg:grid-cols-2">
-        {LOCAL_AGENT_CLI_DRIVERS.map((driver) => {
-          const live = cliStatusMap.get(driver.key)
-          const guide = CLI_INSTALL_GUIDES[driver.key]
-          const installed = Boolean(live?.installed)
-          const testResult = testResults[driver.key]
-          const promptValue =
-            prompts[driver.key] ??
-            "请用一句话确认星火工厂本地 Agent CLI 调用正常。"
+      <Alert>
+        <AlertTitle>如何启用本机 CLI</AlertTitle>
+        <AlertDescription>
+          在节点所在机器上安装并登录对应 CLI（及其 ACP 适配器），设置{" "}
+          <code className="font-mono">SENSE_ACP_CLIS</code>（逗号分隔，如 <code className="font-mono">opencode,codex</code>），
+          需要时用 <code className="font-mono">SENSE_ACP_&lt;KEY&gt;_COMMAND</code> / <code className="font-mono">_ARGS</code>{" "}
+          覆盖启动命令，然后重启节点。本机 CLI 节点只配合本地启动的控制台使用。
+        </AlertDescription>
+      </Alert>
 
-          return (
-            <Card key={driver.key}>
-              <CardHeader className="border-b">
-                <div className="flex flex-wrap items-center justify-between gap-2">
-                  <div className="flex items-center gap-2">
-                    <TerminalSquareIcon className="size-5 text-primary" />
-                    <CardTitle>{driver.name}</CardTitle>
-                  </div>
-                  <Badge variant={installed ? "default" : "outline"}>
-                    {installed
-                      ? `已安装 (${live?.version ?? driver.binary})`
-                      : "未检测到安装"}
-                  </Badge>
-                </div>
-                <CardDescription>
-                  命令标识: <code className="font-mono">{driver.binary}</code> ·{" "}
-                  {driver.notes}
-                </CardDescription>
-              </CardHeader>
-
-              <CardContent className="space-y-4 pt-5 text-sm">
-                {installed && live?.binaryPath && (
-                  <div className="rounded-lg border bg-muted/40 p-3 text-xs">
-                    <div className="font-medium text-foreground">
-                      已识别本机可执行路径：
-                    </div>
-                    <code className="mt-1 block break-all text-muted-foreground">
-                      {live.binaryPath}
-                    </code>
-                  </div>
-                )}
-
-                <div className="space-y-2 rounded-lg border p-3.5 text-xs">
-                  <div className="font-semibold text-foreground">
-                    {installed
-                      ? "订阅登录与命令参考："
-                      : "未检测到该 CLI，按以下 3 步快速安装与授权："}
-                  </div>
-                  <p className="text-muted-foreground">{guide.docsHint}</p>
-
-                  <div className="space-y-1.5 pt-1">
-                    <div className="flex items-center justify-between gap-2 rounded bg-muted px-2.5 py-1.5 font-mono">
-                      <span className="truncate">1. {guide.installCommand}</span>
-                      <button
-                        type="button"
-                        onClick={() => copyCommand(guide.installCommand)}
-                        className="shrink-0 text-primary hover:underline"
-                      >
-                        <CopyIcon className="size-3.5" />
-                      </button>
-                    </div>
-                    <div className="flex items-center justify-between gap-2 rounded bg-muted px-2.5 py-1.5 font-mono">
-                      <span className="truncate">2. {guide.authCommand}</span>
-                      <button
-                        type="button"
-                        onClick={() => copyCommand(guide.authCommand)}
-                        className="shrink-0 text-primary hover:underline"
-                      >
-                        <CopyIcon className="size-3.5" />
-                      </button>
-                    </div>
-                    <div className="flex items-center justify-between gap-2 rounded bg-muted px-2.5 py-1.5 font-mono">
-                      <span className="truncate">3. {guide.verifyCommand}</span>
-                      <button
-                        type="button"
-                        onClick={() => copyCommand(guide.verifyCommand)}
-                        className="shrink-0 text-primary hover:underline"
-                      >
-                        <CopyIcon className="size-3.5" />
-                      </button>
-                    </div>
-                  </div>
-                </div>
-
-                <div className="space-y-2 pt-1">
-                  <label className="block space-y-1.5">
-                    <span className="font-medium">快速调用测试指令</span>
-                    <div className="flex gap-2">
-                      <Input
-                        value={promptValue}
-                        onChange={(e) =>
-                          setPrompts((prev) => ({
-                            ...prev,
-                            [driver.key]: e.target.value,
-                          }))
-                        }
-                        placeholder="输入测试提示词…"
-                      />
-                      <Button
-                        disabled={Boolean(testResult?.loading)}
-                        onClick={() => void handleTestCli(driver.key)}
-                      >
-                        <PlayIcon />
-                        {testResult?.loading ? "调用中…" : "测试调用"}
-                      </Button>
-                    </div>
-                  </label>
-                </div>
-
-                {testResult && !testResult.loading && (
-                  <div
-                    className={`rounded-lg border p-3 text-xs ${
-                      testResult.ok
-                        ? "border-primary/40 bg-primary/5"
-                        : "border-destructive/40 bg-destructive/5 text-destructive"
-                    }`}
-                  >
-                    <div className="flex items-center justify-between font-medium">
-                      <span className="flex items-center gap-1.5">
-                        <CheckCircle2Icon className="size-4" />
-                        {testResult.ok ? "CLI 调用成功" : "CLI 调用未通过"}
-                      </span>
-                      {testResult.durationMs !== undefined && (
-                        <span>耗时 {testResult.durationMs} ms</span>
-                      )}
-                    </div>
-                    <pre className="mt-1.5 max-h-40 overflow-auto whitespace-pre-wrap font-mono text-xs">
-                      {testResult.text}
-                    </pre>
-                  </div>
-                )}
-              </CardContent>
-            </Card>
-          )
-        })}
-      </div>
+      <RuntimeNodeGroups
+        kind="acp"
+        nodes={nodes}
+        isLoading={catalog.isPending}
+        error={catalog.error}
+        emptyTitle="还没有节点上报本机 CLI"
+        emptyGuidance={
+          <ol className="list-decimal space-y-1 pl-5">
+            <li>在上方「执行节点」新建节点，把令牌写进 worker 机器的环境文件。</li>
+            <li>
+              在该机器上设置 <code className="font-mono">SENSE_ACP_CLIS</code>，并确认 CLI 已安装、已登录。
+            </li>
+            <li>
+              启动节点（<code className="font-mono">npm run worker:agent</code>），刷新本页。说明见{" "}
+              <code className="font-mono">workers/agent/README.md</code>「运行时目录」与 <code className="font-mono">docs/ACP-info.md</code>。
+            </li>
+          </ol>
+        }
+      />
     </div>
   )
 }

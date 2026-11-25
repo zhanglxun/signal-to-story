@@ -197,8 +197,13 @@ export interface RuntimeEntry {
 export interface RuntimeNodeCatalog {
   nodeId: string
   nodeName: string
+  /** last_seen_at within 2 minutes and not revoked (docs/modules/chat.md 3.4). */
   online: boolean
+  /** Finer state for the configuration pages; absent on hand-built catalogs. */
+  state?: "online" | "offline" | "never" | "revoked"
   lastSeenAt: string | null
+  revokedAt?: string | null
+  capabilitiesUpdatedAt?: string | null
   protocolVersion: number
   supportsHttpSse: boolean
   httpEndpointHint: string

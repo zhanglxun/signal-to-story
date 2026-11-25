@@ -10,7 +10,6 @@ import { ModelsIntegrationPage } from "@/pages/models-integration-page"
 import {
   buildFallbackBridgeStatus,
   CLI_INSTALL_GUIDES,
-  formatEnvLocalSnippet,
 } from "@/services/local-bridge-service"
 
 function renderWithProviders(ui: React.ReactElement, initialRoute = "/") {
@@ -38,20 +37,6 @@ describe("P3: Models Integration, Local CLI Agents & Chat Assistant Pages", () =
     expect(resolveNavigation("/h5/chat").activeModule.id).toBe("workspace")
   })
 
-  it("formats .env.local snippet with provider and CONTENT_AI default keys", () => {
-    const snippet = formatEnvLocalSnippet({
-      providerKey: "qwen",
-      apiKey: "sk-test-123456",
-      baseUrl: "https://dashscope.aliyuncs.com/compatible-mode/v1",
-      model: "qwen3.7-max",
-      setAsDefault: true,
-    })
-
-    expect(snippet).toContain('SENSE_LLM_QWEN_API_KEY="sk-test-123456"')
-    expect(snippet).toContain('SENSE_DEFAULT_LLM_PROVIDER="qwen"')
-    expect(snippet).toContain('CONTENT_AI_MODEL="qwen3.7-max"')
-  })
-
   it("provides installation & auth commands for codex, agy, pi, and opencode CLIs", () => {
     expect(CLI_INSTALL_GUIDES["codex-cli"].installCommand).toContain(
       "@openai/codex"
@@ -69,27 +54,20 @@ describe("P3: Models Integration, Local CLI Agents & Chat Assistant Pages", () =
     expect(fallback.cliDrivers.length).toBe(4)
   })
 
-  it("renders ModelsIntegrationPage with domestic model cards and .env.local save controls", () => {
-    renderWithProviders(<ModelsIntegrationPage />, "/system/models")
+  it("renders the configuration pages from the node capability catalog", async () => {
+    const { unmount } = renderWithProviders(<ModelsIntegrationPage />, "/system/models")
     expect(
       screen.getByRole("heading", { name: "国内大模型接入" })
     ).toBeInTheDocument()
-    expect(
-      screen.getByText("通义千问 (Qwen / DashScope)")
-    ).toBeInTheDocument()
-    expect(screen.getByText("Kimi (Moonshot AI)")).toBeInTheDocument()
-    expect(screen.getByText("DeepSeek (深度求索)")).toBeInTheDocument()
-  })
+    // Supabase is not configured in tests, so the catalog falls back to the mock nodes.
+    expect(await screen.findByText("通义千问 Qwen 3.8 Flash")).toBeInTheDocument()
+    unmount()
 
-  it("renders CliAgentsPage with CLI installation guides and test controls", () => {
     renderWithProviders(<CliAgentsPage />, "/system/cli-agents")
     expect(
       screen.getByRole("heading", { name: "本地 CLI 接入" })
     ).toBeInTheDocument()
-    expect(screen.getByText("Codex CLI")).toBeInTheDocument()
-    expect(screen.getByText("Antigravity CLI (agy)")).toBeInTheDocument()
-    expect(screen.getByText("Pi Coding Agent CLI")).toBeInTheDocument()
-    expect(screen.getByText("OpenCode CLI")).toBeInTheDocument()
+    expect(await screen.findByText("OpenCode CLI (本机 ACP)")).toBeInTheDocument()
   })
 
   it("renders ChatAssistantPage in both Console mode and standalone H5 mode", () => {

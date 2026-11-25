@@ -16,7 +16,6 @@ import {
   PROVIDER_DEFAULTS,
   bridgePathname,
   buildChildEnv,
-  buildEnvUpdates,
   hasControlChars,
   resolveChatBaseUrl,
   validateBridgeRequest,
@@ -46,32 +45,6 @@ function parseEnvFile(filePath: string): Record<string, string> {
     result[key] = val
   }
   return result
-}
-
-function writeEnvUpdates(filePath: string, updates: Record<string, string>) {
-  const existingLines = fs.existsSync(filePath)
-    ? fs.readFileSync(filePath, "utf-8").split(/\r?\n/)
-    : []
-  const updatedKeys = new Set<string>()
-  const nextLines = existingLines.map((line) => {
-    const trimmed = line.trim()
-    if (!trimmed || trimmed.startsWith("#")) return line
-    const eqIdx = trimmed.indexOf("=")
-    if (eqIdx <= 0) return line
-    const key = trimmed.slice(0, eqIdx).trim()
-    if (key in updates) {
-      updatedKeys.add(key)
-      return `${key}=${JSON.stringify(updates[key])}`
-    }
-    return line
-  })
-  for (const [key, val] of Object.entries(updates)) {
-    if (!updatedKeys.has(key)) nextLines.push(`${key}=${JSON.stringify(val)}`)
-  }
-  const finalContent =
-    nextLines.filter((l, i, arr) => i < arr.length - 1 || l !== "").join("\n") +
-    "\n"
-  fs.writeFileSync(filePath, finalContent, { encoding: "utf-8", mode: 0o600 })
 }
 
 function maskSecret(secret: string | undefined): string | null {
@@ -280,19 +253,6 @@ export function senseLocalBridgePlugin(): Plugin {
             })
           }
 
-          if (method === "POST" && pathname === "/__sense_bridge/env") {
-            const body = await readJsonBody(req)
-            const built = buildEnvUpdates(body, parseEnvFile(envLocalPath))
-            if (!built.ok) return sendJson(400, { ok: false, error: built.error })
-            writeEnvUpdates(envLocalPath, built.value.updates)
-            return sendJson(200, {
-              ok: true,
-              providerKey: String(body.providerKey),
-              maskedKey: maskSecret(built.value.apiKey),
-              savedTo: ".env.local",
-            })
-          }
-
           if (method === "POST" && pathname === "/__sense_bridge/chat") {
             const body = await readJsonBody(req)
             const driverMode = String(body.driverMode ?? "cloud_api")
@@ -381,7 +341,7 @@ export function senseLocalBridgePlugin(): Plugin {
             if (!apiKey || !apiKey.trim()) {
               return sendJson(400, {
                 ok: false,
-                error: `[${providerKey}] 尚未配置 API Key。请前往「系统管理 → 大模型接入」填写 Key 并保存到 .env.local。`,
+                error: `[${providerKey}] 尚未配置 API Key。请在 sense-console/.env.local 中手动配置（仅本地开发旧对话页使用；正式模型在 workers/agent 节点配置）。`,
               })
             }
             const baseCheck = resolveChatBaseUrl(
