@@ -3,7 +3,7 @@
  * to the repo head (docs/database.md §8.1). The script is generated from the migration files, so the SQL
  * that the tests rehearse is exactly the SQL that runs live.
  *
- *   npx tsx testing/db/release.ts            → supabase/release/0.5.0-step{1,2,3,4,5}.sql
+ *   npx tsx testing/db/release.ts            → supabase/release/0.5.0-step{1,2,3,4,5,6}.sql
  *
  * Shape: preflight assertions → [retire legacy live-only objects] → pending migrations in order →
  * migration history rows → [V1 backfill (idempotent)] → commit. Any failure rolls everything back.
@@ -107,6 +107,7 @@ export const RELEASES = {
   // (last backfill + reconciliation + drop of every retired table). After it the public schema is 21 tables, 0 views.
   step5: {
     after: "20261125100000",
+    upTo: "20261126100300",
     label: "0.5.0 step 5 (final: DB4 + DB5 + DB3 + retire V1)",
     file: "0.5.0-step5.sql",
     retireLegacySite: false,
@@ -129,6 +130,22 @@ export const RELEASES = {
       `  -- Reader-site tables: only the single site_settings row may exist (no published entries are lost).`,
       `  select (select count(*) from public.site_entries) + (select count(*) from public.site_entry_releases) + (select count(*) from public.site_resources) + (select count(*) from public.site_bookmarks) into n;`,
       `  if n > 0 then raise exception 'preflight: reader-site tables hold % rows; republish through publish_document after the release instead', n; end if;`,
+    ],
+  },
+  // DB3b: chat turn correctness, structured messages, runtime_config, node runtime catalog, node_claim_job.
+  // Additive except that send_chat_message / node_append_chat_message change signature (no callers live yet).
+  step6: {
+    after: "20261126100300",
+    upTo: "20261127100000",
+    label: "0.5.0 step 6 (DB3b: chat runtime catalog)",
+    file: "0.5.0-step6.sql",
+    retireLegacySite: false,
+    backfillV1: false,
+    appliedWhen: "to_regprocedure('public.node_claim_job(text,uuid,integer)') is not null",
+    preflight: [
+      `  -- No chat turn may be in flight: chat_turn jobs change shape (max_attempts, limits) and node_append_chat_message is replaced.`,
+      `  select count(*) into n from public.agent_jobs where kind = 'chat_turn' and status in ('queued','running');`,
+      `  if n > 0 then raise exception 'preflight: % chat_turn job(s) are queued or running; wait for them to finish or cancel them', n; end if;`,
     ],
   },
 } satisfies Record<string, ReleaseSpec>

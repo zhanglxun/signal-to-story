@@ -3,7 +3,7 @@
 这里放的是**从迁移文件生成**的上线脚本，不要手改。改了迁移就重新生成：
 
 ```bash
-npx tsx testing/db/release.ts          # 生成 supabase/release/0.5.0-step{1,2,3,4,5}.sql
+npx tsx testing/db/release.ts          # 生成 supabase/release/0.5.0-step{1,2,3,4,5,6}.sql
 npx vitest run testing/db/release*.test.ts   # 在模拟线上状态的 PGlite 上演练
 ```
 
@@ -18,6 +18,7 @@ npx vitest run testing/db/release*.test.ts   # 在模拟线上状态的 PGlite �
 | 第 3 批 | `0.5.0-step3.sql` | DB2c-2（`20261124100000`） | 已在线上执行（2026-11-21 核对通过：`max=20261124100000`、`runner_nodes=0`、`node_*=12`、`agent_jobs_node_id_fkey` 存在） |
 | 第 4 批 | `0.5.0-step4.sql` | DB2c-3（`20261125100000`：AI 直接写草稿、退役 `content_ai_proposals`） | 已在线上执行（2026-11-23 核对通过：`max=20261125100000`、`content_ai_proposals` 已删、`node_*=12`；真实出稿一次跑通） |
 | 第 5 批（最终） | `0.5.0-step5.sql` | DB4 + DB5 + DB3 + V1 退役（`20261126100000`～`20261126100300`） | 已生成并通过 PGlite 演练，待 Codex 执行（给 Codex 的提示词：[0.5.0-step5-codex-prompt.md](0.5.0-step5-codex-prompt.md)） |
+| 第 6 批 | `0.5.0-step6.sql` | DB3b（`20261127100000`：Chat 回合正确性、结构化消息、运行时配置、节点能力目录、`node_claim_job`） | 已生成，待决定上线时间（必须在第 5 批之后） |
 
 ---
 
@@ -374,3 +375,87 @@ npx vitest run testing/db/release*.test.ts   # 在模拟线上状态的 PGlite �
 5. 知识库页能看到仓库 `knowledge-base/` 的 3 条条目（只读）；菜单里不再有「发布运营」和「决定记忆」。
 
 **出问题怎么回退**：脚本失败会自动回滚，不需要处理。脚本成功后想撤销，只能用第 2 步的备份恢复，并重新部署 V1 控制台。
+
+## 0.5.0 第 6 批（DB3b：Chat 运行时与节点能力目录）
+
+**做什么**：在一个事务里执行 1 个迁移 `20261127100000_chat_runtime_catalog`（任务书 [docs/tasks/db3b-chat-runtime-catalog.md](../../docs/tasks/db3b-chat-runtime-catalog.md) 需求 0～6）。不删表、不删数据，已有会话和消息原样保留（新列取默认值）。
+
+1. 前置检查：迁移历史最后一条必须是 `20261126100300`（第 5 批已执行）；`node_claim_job` 还不存在；**没有 `queued` / `running` 的 `chat_turn` 任务**（回合任务的形状和 `node_append_chat_message` 签名都变了）。任一不满足就中止。
+2. `chat_messages` 新增 `parts`（≤ 256KB 数组）、`status`（`completed / cancelled / error`）、`reply_to_message_id`（只给 assistant 行，指向本会话的 user 消息）；每个任务最多一条助手消息（部分唯一索引）。
+3. `chat_sessions` 新增 `runtime_config`（≤ 8KB 对象），浏览器可插入 / 修改这一列；`last_seq`、`exec_session` 仍只能由服务端写。
+4. `agent_jobs`：`chat_turn` 的 `max_rounds` 上限放宽到 20（其他任务仍为 5）；`payload.target_node_id` 必须是 UUID；同一会话同时只允许一个 `queued / running` 的回合（部分唯一索引兜底）；所有 `chat_turn` 强制 `max_attempts = 1`、`budget_cents` 夹紧在 1～500。
+5. RPC：`send_chat_message` 改为 6 参（新增 `p_parts`、`p_runtime`、`p_target_node_id`，先删旧 3 参签名）；新增 `regenerate_chat_turn`；`node_append_chat_message` 改为 9 参（新增 `p_parts`、`p_status`、`p_finish`、`p_title`，幂等）；新增 `node_chat_context`、`node_report_capabilities`、`node_claim_job`；`node_claim` 增加 `target_node_id` 过滤与「10 分钟无人认领的回合标为失败（`chat_turn_unclaimed`）」清扫。`node_*` 从 12 个变为 15 个。
+6. `runner_nodes` 新增 `capabilities`（≤ 32KB）与 `capabilities_updated_at`，浏览器只读这两列，`token_hash` 仍不可读。
+7. 若存在 `supabase_realtime` 发布，把 `public.chat_messages` 加入（推送仍受 `chat_messages_read` RLS 约束）。
+8. 写入迁移历史。
+
+**不做什么**：不改其他表；不需要重新部署 Edge Functions；脚本里没有密钥。
+
+### 给 Codex 的执行步骤
+
+> 执行人：Codex。需要项目的数据库连接，或 Supabase Dashboard 的 SQL Editor 权限。**不要在输出或日志里打印任何密钥、连接串、项目 ID 或节点令牌。** 用户明确说「开始执行 step6」之前，只做第 0 步并汇报。
+
+0. **代码先就位**：使用包含 `0.5.0-step6.sql` 的提交，先在本地跑一遍门禁：
+
+   ```bash
+   npm install && npm run typecheck && npm run lint && npm test
+   npx vitest run testing/db/release-step6.test.ts
+   ```
+
+1. **停掉 agent worker**（`npm run worker:agent`），并确认控制台里没有正在生成的 Chat 回合。视频 worker 不受影响，可以不停。
+
+2. **备份**：这一批不删数据，建议仍做一次结构备份：有 CLI 时 `supabase db dump -f backup-0.5.0-step6-schema.sql`（放在仓库外，不要提交）。
+
+3. **只读预检**：
+
+   ```sql
+   select
+    (select max(version) from supabase_migrations.schema_migrations) as head,                          -- 20261126100300
+    (select count(*) from public.agent_jobs where kind = 'chat_turn' and status in ('queued','running')) as chat_turns_in_flight,  -- 0
+    to_regprocedure('public.node_claim_job(text,uuid,integer)') as claim_job,                          -- null
+    (select count(*) from pg_proc p join pg_namespace n on n.oid = p.pronamespace
+      where n.nspname = 'public' and p.proname like 'node\_%') as node_rpcs,                           -- 12
+    exists (select 1 from pg_publication where pubname = 'supabase_realtime') as realtime_pub;         -- true（为 false 也可执行，只是不加发布）
+   ```
+
+   任一结果不符就**停止**，把结果原样发回来。
+
+4. **执行脚本**：二选一。
+   - SQL Editor：打开 `supabase/release/0.5.0-step6.sql`，**整份粘贴、一次运行**。
+   - psql：`psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -f supabase/release/0.5.0-step6.sql`。
+
+   出现任何报错都说明已经整体回滚，**不要分段重跑**，把报错原文发回来。
+
+5. **核对结果**：
+
+   ```sql
+   select max(version) from supabase_migrations.schema_migrations;                                   -- 20261127100000
+   select count(*) from pg_proc p join pg_namespace n on n.oid = p.pronamespace
+    where n.nspname = 'public' and p.proname like 'node\_%';                                        -- 15
+   select p.proname, p.pronargs from pg_proc p join pg_namespace n on n.oid = p.pronamespace
+    where n.nspname = 'public' and p.proname in ('send_chat_message','regenerate_chat_turn','node_append_chat_message')
+    order by 1;                                                                                     -- node_append_chat_message 9 / regenerate_chat_turn 4 / send_chat_message 6（各一行，无重载）
+   select column_name from information_schema.columns
+    where table_schema = 'public' and table_name = 'chat_messages' and column_name in ('parts','status','reply_to_message_id')
+    order by 1;                                                                                     -- parts / reply_to_message_id / status
+   select has_column_privilege('authenticated','public.runner_nodes','capabilities','select') as caps,      -- true
+          has_column_privilege('authenticated','public.runner_nodes','token_hash','select') as token_hash,  -- false
+          has_column_privilege('authenticated','public.chat_sessions','runtime_config','update') as runtime_config,  -- true
+          has_column_privilege('authenticated','public.chat_sessions','last_seq','update') as last_seq;     -- false
+   select count(*) from pg_publication_tables
+    where pubname = 'supabase_realtime' and schemaname = 'public' and tablename = 'chat_messages';  -- 1（预检 realtime_pub 为 false 时为 0）
+   ```
+
+   把这些结果原样发回来。
+
+6. **重启 worker**：用包含 DB3b 调用的新 worker 代码 `npm run worker:agent`。旧 worker 若调用 3 参 `send_chat_message` 或 5 参 `node_append_chat_message` 会因签名不存在而失败（Chat 在此之前未上线，没有线上调用方）。
+
+7. **不需要做的**：不执行 `supabase db push`，不重部署 Edge Functions，不修改函数环境变量。
+
+### 执行后验收
+
+1. 控制台 Chat 发一条消息 → 节点认领并流式回复 → 刷新页面后回复、思考 / 工具卡片仍在（`parts`）。
+2. 生成中再发一条 → 被拒绝（「上一轮还在生成」）；点「重新生成」→ 没有新增 user 消息，出现「版本 2」。
+3. 模型 / CLI 选择器能列出在线节点上报的运行时（`runner_nodes.capabilities`）。
+
+**出问题怎么回退**：脚本失败会自动回滚。脚本成功后若要撤销，按第 2 步的结构备份恢复相关函数与列；本批不删数据，已有会话不受影响。
