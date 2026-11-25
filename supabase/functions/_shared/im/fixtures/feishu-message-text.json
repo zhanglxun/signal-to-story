@@ -1,0 +1,12 @@
+{
+  "schema": "2.0",
+  "header": { "event_id": "5e3702a84e847582be8db7fb73283c02", "event_type": "im.message.receive_v1", "create_time": "1608725989000", "token": "vt_test_token", "app_id": "cli_a1b2c3", "tenant_key": "tenant_x" },
+  "event": {
+    "sender": { "sender_id": { "union_id": "on_1", "user_id": "u1", "open_id": "ou_sender" }, "sender_type": "user", "tenant_key": "tenant_x" },
+    "message": {
+      "message_id": "om_dc13264520392913993dd051dba21dcf", "root_id": "", "chat_id": "oc_5ad11d72b830411d72b836c20", "chat_type": "group",
+      "message_type": "text", "content": "{\"text\":\"@_user_1 出稿 写成小红书和公众号 https://example.com/a。\"}",
+      "mentions": [{ "key": "@_user_1", "id": { "open_id": "ou_bot" }, "name": "星火机器人", "tenant_key": "tenant_x" }]
+    }
+  }
+}

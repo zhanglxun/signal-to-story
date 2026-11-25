@@ -1,0 +1,5 @@
+{
+  "msgid": "MSGID_0001", "aibotid": "AIBOTID", "chatid": "CHATID_1", "chattype": "group",
+  "from": { "userid": "zhangsan" }, "response_url": "https://example.invalid/resp", "msgtype": "text",
+  "text": { "content": "@星火机器人 收藏一下 https://example.com/b 企业落地的角度" }
+}

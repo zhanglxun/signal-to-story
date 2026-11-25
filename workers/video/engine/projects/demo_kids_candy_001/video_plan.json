@@ -1,0 +1,95 @@
+{
+  "project_id": "demo_kids_candy_001",
+  "title": "小宇航员的星际糖果星",
+  "meta": {
+    "aspect_ratio": "9:16",
+    "target_resolution": "1080x1920",
+    "style": "3D Pixar animation style, vibrant pastel colors, soft cinematic lighting, dreamlike, 8k",
+    "bgm_track": "assets/bgm/cheerful_fantasy.mp3",
+    "voice": "zh-CN-XiaoxiaoNeural",
+    "voice_rate": "+3%",
+    "voice_pitch": "+0Hz",
+    "total_duration_sec": 27.56,
+    "subtitles_file": "subtitles/subtitles.srt"
+  },
+  "character_refs": [
+    {
+      "id": "char_paopao",
+      "name": "小宇航员泡泡",
+      "description": "A cute 6-year-old chibi astronaut boy, round glass helmet, big sparkling brown eyes, wearing a puffy white and teal spacesuit with glowing buttons",
+      "ref_images": []
+    }
+  ],
+  "shots": [
+    {
+      "id": "shot_001",
+      "type": "pan_zoom",
+      "voiceover": "在银河系的最深处，藏着一颗彩虹色的棉花糖星球！",
+      "visual_prompt": "A cute round spaceship flying towards a giant swirling rainbow cotton candy planet in deep space, glowing stars, 3D Pixar style, 9:16 vertical",
+      "camera": "zoom_in",
+      "duration_sec": 5.39,
+      "keyframe_image": "keyframes/shot_001.png",
+      "motion_adapter": "local_kenburns",
+      "status": "rendered",
+      "audio_file": "audio/shot_001.mp3",
+      "output_video": "shots/shot_001.mp4",
+      "cost": 0.0
+    },
+    {
+      "id": "shot_002",
+      "type": "pan_zoom",
+      "voiceover": "小宇航员泡泡推开舱门，哇！地上的石头居然全是跳跳糖！",
+      "visual_prompt": "Paopao the cute chibi astronaut stepping out of spaceship onto glowing sparkling candy crystals ground, looking around in wonder, 3D Pixar style, 9:16 vertical",
+      "camera": "pan_left",
+      "duration_sec": 6.44,
+      "keyframe_image": "keyframes/shot_002.png",
+      "motion_adapter": "local_kenburns",
+      "status": "rendered",
+      "audio_file": "audio/shot_002.mp3",
+      "output_video": "shots/shot_002.mp4",
+      "cost": 0.0
+    },
+    {
+      "id": "shot_003",
+      "type": "pan_zoom",
+      "voiceover": "一只果冻小兔子跳了过来，送给他一颗会发光的棒棒糖。",
+      "visual_prompt": "A translucent glowing jelly bunny hopping towards Paopao the chibi astronaut and offering a spinning galaxy lollipop, magical particle effects, 3D Pixar style, 9:16 vertical",
+      "camera": "zoom_in",
+      "duration_sec": 5.46,
+      "keyframe_image": "keyframes/shot_003.png",
+      "motion_adapter": "local_kenburns",
+      "status": "rendered",
+      "audio_file": "audio/shot_003.mp3",
+      "output_video": "shots/shot_003.mp4",
+      "cost": 0.0
+    },
+    {
+      "id": "shot_004",
+      "type": "pan_zoom",
+      "voiceover": "轻轻咬上一口，整片夜空都绽放出了七彩的糖果烟花！",
+      "visual_prompt": "Paopao the chibi astronaut tasting the lollipop with a joyful smile, colorful candy fireworks exploding in the night sky, vibrant reflections, 3D Pixar style, 9:16 vertical",
+      "camera": "pan_up",
+      "duration_sec": 5.36,
+      "keyframe_image": "keyframes/shot_004.png",
+      "motion_adapter": "local_kenburns",
+      "status": "rendered",
+      "audio_file": "audio/shot_004.mp3",
+      "output_video": "shots/shot_004.mp4",
+      "cost": 0.0
+    },
+    {
+      "id": "shot_005",
+      "type": "pan_zoom",
+      "voiceover": "今晚的梦里，你也会收到一份宇宙送来的甜蜜礼物哦！",
+      "visual_prompt": "The cute spaceship flying away gently through a sea of glowing stars and candy dust, warm cozy sunset lighting, 3D Pixar style, 9:16 vertical",
+      "camera": "zoom_out",
+      "duration_sec": 4.91,
+      "keyframe_image": "keyframes/shot_005.png",
+      "motion_adapter": "local_kenburns",
+      "status": "rendered",
+      "audio_file": "audio/shot_005.mp3",
+      "output_video": "shots/shot_005.mp4",
+      "cost": 0.0
+    }
+  ]
+}

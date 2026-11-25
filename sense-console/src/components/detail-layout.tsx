@@ -1,0 +1,10 @@
+import type { ReactNode } from "react"
+import { Link } from "react-router"
+import { ArrowLeft } from "lucide-react"
+import { StatusBadge } from "@/components/status-badge"
+import { Button } from "@/components/ui/button"
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
+
+export function DetailLayout({ backTo, backLabel, eyebrow, title, status, description, actions, facts, children }: { backTo: string; backLabel: string; eyebrow: string; title: string; status: string; description: string; actions?: ReactNode; facts: { label: string; value: string }[]; children: ReactNode }) {
+  return <div className="space-y-6"><Link to={backTo} className="inline-flex items-center gap-2 text-sm text-muted-foreground hover:text-foreground"><ArrowLeft className="size-4" />{backLabel}</Link><div className="flex flex-col gap-5 border-b pb-6 lg:flex-row lg:items-end lg:justify-between"><div className="max-w-3xl"><p className="mb-2 text-sm font-medium text-muted-foreground">{eyebrow}</p><div className="flex flex-wrap items-center gap-3"><h1 className="text-2xl font-semibold tracking-tight">{title}</h1><StatusBadge status={status} /></div><p className="mt-3 text-sm leading-6 text-muted-foreground">{description}</p></div>{actions && <div className="flex gap-2">{actions}</div>}</div><div className="grid gap-5 xl:grid-cols-[1fr_320px]"><div className="space-y-5">{children}</div><aside className="space-y-5"><Card><CardHeader className="border-b"><CardTitle>基本信息</CardTitle></CardHeader><CardContent className="space-y-4">{facts.map((fact) => <div key={fact.label} className="flex items-start justify-between gap-4 text-sm"><span className="text-muted-foreground">{fact.label}</span><span className="text-right font-medium">{fact.value}</span></div>)}</CardContent></Card><Card><CardContent><p className="text-xs font-medium text-muted-foreground">Relationship graph</p><p className="mt-3 text-lg font-semibold">关系视图即将接入</p><p className="mt-2 text-xs leading-5 text-muted-foreground">数据库模型确认后，将在这里串联选题、任务、故事节点和资产版本。</p><Button variant="outline" size="sm" className="mt-5" disabled>打开图谱</Button></CardContent></Card></aside></div></div>
+}

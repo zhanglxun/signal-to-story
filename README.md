@@ -1,79 +1,45 @@
-# Signal to Story
+# 星火工厂 · Signal to Story
 
-Signal to Story 是一个面向个人内容生产与 AI 协作的 **Content Ops 控制系统**。
+面向个人内容生产与 AI 协作的 **Content Ops 控制系统**：把信息、选题、稿件、视频、审核、发布和复盘组织成可查询、可审核、可追溯的生产流程。Agent 产出提案，人负责判断和放行。
 
-它把信息源、线索、选题、内容项目、任务、故事、脚本、分镜、人物、场景、媒体资产、发布记录和复盘数据组织成一个可查询、可审核、可追踪的生产系统。
+产品中文名「星火工厂」，英文名「Signal to Story」。`sense-console`、`sense-site` 只是工程目录名。企业及版权标识暂用 `susesne.cn`。线上控制台：https://story.susense.cn/ （目前只部署了 V1）。
 
-产品展示名统一为 **Signal to Story**，Web 工程目录名保留为 `sense-console`，企业及版权标识暂用 `susesne.cn`。
+## 当前分支：0.5.0
 
-## 核心定位
-
-> Signal to Story Console 是内容生产系统的控制面和资产关系可视化中心；Supabase 管理运行状态、关系与审计；Agent 和 Worker 在后台异步完成认知及媒体生产；原始媒体物料保存在独立对象存储中。
-
-| 组成 | 主要职责 |
-| --- | --- |
-| `sense-console` | 驾驶舱、内容与任务可视化、指令下达、审核和资产关系查询 |
-| Supabase | Auth、Postgres、Data API、任务状态、关系、审计及可选 Storage/Queue |
-| AI Agent | 信息收集、分析、选题、Brief、草稿、脚本和分镜 Proposal |
-| Worker | 模型调用、轮询、下载、上传、转码、渲染、重试和状态回写 |
-| 对象存储 | 图片、音频、视频、字幕和其他原始二进制物料 |
-| Obsidian Vault | 深度研究、原稿、脚本和创作过程的主编辑来源 |
+0.5.0 从 `codex/0.3` 切出，正在按职责重整目录结构。**先读 [docs/architecture.md](docs/architecture.md)**：分层、目标目录、模块调用关系和调整顺序（R0～R5）都在里面。所有文档的入口是 [docs/README.md](docs/README.md)。
 
 ## 核心原则
 
-1. Console 管控制与展示，不承担长时间任务。
-2. Supabase Postgres 管状态和关系，不存放大型二进制文件。
-3. 对象存储管原始物料，数据库保存可审计的元数据和关系。
-4. 前端可通过 Supabase SDK 完成受 RLS 保护的普通 CRUD，不建设传统后台 API。
-5. 服务端 Secret、Webhook、强校验和受控 Agent 接口使用 Edge Functions 或可信执行环境。
-6. Agent 提交 Proposal/Draft，人类保留批准、发布和关键资产选择权。
-7. Worker 负责可靠执行，异步任务必须可重试、可取消、可追踪并记录成本。
-8. Obsidian 是原稿主编辑端，CMS 只接收单向快照，不静默反向覆盖。
-9. 所有正式产物都必须能追溯来源、版本、任务、模型、成本和人工审核。
-10. 先验证单条真实链路，再增加抽象、模型和自动化。
+1. Console 只做控制和展示，不跑长任务；长任务由出站 worker 从数据库认领执行。
+2. 普通读写由浏览器经 Supabase RLS / RPC 直连，不建传统后端 API。
+3. Postgres 管状态、队列和关系；媒体二进制放对象存储。
+4. Agent 只出提案；批准、发布、付费渲染由人放行，并由数据库触发器和 RPC 强制执行。
+5. 外部内容一律当作数据，不能当作指令；`service_role` 和各类密钥绝不进浏览器。
+6. 先跑通一条真实链路，再加抽象和自动化。
 
-## 工程目录
-
-当前工程代码统一放在 `signal-to-story/sense-console/`：
+## 目录
 
 ```text
 signal-to-story/
-├── sense-console/           # Web Console、Supabase 配置及后续执行入口
-│   ├── src/
-│   ├── supabase/
-│   ├── docs/
-│   └── workers/             # 出现真实长任务后再创建
-├── docs-site/
-│   ├── design/
-│   ├── plan/
-│   └── spec/
-└── README.md
+├── docs/              文档（唯一入口）
+├── knowledge-base/    知识库默认种子（kb:seed 同步到 knowledge_entries）
+├── supabase/          迁移、RLS、RPC、Edge Functions（_shared/ 放函数共享代码）、数据库测试
+├── workers/           长任务进程：agent/（Node，本机节点）、video/（Python，engine/ 为视频引擎）
+├── testing/           共享测试基建（PGlite harness 等）
+├── sense-console/     控制台前端（只是 Web）
+├── sense-site/        读者站
+└── package.json       运行时一侧（workers、数据库测试、testing）的依赖与命令
 ```
 
-当前不创建 `packages/` 或 Worker。只有 Web、Worker、本机同步器确实需要共享契约时，才将 `sense-console/src/contracts/` 提升为共享 package。
+## 本地验证
 
-## 当前阶段
-
-当前优先建设：
-
-- React + shadcn/ui Base UI 的 `sense-console` 工程基座。
-- Supabase 邮箱和密码登录、RLS 边界及数据访问层。
-- 轻量 AppShell、两层以内菜单、驾驶舱、列表和详情页面模式。
-- Agent Contract、幂等、审计和安全约定。
-- 独立数据库模型设计文档。
-
-当前不建设完整 Agent 编排平台、Media Worker、自动发布系统、三级菜单或 Obsidian 双向同步。
-
-## 文档导航
-
-- [总体系统架构 SPEC](docs-site/spec/Signal-to-Story总体架构-SPEC.md)：控制面、状态层、执行面、资产存储和任务闭环的上位规范。
-- [内容系统分层与 Obsidian 单向同步 SPEC](docs-site/spec/内容系统分层与Obsidian单向同步-SPEC.md)：知识正文、导入协议、版本和冲突规则。
-- [内容创作与 AI-CMS 指导 SPEC](docs-site/spec/内容创作与AI-CMS指导-SPEC.md)：个人定位、内容方法、生命周期和质量门禁。
-- [AI 内容生产系统 PRD](docs-site/design/AI内容生产系统-PRD-v1.md)：产品范围、功能需求和里程碑。
-- [Console 框架搭建计划](docs-site/plan/frame-work.md)：`sense-console` 前端与 Supabase 基座实施计划。
-
-数据库表、字段、关系、状态机、RLS、Data API 暴露和 Storage Policy 后续单独维护在：
-
-```text
-sense-console/docs/supabase-data-model.md
+```bash
+npm install && npm run typecheck && npm run lint && npm test   # 运行时：workers + 数据库（PGlite）
+npm run test:video-worker                                       # Python 视频 worker
+npm run demo:harness                                            # 出稿循环，使用假模型
+npm --prefix sense-console run typecheck && npm --prefix sense-console run lint
+npm --prefix sense-console run test && npm --prefix sense-console run build
+npm --prefix sense-site run dev:demo                            # 读者站演示模式
 ```
+
+完整的命令、实现状态和已知断层见 [docs/status.md](docs/status.md)。

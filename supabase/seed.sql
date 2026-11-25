@@ -1,0 +1,1 @@
+-- Intentionally empty. Stable workspace seed data lives in versioned migrations.

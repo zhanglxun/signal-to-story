@@ -1,0 +1,1 @@
+{ "msgid": "EVT1", "aibotid": "AIBOTID", "chattype": "single", "from": { "userid": "lisi" }, "msgtype": "event", "event": { "eventtype": "enter_chat" } }

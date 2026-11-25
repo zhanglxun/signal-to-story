@@ -1,0 +1,74 @@
+services:
+  console-web:
+    build:
+      context: ./sense-console
+      dockerfile: Dockerfile
+      target: web
+      args:
+        VITE_SUPABASE_URL: ${VITE_SUPABASE_URL:-}
+        VITE_SUPABASE_PUBLISHABLE_KEY: ${VITE_SUPABASE_PUBLISHABLE_KEY:-}
+    ports:
+      - "${CONSOLE_PORT:-4173}:80"
+    restart: unless-stopped
+
+  site-web:
+    build:
+      context: ./sense-site
+      dockerfile: Dockerfile
+      target: web
+      args:
+        VITE_SUPABASE_URL: ${VITE_SUPABASE_URL:-}
+        VITE_SUPABASE_PUBLISHABLE_KEY: ${VITE_SUPABASE_PUBLISHABLE_KEY:-}
+        VITE_SITE_SLUG: ${VITE_SITE_SLUG:-signal-to-story}
+    ports:
+      - "${SITE_PORT:-4174}:80"
+    restart: unless-stopped
+
+  agent-worker:
+    build:
+      context: .
+      dockerfile: workers/agent/Dockerfile
+    environment:
+      SUPABASE_URL: ${SUPABASE_URL:?SUPABASE_URL is required}
+      SUPABASE_PUBLISHABLE_KEY: ${SUPABASE_PUBLISHABLE_KEY:?SUPABASE_PUBLISHABLE_KEY is required}
+      SENSE_NODE_TOKEN: ${SENSE_NODE_TOKEN:?SENSE_NODE_TOKEN is required (console → 执行节点)}
+      SENSE_WORKER_ID: ${SENSE_WORKER_ID:-agent-worker-1}
+      SENSE_WORKER_JOB_TYPES: ${SENSE_WORKER_JOB_TYPES:-content_draft,video_storyboard}
+      SENSE_WORKER_LEASE_SECONDS: ${SENSE_WORKER_LEASE_SECONDS:-120}
+      SENSE_WORKER_POLL_MS: ${SENSE_WORKER_POLL_MS:-5000}
+      SENSE_LLM_DRIVER: ${SENSE_LLM_DRIVER:-cloud}
+      SENSE_LLM_PROVIDER: ${SENSE_LLM_PROVIDER:-qwen}
+      SENSE_LLM_BASE_URL: ${SENSE_LLM_BASE_URL:-}
+      SENSE_LLM_API_KEY: ${SENSE_LLM_API_KEY:-}
+      SENSE_LLM_MODEL: ${SENSE_LLM_MODEL:-}
+      SENSE_EVAL_LLM_DRIVER: ${SENSE_EVAL_LLM_DRIVER:-cloud}
+      SENSE_EVAL_LLM_PROVIDER: ${SENSE_EVAL_LLM_PROVIDER:-deepseek}
+      SENSE_EVAL_LLM_BASE_URL: ${SENSE_EVAL_LLM_BASE_URL:-}
+      SENSE_EVAL_LLM_API_KEY: ${SENSE_EVAL_LLM_API_KEY:-}
+      SENSE_EVAL_LLM_MODEL: ${SENSE_EVAL_LLM_MODEL:-}
+      CONSOLE_BASE_URL: ${CONSOLE_BASE_URL:-http://localhost:4173}
+      WECOM_NOTIFY_WEBHOOK_URL: ${WECOM_NOTIFY_WEBHOOK_URL:-}
+      FEISHU_APP_ID: ${FEISHU_APP_ID:-}
+      FEISHU_APP_SECRET: ${FEISHU_APP_SECRET:-}
+    restart: unless-stopped
+
+  video-worker:
+    build:
+      context: .
+      dockerfile: workers/video/Dockerfile
+    environment:
+      SUPABASE_URL: ${SUPABASE_URL:?SUPABASE_URL is required}
+      SUPABASE_SERVICE_ROLE_KEY: ${SUPABASE_SERVICE_ROLE_KEY:?SUPABASE_SERVICE_ROLE_KEY is required}
+      SENSE_VIDEO_WORKER_ID: ${SENSE_VIDEO_WORKER_ID:-video-worker-1}
+      SENSE_VIDEO_JOB_TYPES: ${SENSE_VIDEO_JOB_TYPES:-video_tts_preview,video_shot_render,video_compose}
+      SENSE_VIDEO_LEASE_SECONDS: ${SENSE_VIDEO_LEASE_SECONDS:-300}
+      SENSE_VIDEO_POLL_SECONDS: ${SENSE_VIDEO_POLL_SECONDS:-5}
+      SENSE_VIDEO_WORK_DIR: /tmp/video-work
+      SENSE_VIDEO_BUCKET: ${SENSE_VIDEO_BUCKET:-video-studio}
+      DASHSCOPE_API_KEY: ${DASHSCOPE_API_KEY:-}
+    volumes:
+      - video_work:/tmp/video-work
+    restart: unless-stopped
+
+volumes:
+  video_work:

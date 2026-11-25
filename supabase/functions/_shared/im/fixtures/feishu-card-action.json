@@ -1,0 +1,5 @@
+{
+  "schema": "2.0",
+  "header": { "event_id": "ev_card_1", "event_type": "card.action.trigger", "create_time": "1608725989000", "token": "vt_test_token", "app_id": "cli_a1b2c3", "tenant_key": "tenant_x" },
+  "event": { "operator": { "open_id": "ou_sender" }, "action": { "value": { "decision": "approve" }, "tag": "button" } }
+}

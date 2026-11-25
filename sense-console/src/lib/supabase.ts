@@ -1,0 +1,26 @@
+import { createClient, type SupabaseClient } from "@supabase/supabase-js"
+
+const supabaseUrl = import.meta.env.VITE_SUPABASE_URL?.trim()
+const supabasePublishableKey = import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY?.trim()
+
+export const isSupabaseConfigured = Boolean(supabaseUrl && supabasePublishableKey)
+
+export function getSupabaseEndpointHostname() {
+  if (!supabaseUrl) return null
+  try { return new URL(supabaseUrl).hostname } catch { return null }
+}
+
+let client: SupabaseClient | null = null
+
+export function getSupabaseClient() {
+  if (!isSupabaseConfigured || !supabaseUrl || !supabasePublishableKey) return null
+
+  client ??= createClient(supabaseUrl, supabasePublishableKey, {
+    auth: {
+      persistSession: true,
+      autoRefreshToken: true,
+      detectSessionInUrl: true,
+    },
+  })
+  return client
+}
