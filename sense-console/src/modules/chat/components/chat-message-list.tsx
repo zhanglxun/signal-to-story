@@ -375,7 +375,58 @@ export interface ChatMessageListProps {
   isLoading: boolean
   onQuickPrompt: (prompt: string) => void
   onRegenerate: (userMessageId: string) => void
+  /** Resend a turn that failed before the node wrote the user message. */
+  onRetrySend?: (content: string, parts: ChatContextRefPart[]) => void
+  /** 401 from the node: the login expired. */
+  onRelogin?: () => void
   onAnswerPermission: (requestId: string, decision: "allow" | "deny") => void | Promise<void>
+}
+
+function LiveTurnErrorActions({
+  activeTurn,
+  onRegenerate,
+  onRetrySend,
+  onRelogin,
+}: {
+  activeTurn: ActiveTurnState
+  onRegenerate: (userMessageId: string) => void
+  onRetrySend?: (content: string, parts: ChatContextRefPart[]) => void
+  onRelogin?: () => void
+}) {
+  const error = activeTurn.error
+  if (!error) return null
+  if (error.action === "relogin") {
+    return onRelogin ? (
+      <Button type="button" size="xs" variant="outline" onClick={onRelogin}>
+        重新登录
+      </Button>
+    ) : null
+  }
+  if (error.retryable === false) return null
+  if (activeTurn.userMessageId) {
+    const userMessageId = activeTurn.userMessageId
+    return (
+      <Button type="button" size="xs" variant="outline" onClick={() => onRegenerate(userMessageId)}>
+        <RotateCcwIcon className="size-3" />
+        重新生成
+      </Button>
+    )
+  }
+  const request = activeTurn.request
+  if (request.kind === "send" && onRetrySend) {
+    return (
+      <Button
+        type="button"
+        size="xs"
+        variant="outline"
+        onClick={() => onRetrySend(request.content, request.parts)}
+      >
+        <RotateCcwIcon className="size-3" />
+        重试发送
+      </Button>
+    )
+  }
+  return null
 }
 
 export function ChatMessageList({
@@ -388,6 +439,8 @@ export function ChatMessageList({
   isLoading,
   onQuickPrompt,
   onRegenerate,
+  onRetrySend,
+  onRelogin,
   onAnswerPermission,
 }: ChatMessageListProps) {
   const persistedActiveJobInTimeline =
@@ -605,26 +658,27 @@ export function ChatMessageList({
                                 <AlertTitle className="text-xs">
                                   {activeTurn.error.code === "budget_exceeded"
                                     ? "费用预算超限"
-                                    : "生成失败"}
+                                    : activeTurn.persistFailed
+                                      ? "回复未能保存"
+                                      : activeTurn.isStreaming
+                                        ? "生成出错，正在等待节点保存结果…"
+                                        : "生成失败"}
                                 </AlertTitle>
                                 <AlertDescription className="mt-1 space-y-2 text-xs">
                                   <p>
                                     {formatErrorDisplayText(
-                                      activeTurn.error.code,
+                                      activeTurn.persistFailed ? "persist_failed" : activeTurn.error.code,
                                       activeTurn.error.message
                                     )}
                                   </p>
                                   <StackTraceBlock stack={activeTurn.error.stack} />
-                                  {activeTurn.userMessageId && (
-                                    <Button
-                                      type="button"
-                                      size="xs"
-                                      variant="outline"
-                                      onClick={() => onRegenerate(activeTurn.userMessageId!)}
-                                    >
-                                      <RotateCcwIcon className="size-3" />
-                                      重新生成
-                                    </Button>
+                                  {!activeTurn.isStreaming && (
+                                    <LiveTurnErrorActions
+                                      activeTurn={activeTurn}
+                                      onRegenerate={onRegenerate}
+                                      onRetrySend={onRetrySend}
+                                      onRelogin={onRelogin}
+                                    />
                                   )}
                                 </AlertDescription>
                               </Alert>

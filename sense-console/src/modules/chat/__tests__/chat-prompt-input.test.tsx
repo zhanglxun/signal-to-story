@@ -4,7 +4,7 @@ import userEvent from "@testing-library/user-event"
 import { describe, expect, it, vi } from "vitest"
 
 import { ChatPromptInput } from "@/modules/chat/components/chat-prompt-input"
-import { listRuntimeCatalog } from "@/modules/chat/services/runtime-catalog-service"
+import { listMockRuntimeCatalog } from "@/modules/chat/services/runtime-catalog-service"
 import type { ChatContextRefPart, ContextRefOption, RuntimeNodeCatalog } from "@/modules/chat/types"
 
 const REFS: ContextRefOption[] = [
@@ -53,7 +53,7 @@ function Harness({
 describe("ChatPromptInput", () => {
   it("opens Slash menu on '/' and inserts selected command", async () => {
     const user = userEvent.setup()
-    const catalog = await listRuntimeCatalog()
+    const catalog = listMockRuntimeCatalog()
     const onSubmitSpy = vi.fn()
 
     render(<Harness catalog={catalog} onSubmitSpy={onSubmitSpy} />)
@@ -68,7 +68,7 @@ describe("ChatPromptInput", () => {
 
   it("opens '@' reference picker, mounts removable context_ref chip, and passes refs on submit", async () => {
     const user = userEvent.setup()
-    const catalog = await listRuntimeCatalog()
+    const catalog = listMockRuntimeCatalog()
     const onSubmitSpy = vi.fn()
 
     render(<Harness catalog={catalog} onSubmitSpy={onSubmitSpy} />)
@@ -102,7 +102,7 @@ describe("ChatPromptInput", () => {
 
   it("shows quick-capture chip when pasting a URL and stop button while streaming", async () => {
     const user = userEvent.setup()
-    const catalog = await listRuntimeCatalog()
+    const catalog = listMockRuntimeCatalog()
     const onQuickCapture = vi.fn()
 
     const { rerender } = render(

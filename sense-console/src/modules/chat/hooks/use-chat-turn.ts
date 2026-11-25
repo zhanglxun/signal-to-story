@@ -1,5 +1,13 @@
 import { useCallback, useEffect, useRef, useState } from "react"
 import type { ChatSessionRepository } from "@/modules/chat/services/chat-session-service"
+import {
+  describePreStreamError,
+  formatErrorDisplayText,
+  NODE_MISMATCH,
+  NODE_UNREACHABLE,
+  nodeUnreachableError,
+  type TurnErrorInfo,
+} from "@/modules/chat/transport/errors"
 import type { ChatTransport, ChatTurnTarget } from "@/modules/chat/transport/transport"
 import {
   type ChatContextRefPart,
@@ -30,10 +38,16 @@ export interface LivePermissionItem {
   decision?: "allow" | "deny" | "timeout"
 }
 
+/** What started the turn; used to offer the right retry. */
+export type TurnRequest =
+  | { kind: "send"; content: string; parts: ChatContextRefPart[] }
+  | { kind: "regenerate"; userMessageId: string }
+
 export interface ActiveTurnState {
   sessionId: string
   jobId: string | null
   userMessageId: string | null
+  request: TurnRequest
   optimisticUserContent: string | null
   optimisticUserParts: ChatContextRefPart[]
   runtimeLabel: string
@@ -46,48 +60,119 @@ export interface ActiveTurnState {
   tools: LiveToolItem[]
   permissions: LivePermissionItem[]
   usage: ChatUsage | null
-  error: { code: string; message: string; retryable?: boolean; stack?: string } | null
+  error: TurnErrorInfo | null
+  /** The stream ended after an `error` without `done`: the reply was not persisted (chat.md 2.4). */
+  persistFailed: boolean
   finalStatus: ChatMessageStatus | null
+}
+
+interface TurnInfo {
+  sessionId: string
+  jobId: string | null
+  runtimeLabel: string
 }
 
 export interface UseChatTurnOptions {
   transport: ChatTransport
   repository: ChatSessionRepository
   onTurnSettled?: (sessionId: string) => void | Promise<void>
-  onStopRequested?: (info: {
-    sessionId: string
-    jobId: string | null
-    runtimeLabel: string
-  }) => void
+  onStopRequested?: (info: TurnInfo) => void
+  /**
+   * The stream broke off after it started, without `done` or `error` (network drop, node restart).
+   * Disconnect is not cancel: the node keeps running and persists the turn, so the page waits for
+   * it (chat.md 2.3).
+   */
+  onStreamInterrupted?: (info: TurnInfo) => void
+  /** How long a successful GET /v1/health is trusted before the next send checks again. */
+  healthCheckTtlMs?: number
+  healthCheckTimeoutMs?: number
 }
 
-function formatErrorMessage(err: unknown): { code: string; message: string; retryable?: boolean } {
-  if (err instanceof HttpTransportError) {
-    if (err.code === "turn_in_progress") {
+export { formatErrorDisplayText }
+
+const DEFAULT_HEALTH_TTL_MS = 60_000
+const DEFAULT_HEALTH_TIMEOUT_MS = 5_000
+
+function isAbortError(err: unknown, signal: AbortSignal): boolean {
+  return signal.aborted || (err as { name?: string } | null)?.name === "AbortError"
+}
+
+function healthKey(target: ChatTurnTarget): string {
+  return `${target.nodeId}@${target.endpointHint}`
+}
+
+/** Applies one non-terminal stream event to the live turn. */
+function applyEvent(prev: ActiveTurnState, ev: ChatStreamEvent): ActiveTurnState {
+  switch (ev.type) {
+    case "turn_start":
       return {
-        code: "turn_in_progress",
-        message: "当前会话上一轮回复仍在进行中（409 turn_in_progress），请等待完成或停止后再试。",
-        retryable: false,
+        ...prev,
+        jobId: ev.jobId,
+        userMessageId: ev.userMessageId,
+        contextTruncated: Boolean(ev.contextTruncated),
       }
-    }
-    return {
-      code: err.code,
-      message: err.message,
-      retryable: err.status >= 500 || err.status === 429,
-    }
+    case "reasoning_delta":
+      return { ...prev, reasoningText: prev.reasoningText + ev.delta }
+    case "text_delta":
+      return { ...prev, textContent: prev.textContent + ev.delta }
+    case "plan_update":
+      return { ...prev, planSteps: ev.steps }
+    case "tool_start":
+      return {
+        ...prev,
+        tools: prev.tools.some((t) => t.callId === ev.callId)
+          ? prev.tools.map((t) =>
+              t.callId === ev.callId
+                ? { ...t, name: ev.name, state: "running", inputSummary: ev.inputSummary ?? t.inputSummary }
+                : t
+            )
+          : [...prev.tools, { callId: ev.callId, name: ev.name, state: "running", inputSummary: ev.inputSummary }],
+      }
+    case "tool_end":
+      return {
+        ...prev,
+        tools: prev.tools.map((t) =>
+          t.callId === ev.callId
+            ? { ...t, state: ev.status, outputSummary: ev.outputSummary, error: ev.error, stackTrace: ev.stackTrace }
+            : t
+        ),
+      }
+    case "permission_request":
+      return {
+        ...prev,
+        permissions: [
+          ...prev.permissions,
+          {
+            requestId: ev.requestId,
+            action: ev.action,
+            summary: ev.summary,
+            options: ev.options ?? [
+              { id: "allow", label: "允许", kind: "allow" },
+              { id: "deny", label: "拒绝", kind: "deny" },
+            ],
+          },
+        ],
+      }
+    case "usage":
+      return {
+        ...prev,
+        usage: {
+          inputTokens: ev.inputTokens,
+          outputTokens: ev.outputTokens,
+          costCents: ev.costCents,
+          durationMs: ev.durationMs,
+          model: ev.model,
+        },
+      }
+    case "error":
+      return {
+        ...prev,
+        finalStatus: "error",
+        error: { code: ev.code, message: ev.message, retryable: ev.retryable, stack: ev.stack },
+      }
+    case "done":
+      return { ...prev, isStreaming: false, isStopping: false, finalStatus: ev.status }
   }
-  return {
-    code: "network_error",
-    message: err instanceof Error ? err.message : "流式请求发生异常",
-    retryable: true,
-  }
-}
-
-export function formatErrorDisplayText(code: string, message: string): string {
-  if (code === "budget_exceeded") {
-    return "单轮费用已达上限（budget_exceeded），已自动停止生成。建议缩小上下文或拆分问题后重试。"
-  }
-  return message
 }
 
 export function useChatTurn({
@@ -95,6 +180,9 @@ export function useChatTurn({
   repository,
   onTurnSettled,
   onStopRequested,
+  onStreamInterrupted,
+  healthCheckTtlMs = DEFAULT_HEALTH_TTL_MS,
+  healthCheckTimeoutMs = DEFAULT_HEALTH_TIMEOUT_MS,
 }: UseChatTurnOptions) {
   const [activeTurn, setActiveTurn] = useState<ActiveTurnState | null>(null)
   const abortRef = useRef<AbortController | null>(null)
@@ -104,6 +192,8 @@ export function useChatTurn({
   const activeSessionIdRef = useRef<string | null>(null)
   const activeRuntimeLabelRef = useRef<string>("")
   const isStreamingRef = useRef(false)
+  /** endpoint → time of the last successful GET /v1/health. */
+  const healthyAtRef = useRef(new Map<string, number>())
 
   // Disconnect on unmount ONLY; never cancel the server/worker turn (frontend.md §5.2 #7).
   useEffect(() => {
@@ -122,13 +212,46 @@ export function useChatTurn({
     setActiveTurn((prev) => (prev && prev.isStreaming ? null : prev))
   }, [])
 
+  /** GET /v1/health before the first send to a node, so an unreachable node fails cleanly. */
+  const ensureNodeReachable = useCallback(
+    async (target: ChatTurnTarget, signal: AbortSignal) => {
+      if (!transport.checkHealth) return
+      const okAt = healthyAtRef.current.get(healthKey(target))
+      if (okAt !== undefined && Date.now() - okAt < healthCheckTtlMs) return
+
+      const controller = new AbortController()
+      const onAbort = () => controller.abort()
+      signal.addEventListener("abort", onAbort, { once: true })
+      const timer = setTimeout(() => controller.abort(), healthCheckTimeoutMs)
+      let nodeId: string
+      try {
+        nodeId = (await transport.checkHealth(target.endpointHint, controller.signal)).node_id
+      } catch (err) {
+        if (signal.aborted) throw err
+        if (err instanceof HttpTransportError && err.code === NODE_UNREACHABLE) throw err
+        throw nodeUnreachableError(target.endpointHint)
+      } finally {
+        clearTimeout(timer)
+        signal.removeEventListener("abort", onAbort)
+      }
+      if (nodeId && nodeId !== target.nodeId) {
+        throw new HttpTransportError(
+          0,
+          NODE_MISMATCH,
+          `该地址上运行的是另一个节点（node_id 不一致），请检查节点的 SENSE_NODE_ID 与对外地址配置：${target.endpointHint}`
+        )
+      }
+      healthyAtRef.current.set(healthKey(target), Date.now())
+    },
+    [healthCheckTimeoutMs, healthCheckTtlMs, transport]
+  )
+
   const consumeStream = useCallback(
     async (
       sessionId: string,
       target: ChatTurnTarget,
       runtimeLabel: string,
-      optimisticUserContent: string | null,
-      optimisticUserParts: ChatContextRefPart[],
+      request: TurnRequest,
       makeStream: (signal: AbortSignal) => AsyncIterable<ChatStreamEvent>
     ) => {
       abortRef.current?.abort()
@@ -143,9 +266,10 @@ export function useChatTurn({
       setActiveTurn({
         sessionId,
         jobId: null,
-        userMessageId: null,
-        optimisticUserContent,
-        optimisticUserParts,
+        userMessageId: request.kind === "regenerate" ? request.userMessageId : null,
+        request,
+        optimisticUserContent: request.kind === "send" ? request.content : null,
+        optimisticUserParts: request.kind === "send" ? request.parts : [],
         runtimeLabel,
         isStreaming: true,
         isStopping: false,
@@ -157,182 +281,93 @@ export function useChatTurn({
         permissions: [],
         usage: null,
         error: null,
+        persistFailed: false,
         finalStatus: null,
       })
 
-      try {
-        for await (const ev of makeStream(controller.signal)) {
-          if (!mountedRef.current || controller.signal.aborted) break
+      let streamStarted = false
+      let lastError: TurnErrorInfo | null = null
+      const isCurrent = () => mountedRef.current && !controller.signal.aborted
+      const update = (fn: (prev: ActiveTurnState) => ActiveTurnState) =>
+        setActiveTurn((prev) => (prev && prev.sessionId === sessionId ? fn(prev) : prev))
 
-          if (ev.type === "turn_start") {
-            activeJobIdRef.current = ev.jobId
-            setActiveTurn((prev) =>
-              prev
-                ? {
-                    ...prev,
-                    jobId: ev.jobId,
-                    userMessageId: ev.userMessageId,
-                    contextTruncated: Boolean(ev.contextTruncated),
-                  }
-                : prev
-            )
-          } else if (ev.type === "reasoning_delta") {
-            setActiveTurn((prev) =>
-              prev ? { ...prev, reasoningText: prev.reasoningText + ev.delta } : prev
-            )
-          } else if (ev.type === "text_delta") {
-            setActiveTurn((prev) =>
-              prev ? { ...prev, textContent: prev.textContent + ev.delta } : prev
-            )
-          } else if (ev.type === "plan_update") {
-            setActiveTurn((prev) => (prev ? { ...prev, planSteps: ev.steps } : prev))
-          } else if (ev.type === "tool_start") {
-            setActiveTurn((prev) =>
-              prev
-                ? {
-                    ...prev,
-                    tools: prev.tools.some((t) => t.callId === ev.callId)
-                      ? prev.tools.map((t) =>
-                          t.callId === ev.callId
-                            ? {
-                                ...t,
-                                name: ev.name,
-                                state: "running",
-                                inputSummary: ev.inputSummary ?? t.inputSummary,
-                              }
-                            : t
-                        )
-                      : [
-                          ...prev.tools,
-                          {
-                            callId: ev.callId,
-                            name: ev.name,
-                            state: "running",
-                            inputSummary: ev.inputSummary,
-                          },
-                        ],
-                  }
-                : prev
-            )
-          } else if (ev.type === "tool_end") {
-            setActiveTurn((prev) =>
-              prev
-                ? {
-                    ...prev,
-                    tools: prev.tools.map((t) =>
-                      t.callId === ev.callId
-                        ? {
-                            ...t,
-                            state: ev.status,
-                            outputSummary: ev.outputSummary,
-                            error: ev.error,
-                            stackTrace: ev.stackTrace,
-                          }
-                        : t
-                    ),
-                  }
-                : prev
-            )
-          } else if (ev.type === "permission_request") {
-            setActiveTurn((prev) =>
-              prev
-                ? {
-                    ...prev,
-                    permissions: [
-                      ...prev.permissions,
-                      {
-                        requestId: ev.requestId,
-                        action: ev.action,
-                        summary: ev.summary,
-                        options: ev.options ?? [
-                          { id: "allow", label: "允许", kind: "allow" },
-                          { id: "deny", label: "拒绝", kind: "deny" },
-                        ],
-                      },
-                    ],
-                  }
-                : prev
-            )
-          } else if (ev.type === "usage") {
-            setActiveTurn((prev) =>
-              prev
-                ? {
-                    ...prev,
-                    usage: {
-                      inputTokens: ev.inputTokens,
-                      outputTokens: ev.outputTokens,
-                      costCents: ev.costCents,
-                      durationMs: ev.durationMs,
-                      model: ev.model,
-                    },
-                  }
-                : prev
-            )
-          } else if (ev.type === "error") {
+      const waitForPersistedResult = async () => {
+        setActiveTurn(null)
+        onStreamInterrupted?.({ sessionId, jobId: activeJobIdRef.current, runtimeLabel })
+        await onTurnSettled?.(sessionId)
+      }
+
+      const showFailure = async (error: TurnErrorInfo, persistFailed: boolean) => {
+        update((prev) => ({
+          ...prev,
+          isStreaming: false,
+          isStopping: false,
+          finalStatus: "error",
+          persistFailed,
+          error,
+        }))
+        await onTurnSettled?.(sessionId)
+      }
+
+      try {
+        await ensureNodeReachable(target, controller.signal)
+        for await (const ev of makeStream(controller.signal)) {
+          if (!isCurrent()) return
+          streamStarted = true
+          if (ev.type === "turn_start") activeJobIdRef.current = ev.jobId
+
+          if (ev.type === "error") {
+            // Not terminal (chat.md 2.4 结束规则): the node persists the failed turn, then sends
+            // `done`. Show the error and keep reading until `done` or the end of the stream.
+            lastError = { code: ev.code, message: ev.message, retryable: ev.retryable, stack: ev.stack }
+          }
+          update((prev) => applyEvent(prev, ev))
+
+          if (ev.type === "done") {
+            // The only terminal event: the assistant message is in the database now and the
+            // timeline (refreshed below) renders it, including a persisted error part.
             isStreamingRef.current = false
-            setActiveTurn((prev) =>
-              prev
-                ? {
-                    ...prev,
-                    isStreaming: false,
-                    isStopping: false,
-                    finalStatus: "error",
-                    error: {
-                      code: ev.code,
-                      message: ev.message,
-                      retryable: ev.retryable,
-                      stack: ev.stack,
-                    },
-                  }
-                : prev
-            )
-            await onTurnSettled?.(sessionId)
-            return
-          } else if (ev.type === "done") {
-            isStreamingRef.current = false
-            setActiveTurn((prev) =>
-              prev
-                ? {
-                    ...prev,
-                    isStreaming: false,
-                    isStopping: false,
-                    finalStatus: ev.status,
-                  }
-                : prev
-            )
             await onTurnSettled?.(sessionId)
             if (mountedRef.current) {
-              setActiveTurn((prev) =>
-                prev && !prev.isStreaming && prev.error == null ? null : prev
-              )
+              setActiveTurn((prev) => (prev && prev.sessionId === sessionId && !prev.isStreaming ? null : prev))
             }
             return
           }
         }
+        if (!isCurrent()) return
         isStreamingRef.current = false
-      } catch (err) {
-        isStreamingRef.current = false
-        if ((err as { name?: string })?.name === "AbortError" || controller.signal.aborted) {
-          return
-        }
-        const formatted = formatErrorMessage(err)
-        if (mountedRef.current) {
-          setActiveTurn((prev) =>
-            prev
-              ? {
-                  ...prev,
-                  isStreaming: false,
-                  isStopping: false,
-                  finalStatus: "error",
-                  error: formatted,
-                }
-              : prev
+
+        if (lastError) {
+          // `error` without `done`: the reply could not be persisted (persist_failed).
+          await showFailure({ ...lastError, retryable: true }, true)
+        } else if (streamStarted) {
+          await waitForPersistedResult()
+        } else {
+          await showFailure(
+            { code: "empty_stream", message: "节点没有返回任何事件，请重试。", retryable: true },
+            false
           )
         }
-        await onTurnSettled?.(sessionId)
+      } catch (err) {
+        isStreamingRef.current = false
+        if (isAbortError(err, controller.signal) || !mountedRef.current) return
+
+        if (lastError) {
+          await showFailure({ ...lastError, retryable: true }, true)
+          return
+        }
+        if (streamStarted) {
+          // The connection broke mid-stream; the node still finishes and persists the turn.
+          await waitForPersistedResult()
+          return
+        }
+        if (err instanceof HttpTransportError && err.code === NODE_UNREACHABLE) {
+          healthyAtRef.current.delete(healthKey(target))
+        }
+        await showFailure(describePreStreamError(err), false)
       }
     },
-    [onTurnSettled]
+    [ensureNodeReachable, onStreamInterrupted, onTurnSettled]
   )
 
   const sendTurn = useCallback(
@@ -345,13 +380,12 @@ export function useChatTurn({
       runtimeLabel: string
       thinkingEffort?: ThinkingEffort
     }) => {
-      if (isStreamingRef.current || activeTurn?.isStreaming) return
+      if (isStreamingRef.current) return
       await consumeStream(
         options.sessionId,
         options.target,
         options.runtimeLabel,
-        options.content,
-        options.parts ?? [],
+        { kind: "send", content: options.content, parts: options.parts ?? [] },
         (signal) =>
           transport.sendTurn(
             options.target,
@@ -366,7 +400,7 @@ export function useChatTurn({
           )
       )
     },
-    [activeTurn?.isStreaming, consumeStream, transport]
+    [consumeStream, transport]
   )
 
   const regenerateTurn = useCallback(
@@ -378,13 +412,12 @@ export function useChatTurn({
       runtimeLabel: string
       thinkingEffort?: ThinkingEffort
     }) => {
-      if (isStreamingRef.current || activeTurn?.isStreaming) return
+      if (isStreamingRef.current) return
       await consumeStream(
         options.sessionId,
         options.target,
         options.runtimeLabel,
-        null,
-        [],
+        { kind: "regenerate", userMessageId: options.userMessageId },
         (signal) =>
           transport.regenerate(
             options.target,
@@ -398,21 +431,22 @@ export function useChatTurn({
           )
       )
     },
-    [activeTurn?.isStreaming, consumeStream, transport]
+    [consumeStream, transport]
   )
 
+  /** The user clicked「停止」: cancel_agent_job first, then stop reading (chat.md 2.3). */
   const stopTurn = useCallback(async () => {
-    if (!isStreamingRef.current && !activeTurn?.isStreaming) return
-    const jobId = activeJobIdRef.current ?? activeTurn?.jobId ?? null
-    const sessionId = activeSessionIdRef.current ?? activeTurn?.sessionId ?? null
-    const runtimeLabel = activeRuntimeLabelRef.current || activeTurn?.runtimeLabel || ""
+    if (!isStreamingRef.current) return
+    const jobId = activeJobIdRef.current
+    const sessionId = activeSessionIdRef.current
+    const runtimeLabel = activeRuntimeLabelRef.current
     isStreamingRef.current = false
     setActiveTurn((prev) => (prev ? { ...prev, isStopping: true } : prev))
     if (jobId) {
       try {
         await repository.cancelJob(jobId)
       } catch {
-        // Still allow local stream abort if cancel RPC fails transiently.
+        // Still abort the local read if the cancel RPC fails transiently.
       }
     }
     abortRef.current?.abort()
@@ -427,11 +461,11 @@ export function useChatTurn({
     if (mountedRef.current) {
       setActiveTurn((prev) => (prev && !prev.isStreaming && prev.error == null ? null : prev))
     }
-  }, [activeTurn, onStopRequested, onTurnSettled, repository])
+  }, [onStopRequested, onTurnSettled, repository])
 
   const answerPermission = useCallback(
     async (requestId: string, decision: "allow" | "deny") => {
-      const jobId = activeJobIdRef.current ?? activeTurn?.jobId
+      const jobId = activeJobIdRef.current
       const target = targetRef.current
       if (!jobId || !target) return
       await transport.answerPermission(target, jobId, requestId, { decision })
@@ -448,7 +482,7 @@ export function useChatTurn({
         )
       }
     },
-    [activeTurn?.jobId, transport]
+    [transport]
   )
 
   const clearError = useCallback(() => {
