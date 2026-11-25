@@ -274,6 +274,27 @@ describe("ChatPage (Phase 1 Mock Mode)", () => {
   })
 })
 
+describe("ChatPage first send", () => {
+  it("shows the persisted reply of a turn sent from a brand-new session", async () => {
+    const user = userEvent.setup()
+    const store = createMemoryChatSessionRepository({ seed: false })
+    const transport = createMockChatTransport({ store, stepDelayMs: 1 })
+    render(
+      <MemoryRouter initialEntries={["/chat"]}>
+        <ChatPage mockMode repository={store} transport={transport} />
+      </MemoryRouter>
+    )
+    await user.type(screen.getByLabelText("聊天消息输入框"), "第一句话{enter}")
+    await waitFor(async () => {
+      const [session] = await store.listSessions("mock-org-1")
+      expect((await store.listMessages(session.id)).map((m) => m.role)).toEqual(["user", "assistant"])
+    })
+    await waitFor(() => expect(screen.getByRole("button", { name: "发送" })).toBeInTheDocument())
+    // The live turn is cleared on done; the reply must come back from the store.
+    expect(await screen.findByText(/回复摘要/, {}, { timeout: 3000 })).toBeInTheDocument()
+  })
+})
+
 describe("ChatPage with the node catalog", () => {
   it("only offers runtimes on online nodes that serve HTTP/SSE at a known address", async () => {
     const user = userEvent.setup()

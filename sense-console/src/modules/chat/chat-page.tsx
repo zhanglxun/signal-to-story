@@ -235,14 +235,23 @@ export function ChatPage(props: ChatPageProps = {}) {
   const thinkingEffort: ThinkingEffort =
     manualRuntimeId !== null ? manualThinking : savedConfig?.thinking_effort ?? "low"
 
+  // A turn can start in a session created moments earlier (first send), so the settle callback
+  // compares against the latest active session, not the one captured when the turn began.
+  const activeSessionIdRef = useRef(activeSessionId)
+  const refreshMessagesRef = useRef(refreshMessages)
+  useEffect(() => {
+    activeSessionIdRef.current = activeSessionId
+    refreshMessagesRef.current = refreshMessages
+  }, [activeSessionId, refreshMessages])
+
   const onTurnSettled = useCallback(
     async (sid: string) => {
-      if (sid === activeSessionId) {
-        await refreshMessages()
+      if (sid === activeSessionIdRef.current) {
+        await refreshMessagesRef.current()
       }
       await refreshSessions()
     },
-    [activeSessionId, refreshMessages, refreshSessions]
+    [refreshSessions]
   )
 
   type WaitHook = (sessionId: string, jobId: string | null, runtimeLabel?: string) => void
