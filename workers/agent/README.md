@@ -33,7 +33,46 @@ npm run worker:agent
 | --- | --- | --- |
 | Cloud（OpenAI 兼容） | 可用 | Qwen / Kimi / DeepSeek / GLM / MiniMax / 自建网关。429 与“请求未发出”的网络错误可重试；超时、5xx、空输出视为**可能已计费**，不自动重试。 |
 | `codex-cli` | 可用（参数已核对 `codex exec --help`，codex-cli 0.167.2） | `codex exec --skip-git-repo-check --ephemeral --sandbox read-only --color never -C <临时空目录> -o <最终消息文件> -`，prompt 走 **stdin**；子进程 env 为白名单（`PATH HOME LANG LC_ALL TMPDIR CODEX_HOME`），超时 SIGTERM→SIGKILL。尚未在本仓库测试中真实调用 codex（会产生费用），仅用假 spawn 验证。 |
+| Pi（Chat，`drivers/pi-cloud.ts`） | 已接线，仅假 `streamFn` 测试 | Chat 回合的 `AgentSessionDriver`；配置见下方「运行时目录」。尚未用真实 Key 在 1.5.2 上复测厂商兼容。 |
 | `pi-cli` / `opencode-cli` / `agy-cli` | **未验证参数**，worker 拒绝使用 | 注册表保留；接入前需按各自 `--help` 验证 stdin/无交互参数后把 `verified` 置为 true。 |
+
+## 运行时目录
+
+Chat 用的云端 API 运行时（`PiCloudDriver`，基于 `@earendil-works/pi-*@1.5.2`）由 `runtime-registry.ts` 从环境变量读取，一个节点可同时配多个 Profile。与出稿用的 `SENSE_LLM_*` / `SENSE_EVAL_LLM_*` 互不影响。
+
+| 变量 | 必填 | 说明 |
+| --- | --- | --- |
+| `SENSE_API_RUNTIMES` | 是 | 逗号分隔的 Profile 名（字母、数字、下划线），如 `qwen_flash,deepseek_chat` |
+| `SENSE_RUNTIME_<PROFILE>_PROVIDER` | 是 | `qwen` / `kimi` / `deepseek` / `zhipu` / `minimax` / `openai-compatible` |
+| `SENSE_RUNTIME_<PROFILE>_MODEL` | 是 | 发给厂商的模型 id |
+| `SENSE_RUNTIME_<PROFILE>_API_KEY` | 否 | 未填时用 `SENSE_PROVIDER_<PROVIDER>_API_KEY`（同厂商多个模型共用一把 Key）；都没有则目录里标 `unavailable` |
+| `SENSE_RUNTIME_<PROFILE>_BASE_URL` | 否 | 未填时用 `SENSE_PROVIDER_<PROVIDER>_BASE_URL`，再退回厂商默认地址；不能内嵌账号密码 |
+| `SENSE_RUNTIME_<PROFILE>_LABEL` | 否 | 控制台显示名，默认「厂商名 · 模型」 |
+| `SENSE_RUNTIME_<PROFILE>_REASONING` | 否 | 思考型模型填 `true`（默认 `false`）；用户关闭思考时只把本轮 `reasoning` 传空，模型标记不变 |
+| `SENSE_RUNTIME_<PROFILE>_CONTEXT_WINDOW` / `_MAX_OUTPUT_TOKENS` | 否 | 默认 32768 / 4096，用于上下文截断 |
+| `SENSE_RUNTIME_<PROFILE>_INPUT_CENTS_PER_1K` / `_OUTPUT_CENTS_PER_1K` | 否 | 单价（分 / 千 token）；都不填则按 0 计、目录标 `priced: false`，只受 `max_rounds` 约束 |
+| `SENSE_RUNTIME_<PROFILE>_TIMEOUT_MS` | 否 | 单次请求超时 |
+
+运行时 id 为 `api:<provider>:<model>`（模型名转小写，非法字符换成 `-`）。DashScope 端点自动带完整 Qwen `compat`，DeepSeek 自动带 `thinkingFormat: "deepseek"`。
+
+示例（值均为占位，勿提交真实 Key）：
+
+```bash
+SENSE_API_RUNTIMES=qwen_flash,deepseek_chat,deepseek_reasoner
+SENSE_RUNTIME_QWEN_FLASH_PROVIDER=qwen
+SENSE_RUNTIME_QWEN_FLASH_MODEL=qwen3.8-flash
+SENSE_RUNTIME_QWEN_FLASH_API_KEY=<dashscope-key>
+SENSE_RUNTIME_QWEN_FLASH_REASONING=true
+SENSE_RUNTIME_QWEN_FLASH_CONTEXT_WINDOW=131072
+SENSE_PROVIDER_DEEPSEEK_API_KEY=<deepseek-key>
+SENSE_RUNTIME_DEEPSEEK_CHAT_PROVIDER=deepseek
+SENSE_RUNTIME_DEEPSEEK_CHAT_MODEL=deepseek-chat
+SENSE_RUNTIME_DEEPSEEK_REASONER_PROVIDER=deepseek
+SENSE_RUNTIME_DEEPSEEK_REASONER_MODEL=deepseek-reasoner
+SENSE_RUNTIME_DEEPSEEK_REASONER_REASONING=true
+```
+
+节点上报的能力目录只含 `id / kind / provider / model / label / capabilities / context_window / max_output_tokens / priced / status`，不含 Key、Base URL 与令牌（构造后再按已配置的 Key 逐一比对兜底）。上报接口 `CapabilityReporter` 目前只有内存假实现，接 `node_report_capabilities` 在 T3b 完成。
 
 ## 本地演示 / 验收
 
