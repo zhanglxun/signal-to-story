@@ -11,7 +11,7 @@
 | [research.md](research.md) | 外部 Agent 工程研究的结论 | 设计 Agent 循环和门禁时 |
 | [ACP-info.md](ACP-info.md) | ACP 协议规范、多 CLI 接入矩阵与本地驱动安全边界 | 接入或改造本地 Agent CLI / ACP 时 |
 | [modules/](modules/) | 每个模块一页：职责、现状、0.5 调整方向 | 改某个模块时 |
-| [tasks/](tasks/) | 进行中的专项需求书与实施路线（评审与落位用） | 拆解或认领数据库/架构重构任务时 |
+| [tasks/](tasks/) | 进行中的迭代与专项任务（完成后删除，结论进模块文档） | 认领或安排下一项工作时 |
 | [conventions/frontend.md](conventions/frontend.md) | 前端组件与 shadcn 约定 | 写前端时 |
 
 模块文档：
@@ -24,14 +24,9 @@
 - [video.md](modules/video.md)：视频工坊与视频 worker
 - [site.md](modules/site.md)：读者站 sense-site
 
-专项任务与实施规划：
+专项任务：
 
-- [db3b-chat-runtime-catalog.md](tasks/db3b-chat-runtime-catalog.md)：DB3b 数据库增量改造任务书（交数据库任务评审与执行）
-- [r1-to-r3-plan.md](tasks/r1-to-r3-plan.md)：R1 → R3 六大断层分析与可执行任务计划
-- [next-phase.md](tasks/next-phase.md)：**下一阶段剩余工作**（R3 收尾：Chat 上线，T0～T6）
-- [orchestration.md](tasks/orchestration.md)：下一阶段分工与调度（T3 Code：Opus 主会话统筹 + 跨模型子代理）
-- [parallel-plan.md](tasks/parallel-plan.md)：目录归属、分支规则与交付报告格式（第一阶段分工记录）；Codex 在途简报：[brief-codex.md](tasks/brief-codex.md)、[brief-codex-wave2.md](tasks/brief-codex-wave2.md)
-- [pi-spike-result.md](tasks/pi-spike-result.md)：Pi 厂商兼容与 1.5.2 API 复核
+- [iteration-1.md](tasks/iteration-1.md)：**当前迭代**（0.5.0 之后的打磨与优化，含部署与启停命令）
 
 ## 维护规则
 

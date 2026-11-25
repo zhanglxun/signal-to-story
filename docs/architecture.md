@@ -1,6 +1,6 @@
 # Signal to Story 架构规划（0.5.0）
 
-> 2026-11-17 · 2026-11-18 修订（取消 `core/`、执行面增加 HTTP 入口，见 6.2、6.5）· 分支 `0.5.0`（从 `codex/0.3` 切出）· 状态：**规划稿，在本分支上迭代**。
+> 2026-11-17 · 2026-11-18 修订（取消 `core/`、执行面增加 HTTP 入口，见 6.2、6.5）· 分支 `0.5.0`（从 `codex/0.3` 切出），2026-11-25 合并进 `main` 并上线 · 状态：**R0～R3 已完成，R4 待做**。
 >
 > 这是 0.5.0 起的**唯一架构入口**。旧文档已精简并入 `docs/`（见 [README](README.md)）。0.4 的数据库设计稿 `sense-console/supabase/design/00～13` 只作为参考，不作为基准，而且只存在于 `codex/0.4` 分支（提交 `348e41c`），不在本分支。
 >
@@ -76,12 +76,12 @@ signal-to-story/
 │   │   ├── loop/                  【R2 已完成】← sense-console/src/{harness,contracts}：循环、预检、评估、Context Pack、
 │   │   │                          预算；接口 LlmClient / SessionDriver / JobStore / ChannelSender；
 │   │   │                          纯逻辑：不读 process.env、不联网、不引用 drivers/ entry/
-│   │   ├── entry/                 【R3】http.ts（SSE 流式）与 queue.ts（认领 agent_jobs）两个入口适配器
-│   │   ├── runner.ts main.ts      认领 / 心跳 / 分派（R3 后归入 entry/queue.ts）
+│   │   ├── entry/                 【R3 已完成】http.ts（SSE 流式）与 queue.ts（认领 agent_jobs）两个入口适配器
+│   │   ├── runner.ts main.ts      认领 / 心跳 / 分派（runner.ts 尚未并入 entry/queue.ts，留待打磨）
 │   │   ├── handlers/              content-draft、video-storyboard、fetch-source、分镜、图片、想法完善、chat-turn（新）
 │   │   ├── drivers/               LlmClient（cloud / cli）、SessionDriver（新），读 Key
 │   │   ├── backends/              JobStore / 数据库访问实现
-│   │   ├── delivery/              ← notify/，改成通知投递器（扫描 `notified_at` 为空的待办）+ ChannelSender（R3）
+│   │   ├── delivery/              ← notify/，改成通知投递器（扫描 `notified_at` 为空的待办）+ ChannelSender（未做，仍为 notify/）
 │   │   ├── demo/                  ← 根目录散放的 demo-*、*-scenario【R1 已完成】
 │   │   └── Dockerfile             构建上下文为仓库根目录
 │   └── video/
@@ -165,7 +165,7 @@ flowchart TB
    - 同步修改 CLAUDE.md、README 与 docker-compose 中的路径和边界说明；
    - 实际做法：根目录新增 `package.json`（运行时一侧），Docker 镜像按进程拆开（`sense-console/Dockerfile` 只剩 Web，`workers/*/Dockerfile` 以仓库根为构建上下文），数据库与 migration 未改动。
 3. ~~**R2 并入 `workers/agent`**~~（2026-11-24 完成，Gemini 交叉评审）：先做依赖盘点（`sense-console` 页面/服务是否用到 `src/contracts` 类型；如用到，类型改用数据库生成类型或接口返回字段，Mandate 界面提示改为接口返回「可执行动作」，仅 UX），再把 `sense-console/src/{harness,contracts}` 迁入 `workers/agent/loop`，消除 worker 对 console 的反向引用，并加 import 规则检查。
-4. **R3 桥接统一并让 Chat 能在生产使用**（代码已完成 2026-11-25：回合内核、Pi / ACP 驱动、HTTP 入口、前端切换；Vite `spawn` 已删除；待 T6 上线）：在 `workers/agent/loop` 新建统一 Agent 循环，加 `chat-turn` handler 和 HTTP 入口（SSE 流式；长任务仍走队列），删掉 Vite 里的 `spawn`。
+4. **R3 桥接统一并让 Chat 能在生产使用**（2026-11-25 完成并上线：回合内核、Pi / ACP 驱动、HTTP 入口、前端切换、第 6 批数据库；Vite `spawn` 已删除；实现记录见 [modules/chat.md](modules/chat.md) 第 6 节）：在 `workers/agent/loop` 新建统一 Agent 循环，加 `chat-turn` handler 和 HTTP 入口（SSE 流式；长任务仍走队列），删掉 Vite 里的 `spawn`。
 5. **R4 前端按模块重组**：和看板一起做，不单独大挪动。
 6. **R5 按模块确认表的归属**：已提前完成规划，见 [database.md](database.md)；实施按其中 DB0～DB7，与 R2～R4 交错推进。
 
@@ -261,5 +261,6 @@ Chat、harness 出稿、`agent_session` 改稿共用同一套 Agent 循环：har
 3. ~~规划数据库设计~~（已完成，方案见 [database.md](database.md)，审计见第 9 节，决定见第 10 节）。
 4. ~~DB0～DB2c-2 实施与线上第 1～3 批推送~~（已完成，线上库至 `20261124100000`，详见 [database.md](database.md) 与 [status.md](status.md)）。
 5. ~~DB2c-3 第 4 批~~（2026-11-23 上线核对通过）。
-6. ~~DB3 建表、DB4、DB5、V1 退役~~（代码完成，合并为最终批次 `0.5.0-step5.sql`，见 [database.md](database.md) DB-D17，待 Codex 执行）。
-7. 下一步：执行最终批次并部署 0.5 控制台与读者站 → ~~R2~~（已完成）→ **R3**：回合内核已在 `workers/agent/loop/chat`；下一步 DB3b（`node_claim_job` 等）与 HTTP/SSE 入口、`PiCloudDriver`，分工见 [tasks/parallel-plan.md](tasks/parallel-plan.md)。
+6. ~~DB3 建表、DB4、DB5、V1 退役~~（合并为最终批次 `0.5.0-step5.sql`，见 [database.md](database.md) DB-D17，2026-11-24 已执行）。
+7. ~~R3 与第 6 批~~（2026-11-25 完成，0.5.0 合并进 `main` 并上线）。
+8. 下一步：迭代 1「打磨与优化」，见 [tasks/iteration-1.md](tasks/iteration-1.md)；R4（前端按域重组与看板）在其中按需推进。

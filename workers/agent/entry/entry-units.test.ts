@@ -82,7 +82,7 @@ describe("SSE writer", () => {
   })
 })
 
-describe("database error mapping (next-phase.md T3b)", () => {
+describe("database error mapping (docs/modules/chat.md 6.3)", () => {
   it("maps the agreed SQLSTATEs", () => {
     expect(mapDbError({ message: "上一轮还在生成", code: "23505", hint: "turn_in_progress" })).toMatchObject({ code: "turn_in_progress", status: 409 })
     expect(mapDbError({ message: "dup", code: "23505" })).toMatchObject({ code: "internal_error", status: 500 })

@@ -4,9 +4,9 @@
 
 产品中文名「星火工厂」，英文名「Signal to Story」。`sense-console`、`sense-site` 只是工程目录名。企业及版权标识暂用 `susesne.cn`。线上控制台：https://story.susense.cn/ （目前只部署了 V1）。
 
-## 当前分支：0.5.0
+## 当前版本：0.5.0（已合并进 `main`）
 
-0.5.0 从 `codex/0.3` 切出，正在按职责重整目录结构。**先读 [docs/architecture.md](docs/architecture.md)**：分层、目标目录、模块调用关系和调整顺序（R0～R5）都在里面。所有文档的入口是 [docs/README.md](docs/README.md)。
+0.5.0 按职责重整了目录结构，并让 Chat 在生产可用；当前在做迭代 1「打磨与优化」（[docs/tasks/iteration-1.md](docs/tasks/iteration-1.md)）。**先读 [docs/architecture.md](docs/architecture.md)**：分层、目标目录、模块调用关系和调整顺序（R0～R5）都在里面。所有文档的入口是 [docs/README.md](docs/README.md)。
 
 ## 核心原则
 

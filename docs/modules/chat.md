@@ -1,15 +1,15 @@
 # 标准 Chat Agent 入口设计（`modules/chat`）
 
-> 2026-11-24 · 状态：**设计已确认（决定见第 5 节）；代码已实现（2026-11-25，T1～T5），待上线联调（T6）**。`/chat`、`/h5/chat` 已切到新页面，前端按 2.4「结束规则」以 `done` 为终止事件；前端另有只在客户端使用的错误码 `node_unreachable`、`node_mismatch`、`empty_stream`，不属于线上协议；第 4.2 节涉及的 Pi / ACP 具体 API 待 R3.0 spike 与 R3-B 真机验证。涵盖「工作台 → 智能对话与速记」（`/chat` 与 `/h5/chat`）的产品定位、交互协议、Runtime & Model Catalog 机制，以及 Pi 精简 MVP 内核与部署边界探讨。
+> 2026-11-24 · 2026-11-25 更新 · 状态：**已上线**。设计决定见第 5 节，实现记录与线上验证见第 6 节。`/chat`、`/h5/chat` 已切到新页面，前端按 2.4「结束规则」以 `done` 为终止事件；前端另有只在客户端使用的错误码 `node_unreachable`、`node_mismatch`、`empty_stream`，不属于线上协议。涵盖「工作台 → 智能对话与速记」（`/chat` 与 `/h5/chat`）的产品定位、交互协议、Runtime & Model Catalog 机制，以及 Pi 精简 MVP 内核与部署边界。
 
 ## 1. 现状事实与目标定位
 
-### 1.1 现状事实
+### 1.1 现状事实（2026-11-25）
 
-1. **前端现状**：`sense-console/src/pages/chat-assistant-page.tsx` 当前是 0.4 遗留形态——消息全部保存在组件 `useState` 内存中，刷新即丢；顶部硬分为「对话测试 / 极简速记 / 自循环出稿」三选一模式；`harness_draft` 在浏览器内运行简化版循环，违背 [../architecture.md](../architecture.md)「Console 不运行 Agent 循环」的边界。
-2. **执行桥现状**：对话接口直连 Vite 开发插件 `sense-console/dev/local-bridge-plugin.ts`（`apply: "serve"`，生产静态包中不存在），`stream: false` 非流式、无多轮历史上下文。
-3. **数据库现状**：DB3 基础表与 RPC（`chat_sessions`、`chat_messages`、`send_chat_message`、`node_append_chat_message`）已在 `supabase/migrations/20261126100200_chat.sql` 编写完成，随 `0.5.0-step5.sql` 待执行（见 [../status.md](../status.md)）。但目前表结构只有纯文本 `content`，缺少结构化消息块 `parts`、会话运行时配置 `runtime_config` 及节点能力目录（待通过 DB3b 增补，见 [../tasks/db3b-chat-runtime-catalog.md](../tasks/db3b-chat-runtime-catalog.md)）。
-4. **DB3 的回合正确性缺口（评审补充）**：没有「同一会话单活跃回合」约束；`chat_turn` 沿用默认 `max_attempts = 2` 且助手消息写入不幂等（崩溃重试会写重复回复）；助手消息与用户消息只靠 `seq` 相邻配对（并发或重新生成时会错位）；`max_rounds = 1`。均在 DB3b「需求 0」中修补。
+1. **前端**：`sense-console/src/modules/chat`，`/chat`（AppShell 内）与 `/h5/chat`（全屏）渲染同一个 `ChatPage`；会话、消息持久化在 Supabase；经 `fetch` + SSE 直连所选节点的 HTTP 入口。0.4 的旧 Chat 页、`local-bridge-service` 与 Vite `spawn` 桥（`dev/`）已删除。
+2. **执行面**：`workers/agent` 一个进程同时跑队列入口与 HTTP/SSE 入口（设置 `SENSE_HTTP_PORT` 时开启）；云端模型走 `PiCloudDriver`，本机 CLI 走 `AcpSessionDriver`，两者都实现 `workers/agent/loop/chat/driver.ts` 的 `AgentSessionDriver`。
+3. **数据库**：DB3（表与基础 RPC）与 DB3b（回合正确性、`parts`、`runtime_config`、能力目录、`node_claim_job`）均已上线（第 5、6 批），见第 6.1 节。
+4. **线上**：本机节点开启 HTTP 入口后，线上控制台已跑通真实回合（第 6.4 节）；公网节点（隧道 / 云端容器）尚未部署。
 
 ### 1.2 目标定位（已确认）
 
@@ -143,7 +143,7 @@ sequenceDiagram
 
 ### 2.6 费用与上下文预算（评审新增）
 
-1. **单轮费用上限**：每个 `chat_turn` 带 `budget_cents`（默认 50，数据库夹紧在 1～500，见 [../tasks/db3b-chat-runtime-catalog.md](../tasks/db3b-chat-runtime-catalog.md) 需求 0 第 5 点）。`handlers/chat-turn` 在**每次模型调用前**累计本任务已记录的 `usage.costCents`，超出即停，已产出部分以 `error / budget_exceeded` 落库。与 `max_rounds`（默认 8）一起，防止工具循环失控。各厂商单价由节点配置提供（不进数据库）；没有单价的模型按 0 计，只受 `max_rounds` 约束，目录里标注「未计价」。
+1. **单轮费用上限**：每个 `chat_turn` 带 `budget_cents`（默认 50，数据库夹紧在 1～500，见 6.1）。`handlers/chat-turn` 在**每次模型调用前**累计本任务已记录的 `usage.costCents`，超出即停，已产出部分以 `error / budget_exceeded` 落库。与 `max_rounds`（默认 8）一起，防止工具循环失控。各厂商单价由节点配置提供（不进数据库）；没有单价的模型按 0 计，只受 `max_rounds` 约束，目录里标注「未计价」。
 2. **按 token 截断上下文**：`node_chat_context` 只按条数（≤ 100）取历史，消息长度不受控（单条最多 20 万字）。`loop/` 中的上下文组装按以下规则在 token 维度截断：
    - **预算**：`输入上限 = 运行时 context_window − 预留输出（max_output_tokens，默认 4096）− 工具定义开销`；`context_window` 由节点在能力目录中按运行时上报（见 3.4），未知时取保守值 32K。
    - **估算**：MVP 不引入分词库，按字符估算（中日韩字符 ≈ 1 token/字、其余 ≈ 1 token/4 字符，再乘 1.1 安全系数）；模型返回真实 `inputTokens` 后，若估算偏差大于 20% 写一条 warn 日志，后续再调系数。
@@ -185,6 +185,9 @@ flowchart TB
    - **真正的统一层在 `workers/agent/drivers/` 的 `AgentSessionDriver` 接口**：向上对 `chat-turn` 输出同一套流式事件（`text_delta` / `reasoning_delta` / `tool_call` / `plan_update` / `permission_request`），向下分别对接 **Pi 云端内核** 与 **ACP 本地 CLI 客户端**。
 
 ### 3.3 对照现状代码的 3 处明显偏离（必须修补的断层）
+
+> 2026-11-25：三处均已修补——模型页 / CLI 页只读展示节点目录（不再写 `.env.local`）、`runner_nodes.capabilities` 能力目录、Vite 桥删除并改用 ACP 驱动。下表保留评审时的原始判断。
+
 
 | # | 现状偏离点 | 代码位置（事实） | 导致的断层 |
 | --- | --- | --- | --- |
@@ -234,7 +237,7 @@ flowchart TB
    - 发送消息时携带 `{ runtime_id, thinking_effort }` 直接 POST 到所选节点的 HTTP 地址，该节点即执行者（见 2.4）；浏览器不传 `target_node_id`，由节点以自己的 id 填入 payload 作记录与兜底校验，保证“点本地 CLI 只会由对应的本地节点执行”。
 4. **节点 HTTP 地址的可达性（评审补充）**：
    - `http_endpoint_hint` 对同组织成员可见，云端节点填公网 HTTPS 地址即可。
-   - 线上控制台（`https://story.susense.cn`）访问本机节点 `http://localhost:<port>`：Chrome 对公网页面访问本地地址有 Private/Local Network Access 限制（需要预检响应 `Access-Control-Allow-Private-Network: true`，新版本还会弹出本地网络权限提示），Safari 会按混合内容拦截。**MVP 约定：本机 CLI 节点只配合本地启动的控制台使用**；需要从线上台用本机 CLI 时走隧道（得到 HTTPS 地址），不在 MVP 里解决浏览器直连 localhost 的兼容问题。
+   - 线上控制台（`https://story.susense.cn`）访问本机节点 `http://localhost:<port>`：Chrome 对公网页面访问本地地址有 Private/Local Network Access 限制（需要预检响应 `Access-Control-Allow-Private-Network: true`，新版本还会弹出本地网络权限提示），Safari 会按混合内容拦截。**MVP 约定：本机 CLI 节点只配合本地启动的控制台使用**；需要从线上台用本机 CLI 时走隧道（得到 HTTPS 地址），不在 MVP 里解决浏览器直连 localhost 的兼容问题。**实测（2026-11-25）**：在同一台机器上，Chrome 打开线上控制台可直接访问 `http://localhost:8787` 的节点并完成回合（需 `SENSE_HTTP_ALLOWED_ORIGINS` 含控制台域名）；Safari 与其他设备未验证。
 5. **ACP 会话的节点亲和性（评审补充）**：ACP 的 `acp_session_id` 与 CLI 本地会话文件只存在于那台机器上。会话一旦在某节点的 ACP 运行时上跑过，`runtime_config.node_id` 即被锁定；用户切换到其他节点或从 CLI 切到 API 模型时，前端提示「将以纯文本历史开启新上下文」，worker 清空 `exec_session` 并用 `node_chat_context` 的文本历史重建上下文（API 模型本来就每轮回灌历史，没有这个问题）。
 
 ---
@@ -261,9 +264,9 @@ flowchart TB
 
 **评审补充：Pi 依赖风险与 spike。** `pi-ai` / `pi-agent-core` 是单人维护、迭代很快的库：① 锁定精确版本（不用 `^`），升级单独提交；② `pi-*` 类型只允许出现在 `drivers/pi-cloud.ts` 内，`loop/` 只认自己的 `ChatStreamEvent`，以便将来替换；③ 动工前先做半天 spike，用真实 Key 逐个验证 Qwen（DashScope 兼容模式）、DeepSeek Reasoner、Kimi、GLM 的流式文本、思考字段（如 `reasoning_content`）与工具调用是否被正确解析，不兼容的厂商先不进目录。
 
-**Spike 结论（2026-11-24，详见 [../tasks/pi-spike-result.md](../tasks/pi-spike-result.md)）**：
+**Spike 结论（2026-11-24，1.5.2 接入要点见 6.2）**：
 
-- 实测包为 `@mariozechner/pi-*@0.73.1`，该包名已废弃（2026-05 起停更），后续在 **`@earendil-works/pi-ai` / `@earendil-works/pi-agent-core`** 继续发布（当前 1.x）。**决定**：R3-A 引入新包名并锁定 **`@earendil-works/pi-ai@1.5.2` / `@earendil-works/pi-agent-core@1.5.2`**。API 已复核，与 0.73.1 有 6 处差异（`streamFn` 必填、系统提示改为消息、不再导出 `Type`、新增 `beforeToolCall` / `finishTurn` 钩子等），见 spike 报告第 5 节；预算闸门接 `finishTurn`。**平台工具的权限确认由 worker 的回合编排在执行工具前统一处理**（白名单 + `enqueue_content_draft` 等高成本工具先发 `permission_request`），驱动不使用 `beforeToolCall` 做这件事；`requestPermission` 只给 ACP CLI 自身的敏感动作用。2026-11-24 交叉评审后 `AgentSessionDriver` 增加了 `sessionId` 与本轮原始输入 `turn`（见 `workers/agent/loop/chat/driver.ts` 规则 1～6）。
+- 实测包为 `@mariozechner/pi-*@0.73.1`，该包名已废弃（2026-05 起停更），后续在 **`@earendil-works/pi-ai` / `@earendil-works/pi-agent-core`** 继续发布（当前 1.x）。**决定**：R3-A 引入新包名并锁定 **`@earendil-works/pi-ai@1.5.2` / `@earendil-works/pi-agent-core@1.5.2`**。API 已复核，与 0.73.1 有 6 处差异（`streamFn` 必填、系统提示改为消息、不再导出 `Type`、新增 `beforeToolCall` / `finishTurn` 钩子等），见 6.2；预算闸门接 `finishTurn`。**平台工具的权限确认由 worker 的回合编排在执行工具前统一处理**（白名单 + `enqueue_content_draft` 等高成本工具先发 `permission_request`），驱动不使用 `beforeToolCall` 做这件事；`requestPermission` 只给 ACP CLI 自身的敏感动作用。2026-11-24 交叉评审后 `AgentSessionDriver` 增加了 `sessionId` 与本轮原始输入 `turn`（见 `workers/agent/loop/chat/driver.ts` 规则 1～6）。
 - 首批目录：Qwen `qwen3.8-flash`、DeepSeek `deepseek-chat` / `deepseek-reasoner`（5 项全通过）。Kimi、GLM 与 `qwen3.7-max` 未实测，不进首批。
 - 驱动必须处理的坑：① DashScope 端点必须显式传完整 `compat`（否则 `system` 被改写为 `developer` 报 400）；② 思考型模型 `model.reasoning` 恒为 `true`，用户选「关闭思考」时只把本轮 `reasoning` 传 `undefined`；③ 中止不抛异常，以 `stopReason = "aborted"` 结束，驱动据此返回 `cancelled`；④ 自定义模型 `cost` 默认为 0，单价由节点配置注入，否则只受 `max_rounds` 约束（目录标 `priced: false`）。
 
@@ -302,3 +305,46 @@ flowchart TB
 | C6 | 重新生成 | 保留全部版本，以 `reply_to_message_id` 归组，前端折叠为「版本 1/2/…」；模型上下文只取最新 `completed` 版本；不加 `superseded` 状态（见 2.3） |
 | C7 | 回合时序 | HTTP 主路径：浏览器直接 POST 到所选节点，节点代用户写消息并 `node_claim_job` 立即认领；队列轮询不认领 `chat_turn`（见 2.4） |
 | C8 | MVP 约定 | Slash 命令由前端直调 RPC、不经过模型（2.2）；`/clear` 即新建会话；本机 CLI 节点只配合本地控制台，线上台要用时走隧道（3.4 第 4 点） |
+
+---
+
+## 6. 实现记录（2026-11-25）
+
+> 由已删除的过程文档（DB3b 任务书、Pi spike 报告、R1→R3 计划、T0～T6 分工）精简而来，原文见 git 历史（提交 `f80cb51` 及之前）。
+
+### 6.1 数据库（DB3b，迁移 `20261127100000_chat_runtime_catalog`，第 6 批已上线）
+
+| 项 | 实现 |
+| --- | --- |
+| 回合正确性 | `chat_messages.reply_to_message_id`（助手消息指向同会话 user 消息）；`unique (agent_job_id) where role = 'assistant'`，重复写入返回已有行；同一会话只允许一个 `queued / running` 的 `chat_turn`（违反时 `SQLSTATE 23505`、hint `turn_in_progress`）；`chat_turn` 强制 `max_attempts = 1`，`max_rounds` 默认 8、上限 20；`budget_cents` 默认 50、夹紧 1～500（触发器保证任何途径入队都生效） |
+| 结构化消息 | `chat_messages.parts jsonb`（数组，≤ 256KB）与 `status`（`completed / cancelled / error`）；`content` 保留为纯文本摘要 |
+| 会话配置 | `chat_sessions.runtime_config jsonb`（≤ 8KB，浏览器可改该列） |
+| RPC | `send_chat_message` 6 参（`p_parts`、`p_runtime`、`p_target_node_id`）；`regenerate_chat_turn`（不新增 user 消息）；`node_chat_context` 返回 `{ turn, session, messages, work_item, documents }`，重新生成时只到原 user 消息为止，同组版本只取最新 `completed`；`node_append_chat_message` 9 参，`p_finish` 同事务完成任务，`p_title` 只在标题为空时写入，返回 `{ message_id, seq, status, job_status, existing }`；`node_report_capabilities`（≤ 32KB、`runtimes` ≤ 64、`id` 格式校验、按键名精确拒绝 `api_key` 等与 `sk-` / `stn_` 值）；`node_claim_job` 按 id 认领；`node_claim` 尊重 `target_node_id`。`node_*` 共 15 个 |
+| 清理与推送 | 超过 10 分钟无人认领的 `chat_turn` 标为 `failed`（`chat_turn_unclaimed`），发送 / 重新生成 / 认领时顺带清扫本会话；`chat_messages` 加入 `supabase_realtime` 发布 |
+| 额外防护 | 节点侧 Chat RPC 要求会话所有人就是任务创建人（防止经 `enqueue_agent_job` 伪造 `chat_turn` 读写他人会话） |
+
+测试：`supabase/tests/db/chat-runtime-catalog-db.test.ts`、`testing/db/release-step6.test.ts`。未决定：是否在数据库层彻底禁止手工入队 `chat_turn`。
+
+### 6.2 Pi 驱动（`@earendil-works/pi-ai@1.5.2` / `pi-agent-core@1.5.2`）
+
+- **用 `runAgentLoop`，不用 `agentLoop`**：后者内部没有 `catch`，`streamFn` 或钩子抛异常时事件流永不结束。`streamFn` 必填，传 `@earendil-works/pi-ai/compat` 导出的 `streamSimple`。
+- **消息**：系统提示是 `role: "system"` 消息，每条消息必须带 `timestamp`；全部消息作为 prompts 传入、`context.messages` 为空（工具声明并入最后一条 system 消息）；历史消息的 `message_end` 用 WeakSet 排除，不重复计用量。工具 `parameters` 直接用 JSON Schema，不引入 schema 库。
+- **预算闸门**：首个请求前驱动先调一次 `beforeModelCall`，之后在 `finishTurn` 中调用，不通过返回 `{ action: "end" }` 立即结束且不重试。`beforeToolCall` 不用于平台工具权限（权限在 `host.executeTool`）。SDK 默认失败重试改为 1 次（重试对 `max_rounds` 不可见）。
+- **厂商坑**：DashScope（Qwen）必须显式传完整 `compat`（`thinkingFormat: "qwen"`、`supportsDeveloperRole: false`、`supportsStore: false`、`supportsReasoningEffort: false`、`maxTokensField: "max_tokens"`），否则 `system` 被改写为 `developer` 报 400；思考型模型 `model.reasoning` 恒为 `true`，用户关闭思考时只把本轮 `reasoning` 传空；中止以 `stopReason = "aborted"` 结束而不抛异常；自定义模型单价默认为 0，由节点配置注入（否则目录标 `priced: false`）。
+- **厂商实测**（spike 在 0.73.1 上做）：`qwen3.8-flash`、`deepseek-chat`、`deepseek-reasoner` 五项（流式、思考、工具循环、中止、用量）全通过；Kimi、GLM、`qwen3.7-max` 未实测。1.5.2 上 `qwen3.8-flash` 已在线上真实回合中验证流式与落库，其余厂商与五项全量复测待做。
+- **依赖面**：`pi-ai` 带 Anthropic / OpenAI / Google / Bedrock 四家 SDK，worker 镜像较大；`pi-telemetry` 无网络调用。
+
+### 6.3 HTTP 入口与驱动约定
+
+- 数据库错误映射：`23505` + `turn_in_progress` → `409 turn_in_progress`；`node_claim_job` 返回 `null` → `409 claim_failed`（worker 随即以用户身份取消该回合释放会话）；`42501` → `403 forbidden`。
+- `budget_cents`、`max_rounds` 放在 `p_runtime` 里传，由数据库夹紧。
+- 驱动选择：`api:*` 经 `runtime-registry`；`acp:*` 经 `drivers/acp-config.ts` + `acp-registry`。**重新生成走 ACP 时**先关闭该会话的子进程并以 `execSession: null` 运行，否则 CLI 会在含旧回复的上下文上继续。
+- ACP 驱动：`@agentclientprotocol/sdk@2.6.0`，仓库内假 ACP Agent 覆盖全部协议路径；`opencode`、`codex-acp` 真机未验证，启动参数见 `drivers/acp-config.ts`。
+- 节点环境变量（HTTP 入口、运行时目录、ACP）全部见 `workers/agent/README.md`。
+
+### 6.4 线上验证（2026-11-25）
+
+- 第 6 批已执行：迁移版本 `20261127100000`，`node_*` = 15。
+- 本机节点（`SENSE_HTTP_PORT=8787`、`SENSE_API_RUNTIMES=qwen_flash`）上报 `supports_http_sse: true` 与 `api:qwen:qwen3.8-flash`；线上控制台用 Chrome 发起的 2 轮回合均 `succeeded`，user / assistant 消息各 2 条落库。
+- 未验证：公网节点（HTTPS / 隧道）、`/h5/chat` 在手机上、ACP 真机、DeepSeek 等其他厂商、停止与重新生成在真实模型上的表现。
+

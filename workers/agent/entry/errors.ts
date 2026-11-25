@@ -41,7 +41,7 @@ export class HttpError extends Error {
 }
 
 /**
- * Database error → HTTP (next-phase.md T3b conventions):
+ * Database error → HTTP (docs/modules/chat.md 6.3):
  *  - SQLSTATE 23505 with hint turn_in_progress → 409 turn_in_progress
  *  - 42501 (insufficient privilege, raised by the RPCs' own checks) → 403 forbidden
  *  - 23514 check_violation / 22P02 invalid text representation / P0002 no data → 422 invalid_request

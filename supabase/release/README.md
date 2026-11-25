@@ -18,7 +18,7 @@ npx vitest run testing/db/release*.test.ts   # 在模拟线上状态的 PGlite �
 | 第 3 批 | `0.5.0-step3.sql` | DB2c-2（`20261124100000`） | 已在线上执行（2026-11-21 核对通过：`max=20261124100000`、`runner_nodes=0`、`node_*=12`、`agent_jobs_node_id_fkey` 存在） |
 | 第 4 批 | `0.5.0-step4.sql` | DB2c-3（`20261125100000`：AI 直接写草稿、退役 `content_ai_proposals`） | 已在线上执行（2026-11-23 核对通过：`max=20261125100000`、`content_ai_proposals` 已删、`node_*=12`；真实出稿一次跑通） |
 | 第 5 批（最终） | `0.5.0-step5.sql` | DB4 + DB5 + DB3 + V1 退役（`20261126100000`～`20261126100300`） | 已生成并通过 PGlite 演练，待 Codex 执行（给 Codex 的提示词：[0.5.0-step5-codex-prompt.md](0.5.0-step5-codex-prompt.md)） |
-| 第 6 批 | `0.5.0-step6.sql` | DB3b（`20261127100000`：Chat 回合正确性、结构化消息、运行时配置、节点能力目录、`node_claim_job`） | 已生成，待决定上线时间（必须在第 5 批之后） |
+| 第 6 批 | `0.5.0-step6.sql` | DB3b（`20261127100000`：Chat 回合正确性、结构化消息、运行时配置、节点能力目录、`node_claim_job`） | 2026-11-25 已执行并核对 |
 
 ---
 
@@ -378,7 +378,7 @@ npx vitest run testing/db/release*.test.ts   # 在模拟线上状态的 PGlite �
 
 ## 0.5.0 第 6 批（DB3b：Chat 运行时与节点能力目录）
 
-**做什么**：在一个事务里执行 1 个迁移 `20261127100000_chat_runtime_catalog`（任务书 [docs/tasks/db3b-chat-runtime-catalog.md](../../docs/tasks/db3b-chat-runtime-catalog.md) 需求 0～6）。不删表、不删数据，已有会话和消息原样保留（新列取默认值）。
+**做什么**：在一个事务里执行 1 个迁移 `20261127100000_chat_runtime_catalog`（设计与实现见 [docs/modules/chat.md](../../docs/modules/chat.md) 第 6.1 节）。不删表、不删数据，已有会话和消息原样保留（新列取默认值）。
 
 1. 前置检查：迁移历史最后一条必须是 `20261126100300`（第 5 批已执行）；`node_claim_job` 还不存在；**没有 `queued` / `running` 的 `chat_turn` 任务**（回合任务的形状和 `node_append_chat_message` 签名都变了）。任一不满足就中止。
 2. `chat_messages` 新增 `parts`（≤ 256KB 数组）、`status`（`completed / cancelled / error`）、`reply_to_message_id`（只给 assistant 行，指向本会话的 user 消息）；每个任务最多一条助手消息（部分唯一索引）。

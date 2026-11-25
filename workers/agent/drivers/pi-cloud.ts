@@ -3,7 +3,7 @@
  * @earendil-works/pi-agent-core@1.5.2 (agent loop) + @earendil-works/pi-ai@1.5.2 (provider streams).
  *
  * Contract: workers/agent/loop/chat/driver.ts rules 1–6. Design: docs/modules/chat.md 4.2 and
- * docs/tasks/pi-spike-result.md sections 4.2 and 5.
+ * docs/modules/chat.md 6.2.
  *
  * All pi-* types stay inside drivers/pi-*.ts; the rest of the worker only sees the loop's own types
  * (AgentSessionDriver, DriverEvent, …) and the plain PiRuntimeSpec below.

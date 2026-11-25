@@ -1,5 +1,5 @@
 // @vitest-environment node
-// DB3b (docs/tasks/db3b-chat-runtime-catalog.md §4): chat turn correctness, structured messages, regenerate,
+// DB3b (docs/modules/chat.md §6.1): chat turn correctness, structured messages, regenerate,
 // node context and targeted claims, and the node runtime catalog — all enforced by the database.
 import { afterEach, beforeEach, describe, expect, it } from "vitest"
 

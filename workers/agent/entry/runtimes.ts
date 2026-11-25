@@ -1,5 +1,5 @@
 /**
- * Which driver runs a chat turn (docs/tasks/next-phase.md T3b): `api:*` through runtime-registry
+ * Which driver runs a chat turn (docs/modules/chat.md 6.3): `api:*` through runtime-registry
  * (PiCloudDriver), `acp:*` through drivers/acp-config + acp-registry. Tests inject their own resolver.
  */
 import type { AgentSessionDriver } from "../loop/chat/driver"

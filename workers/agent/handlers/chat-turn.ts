@@ -1,5 +1,5 @@
 /**
- * chat_turn handler (docs/modules/chat.md 2.3–2.6, next-phase.md T3b): for a job this node already
+ * chat_turn handler (docs/modules/chat.md 2.3–2.6, 6.3): for a job this node already
  * claimed, node_chat_context → buildChatContext → runChatTurn with real ports:
  *  - emit → the SSE writer (swallows writes after a disconnect; a disconnect is NOT a cancel)
  *  - recordUsage → node_record_step (kind generate, usage tokens / cost / model)

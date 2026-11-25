@@ -116,5 +116,5 @@ flowchart LR
    - 任何写文件、执行 Shell 命令、联网发送或修改配置：**禁止自动放行**，必须转成 `permission_request` 事件挂起等待前端人类显式确认（或直接拒绝），防范外部收录信源夹带 Prompt Injection 诱导本地 CLI 越权操作；
    - 用户无响应（超时，建议 5 分钟）或 SSE 连接丢失：一律按**拒绝**回复 Agent，回传通道见 [modules/chat.md](modules/chat.md) 2.5；
    - 若适配器在选项中提供「总是允许」（`allow_always`），MVP 不展示该选项，只提供单次允许 / 拒绝。
-4. **节点归属隔离**：只有部署在本机且通过 `runner_nodes` 注册的节点才在 `capabilities.runtimes` 中声明可用本地 ACP CLI；云端无头节点不暴露本地 CLI 选项，请求直接发往目标节点的 HTTP 入口（详见 [modules/chat.md](modules/chat.md) 2.4 与 [tasks/r1-to-r3-plan.md](tasks/r1-to-r3-plan.md)）。
+4. **节点归属隔离**：只有部署在本机且通过 `runner_nodes` 注册的节点才在 `capabilities.runtimes` 中声明可用本地 ACP CLI；云端无头节点不暴露本地 CLI 选项，请求直接发往目标节点的 HTTP 入口（详见 [modules/chat.md](modules/chat.md) 2.4）。
 5. **子进程生命周期（评审补充）**：每个活跃会话最多一个 ACP 子进程；回合结束后保留一段空闲时间（如 10 分钟）便于下一轮直接 `session/prompt`，超时即关闭，下轮按 `exec_session` 走 `session/load`（Agent 未声明 `loadSession` 能力时，退化为新会话 + 文本历史）。节点级限制并发子进程数（如 3 个），超出时拒绝新回合并提示。worker 退出时必须清理全部子进程。

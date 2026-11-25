@@ -1,8 +1,8 @@
 /**
  * AgentSessionDriver — the single seam between the chat turn runner (loop/) and a model runtime
  * (drivers/): PiCloudDriver for cloud APIs, AcpSessionDriver for local CLIs over ACP.
- * docs/modules/chat.md 3.2 · frozen for wave 2 by docs/tasks/parallel-plan.md §2: change it only
- * after updating that doc and telling the other tracks.
+ * docs/modules/chat.md 3.2. Both drivers and their tests depend on this contract: change it only together
+ * with docs/modules/chat.md and every implementation.
  *
  * Rules every driver follows (revised after the 2026-11-24 cross-review):
  * 1. Gate model requests with host.beforeModelCall() and stop without calling the model when it returns
