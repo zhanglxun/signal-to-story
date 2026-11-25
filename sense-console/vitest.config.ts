@@ -10,5 +10,9 @@ export default defineConfig({
     setupFiles: "./src/test/setup.ts",
     include: ["src/**/*.test.{ts,tsx}"],
     css: true,
+    // Unit tests must never reach a real backend: blank out the Supabase settings a developer's
+    // .env.local may hold, so every machine runs the suite like a clean checkout. Tests that need a
+    // client mock @/lib/supabase explicitly.
+    env: { VITE_SUPABASE_URL: "", VITE_SUPABASE_PUBLISHABLE_KEY: "" },
   },
 })
