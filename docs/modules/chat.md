@@ -133,6 +133,7 @@ sequenceDiagram
 - `thinking_effort` 取值 `"off" | "low" | "medium" | "high"`，运行时不支持时忽略。
 - **SSE 线格式**：每个事件为 `event: <类型>\ndata: <单行 JSON>\n\n`，类型与字段见 2.3 表；保活为 `: ping\n\n`；**结束规则（2026-11-24 评审后修订）**：worker 先落库再宣布结果——回合出错时依次发 `error`、`done(status: "error")`；正常或中断时只发 `done`。因此 **`done` 是唯一的正常终止事件**，收到 `done` 时消息已在库里；只有落库本身失败时，流以 `error`（`code: "persist_failed"`）结束且没有 `done`。前端收到 `error` 后应继续读到 `done` 或流结束为止（第一波实现收到 `error` 即停止读取，因 worker 已先落库所以结果正确，第二波 B 统一改为以 `done` 为准）。`data` 中字段名用 camelCase。
 - **流开始前的错误**用普通 HTTP 状态码 + `{ code, message }` JSON 返回：`401 unauthorized`、`403 forbidden`（无 `agent.dispatch` 等）、`409 turn_in_progress`（会话已有活跃回合）、`409 claim_failed`、`422 invalid_request`（含未知 `runtime_id`）、`429 rate_limited`、`503 runtime_unavailable`。流开始后的错误一律走 `error` 事件。
+- **实现补充（T3b，2026-11-25）**：另有 `404 not_found`（未知路径、权限请求不存在）、`405 method_not_allowed`、`500 internal_error`（不回显 SQL 细节）；流开始后读取上下文失败用 `error.code = "context_failed"`，同样先落库再发 `error`、`done`。浏览器断开时挂起中的权限请求记为 `deny`。节点需配置 `SENSE_NODE_ID`（数据库暂无返回节点 id 的 RPC；配错时每轮 `409 claim_failed`，worker 会立即以用户身份取消该回合释放会话）。HTTP 仅在设置 `SENSE_HTTP_PORT` 时开启，默认只监听 `127.0.0.1`；全部变量见 `workers/agent/README.md`。
 - `parts` 元素形状与 2.3 表「落库 `parts[]` 元素」列一致；user 消息的引用芯片为 `{ type: "context_ref", kind: "work_item" | "document", id, label }`。
 
 ### 2.5 工具身份与权限确认回传（评审新增）

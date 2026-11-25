@@ -22,7 +22,7 @@
 | 视频工坊与 Python 视频 worker | 已有（DB5：AI 直接写草稿分镜、无成本账本；引擎仅跑 dry-run） | 待最终批次 | 未真环境联调；视频 worker 仍用 `service_role`，切换节点令牌留待后续 |
 | 读者站 `sense-site` | 已改读 `content_documents.published_*`（anon 列授权）；专题 / 资源 / 读者账号 / 收藏下线 | 待最终批次 | 最终批次后部署 |
 | 知识库 | 读仓库 `knowledge-base/` 文件（worker 直接读，控制台只读展示）；决定记忆下线 | 两表待最终批次删除 | — |
-| Chat | 表与 RPC 已有（DB3）；DB3b 代码完成（step6 待上线）；`PiCloudDriver`、ACP 驱动已实现（均未用真实 Key / 真实 CLI 验证）；模型页 / CLI 页改为只读展示节点上报的能力目录（不再写 `.env.local`）；新 Chat 界面第一波已合并（`sense-console/src/modules/chat`，临时路由 `/chat-next`，`VITE_CHAT_TRANSPORT=mock` 下可完整演示）；回合内核与 HTTP/SSE 入口在 `feat/r3-core` 开发中 | 待最终批次 | 生产不可用：真实传输要等 DB3b 与 HTTP 入口；旧 `/chat` 仍在用 |
+| Chat | 表与 RPC 已有（DB3）；DB3b 代码完成（step6 待上线）；worker HTTP/SSE 入口与 `chat-turn` 处理器已实现（只用假驱动验证）；`PiCloudDriver`、ACP 驱动已实现（均未用真实 Key / 真实 CLI 验证）；模型页 / CLI 页改为只读展示节点上报的能力目录（不再写 `.env.local`）；新 Chat 界面第一波已合并（`sense-console/src/modules/chat`，临时路由 `/chat-next`，`VITE_CHAT_TRANSPORT=mock` 下可完整演示）；回合内核与 HTTP/SSE 入口在 `feat/r3-core` 开发中 | 待最终批次 | 生产不可用：真实传输要等 DB3b 与 HTTP 入口；旧 `/chat` 仍在用 |
 
 ## 2. 本地验证命令
 

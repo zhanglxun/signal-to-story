@@ -97,7 +97,7 @@
 | T1 DB3b | Opus 子代理 | `t1-db3b` | 已合并 | Claude 验收 | `61e4572` |
 | T2 ACP 驱动 | Opus 子代理 | `t2-acp-driver` | 已合并 | Claude 验收 | `162bccf` |
 | T3a Pi 驱动 | Opus 子代理 | `t3a-pi-driver` | 已合并 | Claude 验收 | `bc7bf72` |
-| T3b HTTP 入口 | Opus 子代理 | `t3b-http-entry` | 进行中 | Claude 验收 | — |
+| T3b HTTP 入口 | Opus 子代理 | `t3b-http-entry` | 已合并 | Claude 验收 | `9f915af` |
 | T4 配置页 | Opus 子代理 | `t4-config-pages` | 已合并 | Claude 验收 | `9258edb` |
-| T5 前端切换 | Gemini | `feat/chat-ui-3` | 等 T3b | Opus | — |
+| T5 前端切换 | Opus 子代理 | `t5-chat-switch` | 进行中 | Claude 验收 | — |
 | T6 上线 | 主会话 + 用户 | — | 等 T2、T4、T5 | — | — |

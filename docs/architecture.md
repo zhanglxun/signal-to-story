@@ -245,7 +245,7 @@ Chat、harness 出稿、`agent_session` 改稿共用同一套 Agent 循环：har
 | --- | --- | --- |
 | Supabase（Postgres、Auth、Data API、Edge Functions、门禁） | 托管服务 | 是（Supabase 提供） |
 | `sense-console` / `sense-site` | 静态文件（nginx） | 是 |
-| `workers/agent` | `npm run worker:agent`（本机或容器） | R3 起有 HTTP 端口；队列部分只出站 |
+| `workers/agent` | `npm run worker:agent`（本机或容器） | 设置 `SENSE_HTTP_PORT` 时开 HTTP 端口（默认只监听 `127.0.0.1`，对外需隧道或容器 + HTTPS）；队列部分只出站 |
 | `workers/video` | `python worker.py` | 否，只出站 |
 
 本地开发需要单独启动的是 worker（`npm run worker:agent`）；各部分仍通过数据库交互，Console 对 `workers/agent` 的调用只有 HTTP 入口。
