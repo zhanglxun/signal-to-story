@@ -1,6 +1,6 @@
 # 下一阶段剩余工作（R3 收尾：Chat 上线）
 
-> 2026-11-24 · 状态：**待执行**。调度方式见 [orchestration.md](orchestration.md)。设计依据：[../modules/chat.md](../modules/chat.md)（第 5 节为已确认决定）、[db3b-chat-runtime-catalog.md](db3b-chat-runtime-catalog.md)、[../ACP-info.md](../ACP-info.md)。全部完成后结论并入模块文档，本文删除。
+> 2026-11-24 · 2026-11-25 更新 · 状态：**T0～T5 与 step6 已完成，`0.5.0` 已合并进 `main`；T6 部分完成**。调度方式见 [orchestration.md](orchestration.md)。设计依据：[../modules/chat.md](../modules/chat.md)（第 5 节为已确认决定）、[db3b-chat-runtime-catalog.md](db3b-chat-runtime-catalog.md)、[../ACP-info.md](../ACP-info.md)。全部完成后结论并入模块文档，本文删除。
 
 ## 1. 已完成（截至 `0.5.0` 提交 `14c16e1`）
 
@@ -18,7 +18,7 @@
 | T4 配置页 | 已合并（`9258edb`）：模型页、CLI 页只读展示节点上报的目录，与 Chat 的 Model Selector 共用 `listRuntimeCatalog`；`/__sense_bridge/env` 已删。控制台单元测试已与本机 `.env.local` 隔离（`894e53a`） |
 | T3a Pi 驱动 | 已合并（`bc7bf72`）：`PiCloudDriver` + 运行时目录（`SENSE_API_RUNTIMES` / `SENSE_RUNTIME_<PROFILE>_*`）；未用真实 Key |
 
-**已知问题**：线上控制台 `story.susense.cn` 仍是 V1 构建（2026-10-08），**0.5 前端未部署，线上控制台当前不可用**；库内快照未建立。
+**线上现状（2026-11-25）**：0.5 控制台已部署到 `story.susense.cn`；step6 已执行（`20261127100000`，`node_*` = 15）；本机节点开启 HTTP 入口并上报 `api:qwen:qwen3.8-flash` 后，线上 Chat 已跑通两轮并落库（浏览器与节点在同一台机器，走 `http://localhost`）。读者站按用户决定暂不上线。库内快照未建立。
 
 ## 2. 依赖关系
 
@@ -93,11 +93,13 @@ flowchart LR
 
 ### T6 · 上线集成与验收（需要人）
 
-1. 人确认后执行 `0.5.0-step6.sql`（流程同前几批：预检 → 执行 → 核对）。
+1. ~~人确认后执行 `0.5.0-step6.sql`~~（2026-11-25 已执行并核对）。
 2. 部署带 HTTP 端口的 `workers/agent`：本机节点走隧道或云端容器，配 HTTPS 与 CORS；`runner_nodes.capabilities` 能看到目录。
 3. 用真实 Key 在 `@earendil-works/pi-*@1.5.2` 上重跑 spike 的 5 项（`deepseek-chat`、`deepseek-reasoner`、`qwen3.8-flash`），结果补进 [pi-spike-result.md](pi-spike-result.md) 第 5 节。
 4. 部署新控制台，人在线上走一遍：发消息流式回复、停止、重新生成、`/capture`、`@` 引用、刷新后历史仍在、H5。
 5. 收尾文档：结论并入 `docs/modules/chat.md` 与 `docs/status.md`，删除 `docs/tasks/` 下已完成的过程文档。
+
+第 2 步目前只做到本机：节点监听 `127.0.0.1:8787`，只有同一台机器的浏览器能用；公网方式、生产 CORS、ACP 真机仍待定。第 4 步由用户在线上完整验收。
 
 ## 4. 需要人做的事（汇总）
 
@@ -106,3 +108,10 @@ flowchart LR
 | T0 | 部署凭据 / 方式、读者站域名；部署后走 README 5 项验收 |
 | T2 | 本机是否安装 `opencode`、`codex-acp`（决定能否真机验证） |
 | T6 | 批准执行 step6；HTTP 节点的公网方式（隧道或云端）；提供可用的模型 Key（当前百炼 Key 免费额度已用完，`.env.local` 旧 Key 已被封，建议删除） |
+
+## 5. 再下一阶段：打磨优化（2026-11-25 用户确定）
+
+0.5.0 合并进 `main` 后，下一阶段以打磨与优化为主，不再做大的结构调整。已确定的一项需求：
+
+- **部署与启停用命令完成**：为 `workers/agent`（以及 `workers/video`）提供简单的命令来启动、停止、查看状态与日志，例如 `npm run node:start | node:stop | node:status | node:logs`；自动从 worker 的环境文件加载变量（不打印），记录 PID 与日志位置，重复启动时给出提示。控制台、读者站的构建与发布也收敛为一条命令。**暂不做常驻后台**（不配 launchd / 开机自启）。
+
