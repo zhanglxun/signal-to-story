@@ -77,3 +77,64 @@ export function buildLlmClientFromEnv(prefix: "SENSE_LLM" | "SENSE_EVAL_LLM", en
     outputCentsPer1k: get("OUTPUT_CENTS_PER_1K") ? Number(get("OUTPUT_CENTS_PER_1K")) : undefined,
   })
 }
+
+/**
+ * Chat HTTP/SSE entry (docs/modules/chat.md 2.4). Disabled unless SENSE_HTTP_PORT is set.
+ *   SENSE_HTTP_PORT                 port to listen on (enables the entry)
+ *   SENSE_HTTP_HOST                 bind address, default 127.0.0.1 (0.0.0.0 in a container)
+ *   SENSE_NODE_ID                   this node's runner_nodes.id (console 执行节点), required with the HTTP entry
+ *   SENSE_HTTP_PUBLIC_URL           public base URL reported as http_endpoint_hint (tunnel / HTTPS address)
+ *   SENSE_HTTP_ALLOWED_ORIGINS      comma-separated console origins; localhost is always allowed
+ *   SENSE_HTTP_MAX_TURNS_PER_USER   concurrent turns per user, default 2
+ *   SENSE_HTTP_TURNS_PER_MINUTE     turn requests per user per minute, default 20
+ *   SENSE_CHAT_BUDGET_CENTS / SENSE_CHAT_MAX_ROUNDS   per-turn limits (database defaults 50 / 8 when unset)
+ */
+export interface HttpEntryConfig {
+  port: number
+  host: string
+  nodeId: string
+  publicUrl: string
+  allowedOrigins: string[]
+  maxConcurrentTurnsPerUser: number
+  turnsPerMinute: number
+  budgetCents?: number
+  maxRounds?: number
+}
+
+function intEnv(env: NodeJS.ProcessEnv, key: string, min: number, max: number): number | undefined {
+  const raw = env[key]?.trim()
+  if (!raw) return undefined
+  const n = Number(raw)
+  if (!Number.isInteger(n) || n < min || n > max) throw new Error(`${key} 应为 ${min}–${max} 之间的整数`)
+  return n
+}
+
+export function readHttpConfig(env: NodeJS.ProcessEnv = process.env): HttpEntryConfig | null {
+  const port = intEnv(env, "SENSE_HTTP_PORT", 1, 65535)
+  if (port === undefined) return null
+  const nodeId = required(env, "SENSE_NODE_ID")
+  if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(nodeId)) {
+    throw new Error("SENSE_NODE_ID 应为控制台「执行节点」显示的节点 id（uuid）")
+  }
+  const allowedOrigins = (env.SENSE_HTTP_ALLOWED_ORIGINS ?? "").split(",").map((s) => s.trim().replace(/\/+$/, "")).filter(Boolean)
+  for (const origin of allowedOrigins) {
+    let url: URL
+    try {
+      url = new URL(origin)
+    } catch {
+      throw new Error(`SENSE_HTTP_ALLOWED_ORIGINS 中的 ${origin} 不是合法来源`)
+    }
+    if (url.origin !== origin) throw new Error(`SENSE_HTTP_ALLOWED_ORIGINS 只写来源（协议 + 域名 + 端口），不要带路径：${origin}`)
+  }
+  return {
+    port,
+    host: env.SENSE_HTTP_HOST?.trim() || "127.0.0.1",
+    nodeId: nodeId.toLowerCase(),
+    publicUrl: env.SENSE_HTTP_PUBLIC_URL?.trim() || `http://localhost:${port}`,
+    allowedOrigins,
+    maxConcurrentTurnsPerUser: intEnv(env, "SENSE_HTTP_MAX_TURNS_PER_USER", 1, 20) ?? 2,
+    turnsPerMinute: intEnv(env, "SENSE_HTTP_TURNS_PER_MINUTE", 1, 600) ?? 20,
+    budgetCents: intEnv(env, "SENSE_CHAT_BUDGET_CENTS", 1, 500),
+    maxRounds: intEnv(env, "SENSE_CHAT_MAX_ROUNDS", 1, 20),
+  }
+}
