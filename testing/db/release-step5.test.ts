@@ -1,7 +1,7 @@
 // @vitest-environment node
 // Rehearse the generated step-5 release (final batch: DB4 + DB5 + DB3 + V1 retirement) on a database shaped like
 // live after step 4, with V1 rows that were captured after step 1 (so the final backfill has work to do).
-// Afterwards the structure must equal the repo head: 21 public tables, 0 views.
+// Afterwards the structure must equal the repo built to step 5: 21 public tables, 0 views. (Step 6: release-step6.test.ts.)
 import { readFileSync } from "node:fs"
 import path from "node:path"
 import { describe, expect, it } from "vitest"
@@ -12,6 +12,7 @@ import { diffSnapshots, snapshotQuery, type SchemaSnapshot } from "./schema-snap
 
 const STEP5 = { ...RELEASES.step5, label: "test" }
 const STEP4_LAST = listMigrationFiles().filter((f) => f.slice(0, 14) <= RELEASES.step5.after).at(-1)!
+const STEP5_LAST = listMigrationFiles().filter((f) => f.slice(0, 14) <= RELEASES.step5.upTo).at(-1)!
 
 async function afterStep4() {
   const db = await createSupabaseTestDb({ upTo: STEP4_LAST })
@@ -69,7 +70,7 @@ describe("0.5 release step 5 (final batch)", () => {
 
     const q = <T>(sql: string, params: unknown[] = []) => db.asPostgres(async (tx) => (await tx.query<T>(sql, params)).rows)
     expect((await q<{ version: string }>("select version from supabase_migrations.schema_migrations order by version")).map((h) => h.version))
-      .toEqual(listMigrationFiles().map((f) => f.slice(0, 14)))
+      .toEqual(listMigrationFiles().filter((f) => f <= STEP5_LAST).map((f) => f.slice(0, 14)))
 
     // 21 tables, no views (docs/database.md §3).
     const rels = await q<{ relname: string; relkind: string }>(
@@ -104,7 +105,7 @@ describe("0.5 release step 5 (final batch)", () => {
     })
     expect(await db.asAnon(async (tx) => (await tx.query("select slug, published_title from public.content_documents")).rows)).toEqual([{ slug: "v1-doc", published_title: "稿" }])
 
-    const fresh = await createSupabaseTestDb()
+    const fresh = await createSupabaseTestDb({ upTo: STEP5_LAST })
     const diff = diffSnapshots(await snapshot(db), await snapshot(fresh))
     await fresh.close()
     for (const [category, d] of Object.entries(diff)) expect({ category, ...d }).toEqual({ category, onlyRemote: [], onlyRepo: [], changed: [] })
@@ -148,7 +149,7 @@ describe("0.5 release step 5 (final batch)", () => {
 
   it("contains the four final migrations, no secrets, and is the committed script", () => {
     const sql = buildRelease(STEP5)
-    expect(pendingMigrations(RELEASES.step5.after)).toEqual([
+    expect(pendingMigrations(RELEASES.step5.after, RELEASES.step5.upTo)).toEqual([
       "20261126100000_publish_on_documents.sql",
       "20261126100100_video_mvp.sql",
       "20261126100200_chat.sql",

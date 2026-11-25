@@ -144,6 +144,7 @@ export const TABLES: Record<string, TableNote> = {
       exec_session: "驱动、原生会话 id 等续接信息（只能由服务端写）",
       last_seq: "最后一条消息的序号（服务端在会话行锁下递增）",
       archived_at: "归档时间；归档后不能再发消息",
+      runtime_config: "上次选用的节点 / 运行时 / 模型 / 推理强度（DB3b；浏览器可改，发消息时也会同步）",
     },
   },
   chat_messages: {
@@ -157,6 +158,9 @@ export const TABLES: Record<string, TableNote> = {
       role: "user / assistant / system / tool",
       content: "消息内容",
       agent_job_id: "这条消息对应的回合任务（kind = chat_turn）",
+      parts: "结构化片段（思考、计划、工具调用、报错、引用芯片），刷新后还原界面用（DB3b）",
+      status: "completed / cancelled / error：回合正常结束、被中断或出错（DB3b）",
+      reply_to_message_id: "助手消息回复的是哪条 user 消息；重新生成的多个版本指向同一条（DB3b）",
     },
   },
   intake_events: {
@@ -354,6 +358,8 @@ export const TABLES: Record<string, TableNote> = {
       revoked_at: "吊销时间；吊销后令牌的所有调用都被拒绝",
       last_seen_at: "最近一次调用数据库的时间；两分钟内算在线",
       created_at: "创建时间",
+      capabilities: "节点上报的能力目录（运行时、模型、HTTP 入口地址），不含任何密钥（DB3b）",
+      capabilities_updated_at: "能力目录最近一次上报时间（DB3b）",
     },
   },
   approval_requests: {
