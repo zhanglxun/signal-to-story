@@ -19,7 +19,7 @@ const NODE_BUILTINS = builtinModules.filter((name) => !name.startsWith("_"))
 const LAYER_DIRS = ["drivers", "entry", "backends", "handlers", "delivery"]
 
 export default defineConfig([
-  globalIgnores(["sense-console", "sense-site", "knowledge-base", "docs", "**/node_modules", "**/dist", "workers/video"]),
+  globalIgnores(["sense-console", "sense-site", "knowledge-base", "docs", "**/node_modules", "**/dist", "workers/video", ".claude"]),
   {
     files: ["**/*.{ts,js}"],
     extends: [js.configs.recommended, tseslint.configs.recommended],
