@@ -141,8 +141,6 @@ describe("the .env.local write path is gone", () => {
   const files = [
     "src/pages/models-integration-page.tsx",
     "src/pages/cli-agents-page.tsx",
-    "src/services/local-bridge-service.ts",
-    "dev/local-bridge-plugin.ts",
   ]
 
   it.each(files)("%s no longer references /__sense_bridge/env", (file) => {
@@ -150,4 +148,11 @@ describe("the .env.local write path is gone", () => {
     expect(source).not.toMatch(/__sense_bridge\/env/)
     expect(source).not.toMatch(/saveProviderEnvConfig|formatEnvLocalSnippet|writeEnvUpdates/)
   })
+
+  it.each(["src/services/local-bridge-service.ts", "dev/local-bridge-plugin.ts", "dev/local-bridge-guard.ts"])(
+    "%s was removed together with the Vite dev bridge (T5)",
+    (file) => {
+      expect(fs.existsSync(path.join(root, file))).toBe(false)
+    }
+  )
 })

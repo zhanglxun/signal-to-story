@@ -6,14 +6,16 @@ import {
   MonitorIcon,
   SmartphoneIcon,
   SparklesIcon,
+  WifiOffIcon,
 } from "lucide-react"
-import { Link, useSearchParams } from "react-router"
+import { Link, useLocation, useNavigate } from "react-router"
 import { toast } from "sonner"
 
 import { Alert, AlertDescription } from "@/components/ui/alert"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { AuthContext } from "@/features/auth/auth-context"
+import { cn } from "@/lib/utils"
 import { getContentWorkspace } from "@/services/content-workspace-service"
 import { ChatMessageList } from "@/modules/chat/components/chat-message-list"
 import { ChatPromptInput } from "@/modules/chat/components/chat-prompt-input"
@@ -37,8 +39,9 @@ import {
 } from "@/modules/chat/services/chat-session-service"
 import {
   findRuntimeTarget,
+  listMockRuntimeCatalog,
   listRuntimeCatalog,
-  pickDefaultRuntime,
+  type SelectedRuntimeTarget,
 } from "@/modules/chat/services/runtime-catalog-service"
 import { createHttpChatTransport } from "@/modules/chat/transport/http-transport"
 import { createMockChatTransport } from "@/modules/chat/transport/mock-transport"
@@ -53,7 +56,29 @@ import type {
   ThinkingEffort,
 } from "@/modules/chat/types"
 
+/** How often the node catalog is re-read (online state follows runner_nodes.last_seen_at). */
+const CATALOG_REFRESH_MS = 30_000
+
+async function loadMockCatalog(): Promise<RuntimeNodeCatalog[]> {
+  return listMockRuntimeCatalog()
+}
+
+function runtimeConfigOf(
+  target: SelectedRuntimeTarget,
+  thinkingEffort: ThinkingEffort
+): ChatRuntimeConfig {
+  return {
+    node_id: target.node.nodeId,
+    runtime_id: target.runtime.id,
+    driver_kind: target.runtime.kind,
+    model: target.runtime.model,
+    thinking_effort: thinkingEffort,
+  }
+}
+
 export interface ChatPageProps {
+  /** `shell`: inside the console AppShell (/chat). `h5`: standalone full-screen page (/h5/chat). */
+  variant?: "shell" | "h5"
   mockMode?: boolean
   repository?: ChatSessionRepository
   transport?: ChatTransport
@@ -67,8 +92,9 @@ export interface ChatPageProps {
 export function ChatPage(props: ChatPageProps = {}) {
   const effectiveMockMode = props.mockMode ?? isMockChatMode()
   const auth = useContext(AuthContext)
-  const [searchParams, setSearchParams] = useSearchParams()
-  const isH5 = searchParams.get("h5") === "1"
+  const navigate = useNavigate()
+  const location = useLocation()
+  const isH5 = props.variant === "h5"
 
   const [resolvedOrgId, setResolvedOrgId] = useState<string | null>(
     props.organizationId ?? (effectiveMockMode ? "mock-org-1" : null)
@@ -109,15 +135,44 @@ export function ChatPage(props: ChatPageProps = {}) {
     }
   }, [auth?.user, effectiveMockMode, props.organizationId])
 
+  // Runtime & Model Catalog: the real runner_nodes catalog; the mock one only in mock mode.
   const [catalog, setCatalog] = useState<RuntimeNodeCatalog[]>([])
+  const [catalogState, setCatalogState] = useState<{ loaded: boolean; error: string | null }>({
+    loaded: false,
+    error: null,
+  })
   const [referenceOptions, setReferenceOptions] = useState<ContextRefOption[]>([])
 
   useEffect(() => {
+    // Real mode waits for the organization so the catalog is scoped to it.
+    if (!effectiveMockMode && !resolvedOrgId && !props.catalogLoader) return
     let active = true
-    const loadCatalog = props.catalogLoader ?? listRuntimeCatalog
-    void loadCatalog(resolvedOrgId).then((nodes) => {
-      if (active) setCatalog(nodes)
-    })
+    const loadCatalog =
+      props.catalogLoader ?? (effectiveMockMode ? loadMockCatalog : listRuntimeCatalog)
+    const load = () =>
+      loadCatalog(resolvedOrgId)
+        .then((nodes) => {
+          if (!active) return
+          setCatalog(nodes)
+          setCatalogState({ loaded: true, error: null })
+        })
+        .catch((err: unknown) => {
+          if (!active) return
+          setCatalogState({
+            loaded: true,
+            error: err instanceof Error ? err.message : "读取执行节点目录失败",
+          })
+        })
+    void load()
+    const timer = setInterval(() => void load(), CATALOG_REFRESH_MS)
+    return () => {
+      active = false
+      clearInterval(timer)
+    }
+  }, [effectiveMockMode, props.catalogLoader, resolvedOrgId])
+
+  useEffect(() => {
+    let active = true
     void listReferenceOptions(resolvedOrgId, effectiveMockMode)
       .then((opts) => {
         if (active) setReferenceOptions(opts)
@@ -128,7 +183,7 @@ export function ChatPage(props: ChatPageProps = {}) {
     return () => {
       active = false
     }
-  }, [effectiveMockMode, props.catalogLoader, resolvedOrgId])
+  }, [effectiveMockMode, resolvedOrgId])
 
   const sessionState = useChatSessions({
     repository,
@@ -148,11 +203,13 @@ export function ChatPage(props: ChatPageProps = {}) {
     Record<string, SlashCardItem[]>
   >({})
 
-  // User's active runtime selection overrides (initialized from activeSession or default catalog)
+  // A selection made in this view overrides the session's saved runtime_config until the session
+  // changes; otherwise the selector is restored from chat_sessions.runtime_config.
   const [manualNodeId, setManualNodeId] = useState<string | null>(null)
   const [manualRuntimeId, setManualRuntimeId] = useState<string | null>(null)
   const [manualThinking, setManualThinking] = useState<ThinkingEffort>("low")
 
+  const savedConfig = activeSession?.runtimeConfig
   const resolvedTarget = useMemo(() => {
     const config: ChatRuntimeConfig = manualRuntimeId
       ? {
@@ -160,16 +217,23 @@ export function ChatPage(props: ChatPageProps = {}) {
           runtime_id: manualRuntimeId,
           thinking_effort: manualThinking,
         }
-      : activeSession?.runtimeConfig ?? {}
-    return findRuntimeTarget(catalog, config) ?? pickDefaultRuntime(catalog)
-  }, [activeSession?.runtimeConfig, catalog, manualNodeId, manualRuntimeId, manualThinking])
+      : savedConfig ?? {}
+    return findRuntimeTarget(catalog, config)
+  }, [catalog, manualNodeId, manualRuntimeId, manualThinking, savedConfig])
+
+  /** The session's saved runtime is not selectable any more (node offline, runtime removed). */
+  const savedRuntimeUnavailable = Boolean(
+    catalogState.loaded &&
+      !manualRuntimeId &&
+      savedConfig?.runtime_id &&
+      (resolvedTarget?.runtime.id !== savedConfig.runtime_id ||
+        (savedConfig.node_id && resolvedTarget?.node.nodeId !== savedConfig.node_id))
+  )
 
   const selectedNodeId = resolvedTarget?.node.nodeId ?? null
   const selectedRuntimeId = resolvedTarget?.runtime.id ?? null
   const thinkingEffort: ThinkingEffort =
-    manualRuntimeId !== null
-      ? manualThinking
-      : activeSession?.runtimeConfig.thinking_effort ?? "low"
+    manualRuntimeId !== null ? manualThinking : savedConfig?.thinking_effort ?? "low"
 
   const onTurnSettled = useCallback(
     async (sid: string) => {
@@ -181,9 +245,9 @@ export function ChatPage(props: ChatPageProps = {}) {
     [activeSessionId, refreshMessages, refreshSessions]
   )
 
-  const stopHookRef = useRef<
-    ((sessionId: string, jobId: string | null, runtimeLabel?: string) => void) | null
-  >(null)
+  type WaitHook = (sessionId: string, jobId: string | null, runtimeLabel?: string) => void
+  const stopHookRef = useRef<WaitHook | null>(null)
+  const disconnectHookRef = useRef<WaitHook | null>(null)
 
   const turnState = useChatTurn({
     transport,
@@ -191,6 +255,9 @@ export function ChatPage(props: ChatPageProps = {}) {
     onTurnSettled,
     onStopRequested: ({ sessionId, jobId, runtimeLabel }) => {
       stopHookRef.current?.(sessionId, jobId, runtimeLabel)
+    },
+    onStreamInterrupted: ({ sessionId, jobId, runtimeLabel }) => {
+      disconnectHookRef.current?.(sessionId, jobId, runtimeLabel)
     },
   })
 
@@ -206,7 +273,8 @@ export function ChatPage(props: ChatPageProps = {}) {
 
   useEffect(() => {
     stopHookRef.current = pendingTurnState.beginWaitingAfterStop
-  }, [pendingTurnState.beginWaitingAfterStop])
+    disconnectHookRef.current = pendingTurnState.beginWaitingAfterDisconnect
+  }, [pendingTurnState.beginWaitingAfterDisconnect, pendingTurnState.beginWaitingAfterStop])
 
   const isTurnBusy = turnState.isStreaming || Boolean(pendingTurnState.pendingTurn)
 
@@ -225,6 +293,7 @@ export function ChatPage(props: ChatPageProps = {}) {
   const handleSelectSession = useCallback(
     (sessionId: string) => {
       if (turnState.isStreaming) {
+        // Switching sessions only disconnects the reader; the turn keeps running (no cancel).
         turnState.disconnectStream()
       }
       turnState.clearError()
@@ -241,20 +310,20 @@ export function ChatPage(props: ChatPageProps = {}) {
     }
     turnState.clearError()
     const created = await sessionState.createNewSession({
-      runtimeConfig: resolvedTarget
-        ? {
-            node_id: resolvedTarget.node.nodeId,
-            runtime_id: resolvedTarget.runtime.id,
-            driver_kind: resolvedTarget.runtime.kind,
-            model: resolvedTarget.runtime.model,
-            thinking_effort: thinkingEffort,
-          }
-        : undefined,
+      runtimeConfig: resolvedTarget ? runtimeConfigOf(resolvedTarget, thinkingEffort) : undefined,
     })
     setManualNodeId(null)
     setManualRuntimeId(null)
     return created
   }, [resolvedTarget, sessionState, thinkingEffort, turnState])
+
+  const persistRuntimeConfig = useCallback(
+    (config: ChatRuntimeConfig) => {
+      if (!activeSessionId) return
+      void sessionState.setSessionRuntimeConfig(activeSessionId, config).catch(() => undefined)
+    },
+    [activeSessionId, sessionState]
+  )
 
   const handleSelectRuntime = useCallback(
     (node: RuntimeNodeCatalog, runtime: RuntimeEntry) => {
@@ -262,19 +331,9 @@ export function ChatPage(props: ChatPageProps = {}) {
       setManualRuntimeId(runtime.id)
       const nextEffort: ThinkingEffort = runtime.capabilities.reasoning ? thinkingEffort : "off"
       setManualThinking(nextEffort)
-      if (activeSessionId) {
-        void sessionState
-          .setSessionRuntimeConfig(activeSessionId, {
-            node_id: node.nodeId,
-            runtime_id: runtime.id,
-            driver_kind: runtime.kind,
-            model: runtime.model,
-            thinking_effort: nextEffort,
-          })
-          .catch(() => undefined)
-      }
+      persistRuntimeConfig(runtimeConfigOf({ node, runtime }, nextEffort))
     },
-    [activeSessionId, sessionState, thinkingEffort]
+    [persistRuntimeConfig, thinkingEffort]
   )
 
   const handleThinkingChange = useCallback(
@@ -284,19 +343,42 @@ export function ChatPage(props: ChatPageProps = {}) {
         setManualNodeId(resolvedTarget.node.nodeId)
         setManualRuntimeId(resolvedTarget.runtime.id)
       }
-      if (activeSessionId && resolvedTarget) {
-        void sessionState
-          .setSessionRuntimeConfig(activeSessionId, {
-            node_id: resolvedTarget.node.nodeId,
-            runtime_id: resolvedTarget.runtime.id,
-            driver_kind: resolvedTarget.runtime.kind,
-            model: resolvedTarget.runtime.model,
-            thinking_effort: effort,
-          })
-          .catch(() => undefined)
-      }
+      if (resolvedTarget) persistRuntimeConfig(runtimeConfigOf(resolvedTarget, effort))
     },
-    [activeSessionId, manualRuntimeId, resolvedTarget, sessionState]
+    [manualRuntimeId, persistRuntimeConfig, resolvedTarget]
+  )
+
+  const turnTarget = useCallback((target: SelectedRuntimeTarget) => {
+    return {
+      target: {
+        endpointHint: target.node.httpEndpointHint,
+        nodeId: target.node.nodeId,
+      },
+      runtimeId: target.runtime.id,
+      runtimeLabel: target.runtime.label,
+    }
+  }, [])
+
+  const sendChatTurn = useCallback(
+    async (content: string, parts: ChatContextRefPart[], sessionId?: string) => {
+      if (!resolvedTarget) {
+        toast.error("当前没有可用的在线执行节点，请先启动 workers/agent 节点或切换模型。")
+        return
+      }
+      let sid = sessionId ?? activeSessionId
+      if (!sid) {
+        const created = await handleCreateSession()
+        sid = created.id
+      }
+      await turnState.sendTurn({
+        sessionId: sid,
+        content,
+        parts: parts.length > 0 ? parts : undefined,
+        ...turnTarget(resolvedTarget),
+        thinkingEffort: resolvedTarget.runtime.capabilities.reasoning ? thinkingEffort : undefined,
+      })
+    },
+    [activeSessionId, handleCreateSession, resolvedTarget, thinkingEffort, turnState, turnTarget]
   )
 
   const executePrompt = useCallback(
@@ -368,34 +450,14 @@ export function ChatPage(props: ChatPageProps = {}) {
       }
 
       if (!resolvedTarget) {
-        toast.error("当前没有可用的在线运行节点，请检查执行节点状态。")
+        toast.error("当前没有可用的在线执行节点，请先启动 workers/agent 节点或切换模型。")
         return
-      }
-
-      let sid = activeSessionId
-      if (!sid) {
-        const created = await handleCreateSession()
-        sid = created.id
       }
 
       const refsToSend = [...contextRefs]
       setInputValue("")
       setContextRefs([])
-
-      await turnState.sendTurn({
-        sessionId: sid,
-        content: trimmed,
-        parts: refsToSend.length > 0 ? refsToSend : undefined,
-        target: {
-          endpointHint: resolvedTarget.node.httpEndpointHint,
-          nodeId: resolvedTarget.node.nodeId,
-        },
-        runtimeId: resolvedTarget.runtime.id,
-        runtimeLabel: resolvedTarget.runtime.label,
-        thinkingEffort: resolvedTarget.runtime.capabilities.reasoning
-          ? thinkingEffort
-          : undefined,
-      })
+      await sendChatTurn(trimmed, refsToSend)
     },
     [
       activeSession,
@@ -407,32 +469,44 @@ export function ChatPage(props: ChatPageProps = {}) {
       isTurnBusy,
       resolvedOrgId,
       resolvedTarget,
+      sendChatTurn,
       sessionState,
-      thinkingEffort,
       turnState,
     ]
   )
 
+  const handleRetrySend = useCallback(
+    (content: string, parts: ChatContextRefPart[]) => {
+      if (isTurnBusy) return
+      void sendChatTurn(content, parts, turnState.activeTurn?.sessionId)
+    },
+    [isTurnBusy, sendChatTurn, turnState.activeTurn?.sessionId]
+  )
+
   const handleRegenerate = useCallback(
     async (userMessageId: string) => {
-      if (!activeSessionId || !resolvedTarget || isTurnBusy) return
+      if (!activeSessionId || isTurnBusy) return
+      if (!resolvedTarget) {
+        toast.error("当前没有可用的在线执行节点，请先启动 workers/agent 节点或切换模型。")
+        return
+      }
       messageState.clearSelectedVersion(userMessageId)
       await turnState.regenerateTurn({
         sessionId: activeSessionId,
         userMessageId,
-        target: {
-          endpointHint: resolvedTarget.node.httpEndpointHint,
-          nodeId: resolvedTarget.node.nodeId,
-        },
-        runtimeId: resolvedTarget.runtime.id,
-        runtimeLabel: resolvedTarget.runtime.label,
-        thinkingEffort: resolvedTarget.runtime.capabilities.reasoning
-          ? thinkingEffort
-          : undefined,
+        ...turnTarget(resolvedTarget),
+        thinkingEffort: resolvedTarget.runtime.capabilities.reasoning ? thinkingEffort : undefined,
       })
     },
-    [activeSessionId, isTurnBusy, messageState, resolvedTarget, thinkingEffort, turnState]
+    [activeSessionId, isTurnBusy, messageState, resolvedTarget, thinkingEffort, turnState, turnTarget]
   )
+
+  const handleRelogin = useCallback(() => {
+    const from = location.pathname
+    void Promise.resolve(auth?.signOut())
+      .catch(() => undefined)
+      .finally(() => navigate("/login", { replace: true, state: { from } }))
+  }, [auth, location.pathname, navigate])
 
   const handleQuickCaptureUrl = useCallback(
     async (rawText: string) => {
@@ -461,13 +535,20 @@ export function ChatPage(props: ChatPageProps = {}) {
     )
   }, [activeWorkItemId, referenceOptions])
 
+  const noSelectableNode = catalogState.loaded && !catalogState.error && !resolvedTarget
+  const pageNotice =
+    sessionState.error ||
+    messageState.error ||
+    (catalogState.error ? `读取执行节点目录失败：${catalogState.error}` : null)
+
   return (
     <div
-      className={
+      className={cn(
+        "flex overflow-hidden bg-background text-foreground",
         isH5
-          ? "mx-auto flex h-svh max-w-md flex-col border-x bg-background text-foreground"
-          : "flex h-svh overflow-hidden bg-background text-foreground"
-      }
+          ? "mx-auto h-svh max-w-md flex-col border-x"
+          : "h-[calc(100svh-5.5rem)] min-h-[28rem] rounded-xl border lg:h-[calc(100svh-6.5rem)]"
+      )}
     >
       <ChatSidebar
         sessions={sessionState.filteredSessions}
@@ -506,9 +587,11 @@ export function ChatPage(props: ChatPageProps = {}) {
               {activeSession?.title.trim() || "星火智能对话与速记"}
             </h1>
 
-            <Badge variant={effectiveMockMode ? "secondary" : "default"} className="text-[11px]">
-              {effectiveMockMode ? "Mock 假传输" : "HTTP/SSE 实时"}
-            </Badge>
+            {effectiveMockMode && (
+              <Badge variant="secondary" className="text-[11px]">
+                演示数据
+              </Badge>
+            )}
 
             {boundWorkItemLabel && (
               <Button
@@ -539,12 +622,10 @@ export function ChatPage(props: ChatPageProps = {}) {
             )}
 
             <Button
-              type="button"
+              nativeButton={false}
               variant="outline"
               size="xs"
-              onClick={() =>
-                setSearchParams(isH5 ? {} : { h5: "1" }, { replace: true })
-              }
+              render={<Link to={isH5 ? "/chat" : "/h5/chat"} />}
               className="gap-1 text-xs"
             >
               {isH5 ? (
@@ -560,24 +641,37 @@ export function ChatPage(props: ChatPageProps = {}) {
               )}
             </Button>
 
-            <Button
-              nativeButton={false}
-              variant="ghost"
-              size="xs"
-              render={<Link to="/dashboard" />}
-              className="gap-1 text-xs"
-            >
-              <ArrowLeftIcon className="size-3" />
-              工作台
-            </Button>
+            {isH5 && (
+              <Button
+                nativeButton={false}
+                variant="ghost"
+                size="xs"
+                render={<Link to="/dashboard" />}
+                className="gap-1 text-xs"
+              >
+                <ArrowLeftIcon className="size-3" />
+                工作台
+              </Button>
+            )}
           </div>
         </header>
 
-        {(sessionState.error || messageState.error) && (
+        {pageNotice && (
           <div className="px-4 pt-3">
             <Alert variant="destructive">
+              <AlertDescription className="text-xs">{pageNotice}</AlertDescription>
+            </Alert>
+          </div>
+        )}
+
+        {(noSelectableNode || savedRuntimeUnavailable) && (
+          <div className="px-4 pt-3">
+            <Alert>
+              <WifiOffIcon className="size-4" />
               <AlertDescription className="text-xs">
-                {sessionState.error || messageState.error}
+                {noSelectableNode
+                  ? "没有可用的执行节点：节点需要在线（2 分钟内上报）并开启 HTTP 对话入口。请启动 workers/agent 节点后稍候刷新。"
+                  : `本会话上次使用的运行时（${savedConfig?.runtime_id}）当前不可用，已临时切换到 ${resolvedTarget?.runtime.label ?? "其他运行时"}。`}
               </AlertDescription>
             </Alert>
           </div>
@@ -598,6 +692,8 @@ export function ChatPage(props: ChatPageProps = {}) {
           isLoading={messageState.isLoading}
           onQuickPrompt={(prompt) => void executePrompt(prompt)}
           onRegenerate={(userMsgId) => void handleRegenerate(userMsgId)}
+          onRetrySend={handleRetrySend}
+          onRelogin={handleRelogin}
           onAnswerPermission={turnState.answerPermission}
         />
 

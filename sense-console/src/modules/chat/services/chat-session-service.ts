@@ -108,19 +108,13 @@ export function createSupabaseChatSessionRepository(): ChatSessionRepository {
           organization_id: input.organizationId,
           work_item_id: input.workItemId ?? null,
           title: input.title ?? "",
+          // DB3b grants insert (runtime_config): the session remembers node, runtime and effort.
+          runtime_config: input.runtimeConfig ?? {},
         })
         .select("*")
         .single()
       if (error || !data) throw new Error(error?.message || "创建会话失败")
-      let session = mapChatSessionRow(data as Record<string, unknown>)
-      if (input.runtimeConfig && Object.keys(input.runtimeConfig).length > 0) {
-        try {
-          session = await this.updateSession(session.id, { runtimeConfig: input.runtimeConfig })
-        } catch {
-          // DB3b adds column update grant on runtime_config; before DB3b lands, keep session usable.
-        }
-      }
-      return session
+      return mapChatSessionRow(data as Record<string, unknown>)
     },
 
     async updateSession(sessionId, patch) {

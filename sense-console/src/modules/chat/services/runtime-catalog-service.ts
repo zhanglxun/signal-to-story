@@ -241,7 +241,8 @@ export function filterCatalogByKind(
     .filter((node) => node.runtimes.length > 0)
 }
 
-function listMockRuntimeCatalog(): RuntimeNodeCatalog[] {
+/** The demo catalog (VITE_CHAT_TRANSPORT=mock preview and unit tests only). */
+export function listMockRuntimeCatalog(): RuntimeNodeCatalog[] {
   return MOCK_RUNTIME_CATALOG.map((node) => ({
     ...node,
     runtimes: node.runtimes.map((r) => ({ ...r, capabilities: { ...r.capabilities } })),
@@ -250,15 +251,16 @@ function listMockRuntimeCatalog(): RuntimeNodeCatalog[] {
 
 /**
  * Runtime & Model Catalog (docs/modules/chat.md 3.4), shared by the Chat model selector and the
- * system configuration pages. Reads runner_nodes.capabilities through RLS; falls back to the mock
- * catalog when VITE_CHAT_TRANSPORT=mock or Supabase is not configured (demo / tests).
+ * system configuration pages. Reads runner_nodes.capabilities through RLS. The mock catalog is
+ * served only under VITE_CHAT_TRANSPORT=mock; without Supabase the real catalog is simply empty.
  */
 export async function listRuntimeCatalog(
   organizationId?: string | null,
   options: ListRuntimeCatalogOptions = {}
 ): Promise<RuntimeNodeCatalog[]> {
+  if (isMockChatMode()) return listMockRuntimeCatalog()
   const client = getSupabaseClient()
-  if (isMockChatMode() || !client) return listMockRuntimeCatalog()
+  if (!client) return []
 
   let query = client.from("runner_nodes").select(RUNNER_NODE_CATALOG_COLUMNS)
   if (organizationId) query = query.eq("organization_id", organizationId)
@@ -276,20 +278,35 @@ export interface SelectedRuntimeTarget {
   runtime: RuntimeEntry
 }
 
+/** Why a node cannot take a chat turn right now, or null when it can. */
+export function nodeUnavailableReason(node: RuntimeNodeCatalog): string | null {
+  if (!node.online) return "离线"
+  if (!node.supportsHttpSse) return "不支持对话"
+  if (!node.httpEndpointHint.trim()) return "未配置地址"
+  return null
+}
+
+/**
+ * A runtime can be chosen in the Chat selector only on an online node that serves the HTTP/SSE
+ * entry at a known address (docs/modules/chat.md 2.4: the browser POSTs to that node directly).
+ */
+export function isRuntimeSelectable(node: RuntimeNodeCatalog, runtime: RuntimeEntry): boolean {
+  return nodeUnavailableReason(node) === null && runtime.status === "ready"
+}
+
 export function findRuntimeTarget(
   catalog: readonly RuntimeNodeCatalog[],
   config?: ChatRuntimeConfig | null
 ): SelectedRuntimeTarget | null {
   if (config?.node_id && config.runtime_id) {
-    const node = catalog.find((n) => n.nodeId === config.node_id && n.online)
-    const runtime = node?.runtimes.find((r) => r.id === config.runtime_id && r.status === "ready")
-    if (node && runtime) return { node, runtime }
+    const node = catalog.find((n) => n.nodeId === config.node_id)
+    const runtime = node?.runtimes.find((r) => r.id === config.runtime_id)
+    if (node && runtime && isRuntimeSelectable(node, runtime)) return { node, runtime }
   }
   if (config?.runtime_id) {
     for (const node of catalog) {
-      if (!node.online) continue
-      const runtime = node.runtimes.find((r) => r.id === config.runtime_id && r.status === "ready")
-      if (runtime) return { node, runtime }
+      const runtime = node.runtimes.find((r) => r.id === config.runtime_id)
+      if (runtime && isRuntimeSelectable(node, runtime)) return { node, runtime }
     }
   }
   return pickDefaultRuntime(catalog)
@@ -297,8 +314,7 @@ export function findRuntimeTarget(
 
 export function pickDefaultRuntime(catalog: readonly RuntimeNodeCatalog[]): SelectedRuntimeTarget | null {
   for (const node of catalog) {
-    if (!node.online || !node.supportsHttpSse) continue
-    const runtime = node.runtimes.find((r) => r.status === "ready")
+    const runtime = node.runtimes.find((r) => isRuntimeSelectable(node, r))
     if (runtime) return { node, runtime }
   }
   return null

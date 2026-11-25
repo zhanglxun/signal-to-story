@@ -109,7 +109,7 @@ async function createStreamRunner(options: {
   const emit = (ev: ChatStreamEvent) => {
     buffer.push(ev)
     for (const fn of listeners) fn(ev)
-    if (ev.type === "done" || ev.type === "error") {
+    if (ev.type === "done") {
       finished = true
     }
   }
@@ -160,6 +160,7 @@ async function createStreamRunner(options: {
 
       store.setActiveChatTurnJob(sessionId, null)
       activeTurns.delete(jobId)
+      // chat.md 2.4 结束规则: persist first; an error turn sends `error` and then `done`.
       if (errorPart?.type === "error") {
         emit({
           type: "error",
@@ -168,14 +169,13 @@ async function createStreamRunner(options: {
           retryable: errorPart.code !== "budget_exceeded",
           stack: errorPart.stack,
         })
-      } else {
-        emit({
-          type: "done",
-          assistantMessageId: saved.id,
-          seq: saved.seq,
-          status,
-        })
       }
+      emit({
+        type: "done",
+        assistantMessageId: saved.id,
+        seq: saved.seq,
+        status,
+      })
       resolveDone()
     }
 

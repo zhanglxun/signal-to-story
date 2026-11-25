@@ -1,4 +1,5 @@
 import { getSupabaseClient } from "@/lib/supabase"
+import { NODE_UNREACHABLE, nodeUnreachableError } from "@/modules/chat/transport/errors"
 import { parseSseStream } from "@/modules/chat/transport/sse-parser"
 import type { ChatTransport, ChatTurnTarget } from "@/modules/chat/transport/transport"
 import {
@@ -43,7 +44,23 @@ async function parsePreStreamError(response: Response): Promise<HttpTransportErr
   return new HttpTransportError(response.status, code, message)
 }
 
-export function createHttpChatTransport(fetchImpl: typeof fetch = fetch): ChatTransport {
+function isAbort(err: unknown, signal?: AbortSignal): boolean {
+  return Boolean(signal?.aborted) || (err as { name?: string } | null)?.name === "AbortError"
+}
+
+export function createHttpChatTransport(
+  fetchImpl: typeof fetch = (input, init) => fetch(input, init)
+): ChatTransport {
+  /** fetch() rejects only when the node cannot be reached (DNS, refused, CORS, offline). */
+  async function request(baseUrl: string, path: string, init: RequestInit): Promise<Response> {
+    try {
+      return await fetchImpl(`${baseUrl}${path}`, init)
+    } catch (err) {
+      if (isAbort(err, init.signal ?? undefined)) throw err
+      throw nodeUnreachableError(baseUrl)
+    }
+  }
+
   async function* postSse(
     target: ChatTurnTarget,
     path: string,
@@ -55,7 +72,7 @@ export function createHttpChatTransport(fetchImpl: typeof fetch = fetch): ChatTr
       throw new HttpTransportError(503, "runtime_unavailable", "当前所选节点未配置 HTTP 地址")
     }
     const token = await resolveAccessToken()
-    const response = await fetchImpl(`${baseUrl}${path}`, {
+    const response = await request(baseUrl, path, {
       method: "POST",
       headers: {
         Authorization: `Bearer ${token}`,
@@ -99,8 +116,9 @@ export function createHttpChatTransport(fetchImpl: typeof fetch = fetch): ChatTr
         throw new HttpTransportError(503, "runtime_unavailable", "当前所选节点未配置 HTTP 地址")
       }
       const token = await resolveAccessToken()
-      const response = await fetchImpl(
-        `${baseUrl}/v1/chat/turns/${encodeURIComponent(jobId)}/permissions/${encodeURIComponent(requestId)}`,
+      const response = await request(
+        baseUrl,
+        `/v1/chat/turns/${encodeURIComponent(jobId)}/permissions/${encodeURIComponent(requestId)}`,
         {
           method: "POST",
           headers: {
@@ -118,11 +136,16 @@ export function createHttpChatTransport(fetchImpl: typeof fetch = fetch): ChatTr
 
     async checkHealth(endpointHint: string, signal?: AbortSignal): Promise<HealthResponse> {
       const baseUrl = normalizeBaseUrl(endpointHint)
-      const response = await fetchImpl(`${baseUrl}/v1/health`, { method: "GET", signal })
+      if (!baseUrl) throw nodeUnreachableError(endpointHint)
+      const response = await request(baseUrl, "/v1/health", { method: "GET", signal })
       if (!response.ok) {
         throw await parsePreStreamError(response)
       }
-      return (await response.json()) as HealthResponse
+      const body = (await response.json().catch(() => null)) as Partial<HealthResponse> | null
+      if (!body || typeof body.protocol_version !== "number") {
+        throw new HttpTransportError(0, NODE_UNREACHABLE, `节点不可达：${baseUrl} 不是 Signal to Story 执行节点`)
+      }
+      return { protocol_version: body.protocol_version, node_id: String(body.node_id ?? "") }
     },
   }
 }

@@ -131,7 +131,12 @@ describe("useChatTurn", () => {
       })
     })
 
-    expect(result.current.activeTurn?.error?.code).toBe("budget_exceeded")
+    // error → done: the failed turn is persisted, so the live turn is cleared and the timeline
+    // shows the stored error part.
+    expect(result.current.activeTurn).toBeNull()
+    const saved = (await store.listMessages(session.id)).at(-1)
+    expect(saved?.status).toBe("error")
+    expect(saved?.parts.find((p) => p.type === "error")).toMatchObject({ code: "budget_exceeded" })
     expect(formatErrorDisplayText("budget_exceeded", "")).toContain("单轮费用已达上限")
 
     await act(async () => {

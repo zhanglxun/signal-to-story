@@ -166,6 +166,19 @@ export function usePendingTurn({
     []
   )
 
+  /** The live stream broke off mid-turn: the node keeps running, so wait for the persisted reply. */
+  const beginWaitingAfterDisconnect = useCallback(
+    (targetSessionId: string, jobId: string | null, runtimeLabel?: string) => {
+      setManualPending({
+        sessionId: targetSessionId,
+        jobId,
+        reason: "running",
+        runtimeLabel,
+      })
+    },
+    []
+  )
+
   const clearPendingTurn = useCallback(() => {
     setManualPending(null)
     setDetectedPending(null)
@@ -174,6 +187,7 @@ export function usePendingTurn({
   return {
     pendingTurn,
     beginWaitingAfterStop,
+    beginWaitingAfterDisconnect,
     clearPendingTurn,
   }
 }

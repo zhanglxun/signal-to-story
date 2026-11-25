@@ -8,9 +8,7 @@ import { AssetsPage } from "@/pages/assets-page"
 import { CanvasPage } from "@/pages/canvas-page"
 import { CapturePage } from "@/pages/capture-page"
 import { CharactersPage } from "@/pages/characters-page"
-import { ChatAssistantPage } from "@/pages/chat-assistant-page"
 import { ChatPage } from "@/modules/chat/chat-page"
-import { isMockChatMode } from "@/modules/chat/transport/transport"
 import { CliAgentsPage } from "@/pages/cli-agents-page"
 import { ContentOverviewPage } from "@/pages/content-overview-page"
 import { KnowledgeBasePage } from "@/pages/knowledge-base-page"
@@ -43,15 +41,14 @@ export default function App() {
       <Route path="/forgot-password" element={<ForgotPasswordPage />} />
       <Route path="/update-password" element={<UpdatePasswordPage />} />
       <Route path="/forbidden" element={<ForbiddenPage />} />
-      <Route path="/h5/chat" element={<ChatAssistantPage standaloneH5 />} />
-      {isMockChatMode() && <Route path="/chat-next" element={<ChatPage />} />}
       <Route element={<RequireAuth />}>
         <Route path="/capture" element={<CapturePage />} />
-        {!isMockChatMode() && <Route path="/chat-next" element={<ChatPage />} />}
+        {/* Standalone full-screen chat; same ChatPage as /chat (mock preview: VITE_CHAT_TRANSPORT=mock). */}
+        <Route path="/h5/chat" element={<ChatPage variant="h5" />} />
         <Route element={<AppShell />}>
           <Route index element={<Navigate to="/dashboard" replace />} />
           <Route path="/dashboard" element={<ContentOverviewPage />} />
-          <Route path="/chat" element={<ChatAssistantPage />} />
+          <Route path="/chat" element={<ChatPage variant="shell" />} />
           <Route path="/work-items" element={<WorkItemsPage />} />
           <Route path="/work-items/:workItemId" element={<WorkItemDetailPage />} />
           {/* V1 routes: topics and content projects became work items. */}

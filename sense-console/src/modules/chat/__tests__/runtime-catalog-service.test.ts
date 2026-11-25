@@ -165,14 +165,14 @@ describe("listRuntimeCatalog", () => {
     await expect(listRuntimeCatalog("org-1")).rejects.toThrow("boom")
   })
 
-  it("returns the mock catalog in mock mode or without Supabase", async () => {
+  it("returns the mock catalog only in mock mode; without Supabase the real catalog is empty", async () => {
     vi.stubEnv("VITE_CHAT_TRANSPORT", "mock")
     const mock = await listRuntimeCatalog("org-1")
     expect(mock.length).toBeGreaterThan(0)
     expect(calls).toHaveLength(0)
     vi.unstubAllEnvs()
     clientAvailable = false
-    expect((await listRuntimeCatalog()).map((n) => n.nodeId)).toEqual(mock.map((n) => n.nodeId))
+    expect(await listRuntimeCatalog()).toEqual([])
     expect(calls).toHaveLength(0)
   })
 })

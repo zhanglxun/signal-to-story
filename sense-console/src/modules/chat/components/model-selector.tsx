@@ -18,7 +18,11 @@ import {
   CommandItem,
   CommandList,
 } from "@/components/ui/command"
-import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover"
+import {
+  Popover,
+  PopoverContent,
+  PopoverTrigger,
+} from "@/components/ui/popover"
 import {
   Select,
   SelectContent,
@@ -27,6 +31,10 @@ import {
   SelectValue,
 } from "@/components/ui/select"
 import { cn } from "@/lib/utils"
+import {
+  isRuntimeSelectable,
+  nodeUnavailableReason,
+} from "@/modules/chat/services/runtime-catalog-service"
 import type {
   RuntimeEntry,
   RuntimeNodeCatalog,
@@ -80,7 +88,11 @@ export function ModelSelector({
 }: ModelSelectorProps) {
   const [open, setOpen] = useState(false)
 
-  const selected = findSelectedRuntime(catalog, selectedNodeId, selectedRuntimeId)
+  const selected = findSelectedRuntime(
+    catalog,
+    selectedNodeId,
+    selectedRuntimeId
+  )
 
   const supportsReasoning = Boolean(selected?.runtime.capabilities.reasoning)
 
@@ -118,70 +130,88 @@ export function ModelSelector({
             <CommandInput placeholder="搜索云端模型或本地 CLI…" />
             <CommandList>
               <CommandEmpty>未找到匹配的运行时引擎</CommandEmpty>
-              {catalog.map((node) => (
-                <CommandGroup
-                  key={node.nodeId}
-                  heading={`${node.nodeName}${node.online ? "" : "（离线）"}`}
-                >
-                  {node.runtimes.map((runtime) => {
-                    const isAvailable = node.online && runtime.status === "ready"
-                    const isSelected =
-                      selected?.node.nodeId === node.nodeId &&
-                      selected?.runtime.id === runtime.id
-                    const ctx = formatContextWindow(runtime.contextWindow)
+              {catalog.length === 0 && (
+                <div className="px-3 py-4 text-center text-xs text-muted-foreground">
+                  还没有执行节点上报运行时。请先启动 workers/agent 节点。
+                </div>
+              )}
+              {catalog.map((node) => {
+                const nodeReason = nodeUnavailableReason(node)
+                return (
+                  <CommandGroup
+                    key={node.nodeId}
+                    heading={`${node.nodeName}${nodeReason ? `（${nodeReason}）` : ""}`}
+                  >
+                    {node.runtimes.map((runtime) => {
+                      const isAvailable = isRuntimeSelectable(node, runtime)
+                      const isSelected =
+                        selected?.node.nodeId === node.nodeId &&
+                        selected?.runtime.id === runtime.id
+                      const ctx = formatContextWindow(runtime.contextWindow)
 
-                    return (
-                      <CommandItem
-                        key={`${node.nodeId}:${runtime.id}`}
-                        value={`${node.nodeName} ${runtime.label} ${runtime.provider} ${runtime.model}`}
-                        disabled={!isAvailable}
-                        onSelect={() => {
-                          if (!isAvailable) return
-                          onSelectRuntime(node, runtime)
-                          setOpen(false)
-                        }}
-                        className={cn(
-                          "flex items-center justify-between gap-2",
-                          !isAvailable && "cursor-not-allowed opacity-50"
-                        )}
-                      >
-                        <div className="flex min-w-0 flex-1 items-center gap-2">
-                          {runtime.kind === "api" ? (
-                            <BotIcon className="size-3.5 shrink-0 text-muted-foreground" />
-                          ) : (
-                            <TerminalSquareIcon className="size-3.5 shrink-0 text-muted-foreground" />
+                      return (
+                        <CommandItem
+                          key={`${node.nodeId}:${runtime.id}`}
+                          value={`${node.nodeName} ${runtime.label} ${runtime.provider} ${runtime.model}`}
+                          disabled={!isAvailable}
+                          onSelect={() => {
+                            if (!isAvailable) return
+                            onSelectRuntime(node, runtime)
+                            setOpen(false)
+                          }}
+                          className={cn(
+                            "flex items-center justify-between gap-2",
+                            !isAvailable && "cursor-not-allowed opacity-50"
                           )}
-                          <div className="min-w-0 flex-1">
-                            <div className="truncate text-xs font-medium">
-                              {runtime.label}
-                            </div>
-                            <div className="flex flex-wrap items-center gap-1 text-[11px] text-muted-foreground">
-                              <span>{runtime.kind.toUpperCase()}</span>
-                              {ctx && <span>· {ctx}</span>}
-                              <span>· {runtime.priced ? "计费" : "本地/订阅"}</span>
+                        >
+                          <div className="flex min-w-0 flex-1 items-center gap-2">
+                            {runtime.kind === "api" ? (
+                              <BotIcon className="size-3.5 shrink-0 text-muted-foreground" />
+                            ) : (
+                              <TerminalSquareIcon className="size-3.5 shrink-0 text-muted-foreground" />
+                            )}
+                            <div className="min-w-0 flex-1">
+                              <div className="truncate text-xs font-medium">
+                                {runtime.label}
+                              </div>
+                              <div className="flex flex-wrap items-center gap-1 text-[11px] text-muted-foreground">
+                                <span>{runtime.kind.toUpperCase()}</span>
+                                {ctx && <span>· {ctx}</span>}
+                                <span>
+                                  · {runtime.priced ? "计费" : "本地/订阅"}
+                                </span>
+                              </div>
                             </div>
                           </div>
-                        </div>
 
-                        <div className="flex shrink-0 items-center gap-1">
-                          {!node.online ? (
-                            <Badge variant="outline" className="h-4 gap-1 px-1.5 text-[10px]">
-                              <WifiOffIcon className="size-2.5" />
-                              离线
-                            </Badge>
-                          ) : runtime.status !== "ready" ? (
-                            <Badge variant="outline" className="h-4 px-1.5 text-[10px]">
-                              未就绪
-                            </Badge>
-                          ) : isSelected ? (
-                            <CheckIcon className="size-3.5 text-primary" />
-                          ) : null}
-                        </div>
-                      </CommandItem>
-                    )
-                  })}
-                </CommandGroup>
-              ))}
+                          <div className="flex shrink-0 items-center gap-1">
+                            {nodeReason ? (
+                              <Badge
+                                variant="outline"
+                                className="h-4 gap-1 px-1.5 text-[10px]"
+                              >
+                                {!node.online && (
+                                  <WifiOffIcon className="size-2.5" />
+                                )}
+                                {nodeReason}
+                              </Badge>
+                            ) : runtime.status !== "ready" ? (
+                              <Badge
+                                variant="outline"
+                                className="h-4 px-1.5 text-[10px]"
+                              >
+                                未就绪
+                              </Badge>
+                            ) : isSelected ? (
+                              <CheckIcon className="size-3.5 text-primary" />
+                            ) : null}
+                          </div>
+                        </CommandItem>
+                      )
+                    })}
+                  </CommandGroup>
+                )
+              })}
             </CommandList>
           </Command>
         </PopoverContent>
@@ -196,7 +226,11 @@ export function ModelSelector({
           }}
           disabled={disabled}
         >
-          <SelectTrigger size="sm" aria-label="思考强度" className="h-7 gap-1 text-xs">
+          <SelectTrigger
+            size="sm"
+            aria-label="思考强度"
+            className="h-7 gap-1 text-xs"
+          >
             <CpuIcon className="size-3 text-muted-foreground" />
             <SelectValue />
           </SelectTrigger>
