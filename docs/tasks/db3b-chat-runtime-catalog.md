@@ -1,6 +1,8 @@
-# 任务书：DB3b — Chat 结构化消息、运行时配置与节点能力目录（已确认，待执行）
+# 任务书：DB3b — Chat 结构化消息、运行时配置与节点能力目录（已实现，2026-11-25；step6 待上线）
 
 > 2026-11-24 · 提交给数据库任务进行方案评审、编写迁移、测试并按 [../database.md](../database.md) DB-D14 规则演练发布。范围与批次已确认（[../modules/chat.md](../modules/chat.md) 第 5 节 C2、C3、C6、C7）。相关业务背景见 [../modules/chat.md](../modules/chat.md)。
+
+> **实现记录（2026-11-25，T1）**：比任务书多做了三处防护——`chat_turn` 默认值触发器（任何途径创建都强制 `max_attempts=1` 并夹紧预算）；节点侧 Chat RPC 要求会话所有人就是任务创建人（防止浏览器经 `enqueue_agent_job` 伪造 `chat_turn` 读写他人会话）；发送 / 重新生成 / 按 id 认领时顺带清扫本会话的过期回合。`runtime_config` 额外授予了 `insert` 列权限。是否在数据库层彻底禁止手工入队 `chat_turn` 尚未决定（会影响 `agent-jobs-mvp-db.test.ts`）。
 
 ## 1. 背景与现状基线
 

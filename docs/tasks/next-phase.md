@@ -11,6 +11,9 @@
 | R3 回合内核 | `workers/agent/loop/chat`：`AgentSessionDriver`（已冻结）、事件与 parts、上下文与预算、`runChatTurn`；Gemini 交叉评审 9 项已修 |
 | Chat UI | `sense-console/src/modules/chat`，Phase 1 + 2，假传输可完整演示（`/chat-next`） |
 | Pi 选型 | `@earendil-works/pi-*@1.5.2`，API 已复核（[pi-spike-result.md](pi-spike-result.md) 第 5 节） |
+| T1 DB3b | 已合并（`61e4572`）：迁移、17 个 PGlite 用例、`0.5.0-step6.sql`（未上线） |
+| T2 ACP 驱动 | 已合并（`162bccf`）：`@agentclientprotocol/sdk@2.6.0`，假 ACP Agent 29 个用例；真机未验证（本机有 `opencode` 2.4.1，无 `codex-acp`） |
+| T3a Pi 驱动 | 已合并（`bc7bf72`）：`PiCloudDriver` + 运行时目录（`SENSE_API_RUNTIMES` / `SENSE_RUNTIME_<PROFILE>_*`）；未用真实 Key |
 
 **已知问题**：线上控制台 `story.susense.cn` 仍是 V1 构建（2026-10-08），**0.5 前端未部署，线上控制台当前不可用**；库内快照未建立。
 
@@ -66,6 +69,13 @@ flowchart LR
 
 - **内容**：按 chat.md 2.4「HTTP 接口约定 v1」与时序实现 `workers/agent/entry/http.ts`（4 个端点、JWT 验签、以用户身份调 `send_chat_message` / `regenerate_chat_turn`、`node_claim_job` 认领、SSE 线格式与 15 秒 ping、CORS 白名单、每用户并发 / 速率限制、权限回答端点）；`workers/agent/handlers/chat-turn.ts`（`node_chat_context` → `buildChatContext` → `runChatTurn`，端口接 `node_record_step` / `node_append_chat_message(p_finish)` / 心跳续租与 `cancel_requested_at`；3 个 MVP 工具以用户身份调用对应 RPC）；`runner.ts` 整理为 `entry/queue.ts`，`p_job_types` 不含 `chat_turn`；`main.ts` 同时启动两个入口；节点启动与定时上报 `node_report_capabilities`。
 - **测试**：PGlite + 假驱动的 HTTP 集成测试（发送、重新生成、单活跃回合 409、断开不取消、停止、权限往返、`persist_failed`）。
+- **T1～T3a 交付后定下的约定（必须遵守）**：
+  - 数据库错误映射：`SQLSTATE 23505` 且 hint 为 `turn_in_progress` → `409 turn_in_progress`；`node_claim_job` 返回 `null` → `409 claim_failed`；`42501` → `403 forbidden`。
+  - `node_chat_context` 返回 `{ turn, session, messages, work_item, documents }`；`node_append_chat_message`（9 参）返回 `{ message_id, seq, status, job_status, existing }`，`existing: true` 视为成功。
+  - `budget_cents`、`max_rounds` 放在 `send_chat_message` / `regenerate_chat_turn` 的 `p_runtime` 里传，数据库会夹紧。
+  - **重新生成走 ACP 时**：先让 `acp-registry` 关闭该会话的子进程，并以 `execSession: null` 运行，否则 CLI 会在保留了旧回复的上下文上继续（T2 报告）。
+  - 驱动选择：`api:*` 经 `runtime-registry.createDriver`；`acp:*` 经 `drivers/acp-config.ts` + `acp-registry`。
+  - 真正的 `CapabilityReporter` 调 `node_report_capabilities`，并填 `supports_http_sse: true` 与 `http_endpoint_hint`（来自 HTTP 入口的公开地址配置）；节点启动时上报一次，之后定时刷新。
 - **目录**：`workers/agent/entry/`、`workers/agent/handlers/chat-turn*`、`workers/agent/main.ts`、`workers/agent/backends/`。
 
 ### T4 · 配置页改读节点目录（R3.5 前半）

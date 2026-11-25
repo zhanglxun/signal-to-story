@@ -1,6 +1,6 @@
 # 下一阶段分工与调度（T3 Code：Opus 主会话统筹 + 跨模型子代理）
 
-> 2026-11-24 · 任务内容见 [next-phase.md](next-phase.md)；目录归属、分支规则与交付报告格式沿用 [parallel-plan.md](parallel-plan.md) 第 3～5 节。本文只规定**谁做、怎么派、怎么收**。
+> 2026-11-24 · **2026-11-25 起实际执行方式**：用户改为由本仓库的 Claude 主会话直接派 Opus 子代理并行完成代码任务（T1、T2、T3a 已合并），线上操作（T0 部署、step6）由用户转交 Codex。下文的跨模型分工保留作参考。任务内容见 [next-phase.md](next-phase.md)；目录归属、分支规则与交付报告格式沿用 [parallel-plan.md](parallel-plan.md) 第 3～5 节。本文只规定**谁做、怎么派、怎么收**。
 
 ## 1. 角色
 
@@ -94,10 +94,10 @@
 | 任务 | 执行 | 分支 | 状态 | 评审 | 合并提交 |
 | --- | --- | --- | --- | --- | --- |
 | T0 补部署 | Codex | — | 待派发（需用户在场） | — | — |
-| T1 DB3b | Codex | `feat/db3b` | 待派发 | Gemini | — |
-| T2 ACP 驱动 | Codex | `feat/acp-driver` | 待派发 | Gemini | — |
-| T3a Pi 驱动 | Opus | `feat/pi-driver` | 待派发 | Codex | — |
-| T3b HTTP 入口 | Opus | `feat/http-entry` | 等 T1、T3a | Codex | — |
-| T4 配置页 | Codex | `feat/config-pages` | 待派发 | Gemini | — |
+| T1 DB3b | Opus 子代理 | `t1-db3b` | 已合并 | Claude 验收 | `61e4572` |
+| T2 ACP 驱动 | Opus 子代理 | `t2-acp-driver` | 已合并 | Claude 验收 | `162bccf` |
+| T3a Pi 驱动 | Opus 子代理 | `t3a-pi-driver` | 已合并 | Claude 验收 | `bc7bf72` |
+| T3b HTTP 入口 | Opus 子代理 | `t3b-http-entry` | 进行中 | Claude 验收 | — |
+| T4 配置页 | Opus 子代理 | `t4-config-pages` | 进行中 | Claude 验收 | — |
 | T5 前端切换 | Gemini | `feat/chat-ui-3` | 等 T3b | Opus | — |
 | T6 上线 | 主会话 + 用户 | — | 等 T2、T4、T5 | — | — |

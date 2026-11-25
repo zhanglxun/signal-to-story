@@ -77,6 +77,8 @@
 - `permission` part 的 `decision`：`"allow" | "deny" | "timeout"`（`timeout` 只由 worker 写入，按拒绝处理，见 2.5）。
 - `tool_start.inputSummary`、`tool_end.outputSummary`、`error.retryable` 由 worker 必填；前端按可选字段容错解析。
 - 运行时 `kind`（`capabilities.runtimes[].kind`）：`"api" | "acp" | "exec"`，与 DB3b 的 `id` 格式校验一致，不再另设 `cli`。
+- 运行时 `id`：云端为 `api:<provider>:<model>`（小写，非法字符换成 `-`），本机 CLI 为 `acp:<cliKey>`（如 `acp:opencode`）。
+- `error.code` 除 `loop/chat/events.ts` 的 `TURN_ERROR_CODES`（`budget_exceeded`、`max_rounds`、`driver_failed`、`persist_failed`、`tool_not_allowed`、`permission_denied` 等）外，还有驱动层的 `rate_limited` / `provider_unavailable` / `provider_error`（Pi）与 `acp_*`（如 `acp_process_exited`、`acp_capacity`、`acp_auth_required`）；前端按通用错误展示，只对 `budget_exceeded` 用专门文案。
 
 #### 2) 停止生成、错误重试与重新生成（Regenerate）
 
@@ -214,7 +216,7 @@ flowchart TB
          "status": "ready"
        },
        {
-         "id": "acp:opencode-cli",
+         "id": "acp:opencode",
          "kind": "acp",
          "provider": "opencode",
          "model": "local-default",
@@ -252,7 +254,7 @@ flowchart TB
 | 层级 | 模块 | 职责划分 |
 | --- | --- | --- |
 | **治理层（平台自研，保留）** | `workers/agent/loop/` | `SafeContextPack` 指令数据隔离、预算/跳数上限计算、Mandate 门禁校验、`agent_jobs` / `agent_job_steps` 审计落库、确定性预检与独立评估（`runHarnessJob`） |
-| **驱动层（Pi 精简嵌入）** | `workers/agent/drivers/pi-cloud.ts` | 基于 `@mariozechner/pi-ai` + `@mariozechner/pi-agent-core`：<br>1. 实现 `LlmClient`（让现有 `content_draft` / `video_storyboard` 无痛平滑升级）；<br>2. 实现流式 `AgentSessionDriver`（给 `chat-turn` 提供多轮 Tool-Calling Loop 与标准事件流） |
+| **驱动层（Pi 精简嵌入）** | `workers/agent/drivers/pi-cloud.ts` | 基于 `@earendil-works/pi-ai@1.5.2` + `@earendil-works/pi-agent-core@1.5.2`（已实现，2026-11-25）：实现流式 `AgentSessionDriver`；出稿用的 `LlmClient` 暂不迁移（见下方评审修订）。运行时目录的环境变量约定见 `workers/agent/README.md`「运行时目录」 |
 
 **评审修订：R3-A 只把 Pi 用在 Chat，不同时替换出稿的 `LlmClient`。** 原稿让 `pi-cloud.ts` 同时实现 `LlmClient`（`content_draft` / `video_storyboard`）与 `AgentSessionDriver`。出稿链路 2026-11-23 刚真实跑通，同时换底层会让两条链路的回归问题搅在一起。建议：R3-A 中 `PiCloudDriver` 只实现 `AgentSessionDriver`；`cloud-llm.ts` 保持不动；等 Chat 稳定后再单独一步把 `LlmClient` 切到 `pi-ai` 并对比出稿结果。
 

@@ -89,7 +89,7 @@ for await (const ev of stream) {
 | 2 | `context.systemPrompt` | `AgentContext` 只有 `{ messages, tools? }`；系统提示是 `role: "system"` 的消息，且所有消息必须带 `timestamp` | 与 `TurnInput.messages`（首条为 system）直接对应，逐条补 `timestamp` |
 | 3 | `import { Type } from "pi-ai"`（TypeBox） | 不再导出 `Type`；schema 构造器移到 `@earendil-works/pi-schema`；`Tool.parameters` 类型为任意 `object` | `ChatToolSpec.inputSchema`（JSON Schema）原样作为 `parameters`，不引入 schema 库 |
 | 4 | `convertToLlm` 过滤 `custom` 角色 | `Message` 新增 `SystemMessage`；不使用自定义消息时可直接透传 | 透传即可 |
-| 5 | — | 新增 `beforeToolCall(ctx) → { block, reason }` | `TurnHost.requestPermission` 在这里接：拒绝即 `block: true` |
+| 5 | — | 新增 `beforeToolCall(ctx) → { block, reason }` | **不用于平台工具权限**（权限由回合编排在 `host.executeTool` 内统一处理，见 `driver.ts` 规则 3） |
 | 6 | — | 新增 `finishTurn(turn) → { action: "continue" \| "end" }`，在每次助手回合（含工具结果）之后、下一次请求之前调用 | `TurnHost.beforeModelCall()` 在这里接：不通过就 `end`；首个请求前由驱动先调一次 |
 
 其余（`message_update` 下的 `text_delta` / `thinking_delta`、`tool_execution_*`、`message_end` 上的 `usage` 与 `stopReason`、`Model<"openai-completions">` 的 `compat` 字段）类型层面与第 2 节一致。
@@ -97,3 +97,11 @@ for await (const ev of stream) {
 **依赖面**：`pi-ai@1.5.2` 依赖 Anthropic、OpenAI、Google GenAI、AWS Bedrock 四家 SDK（另有 lazy 入口按需加载），worker 镜像会变大；`@earendil-works/pi-telemetry` 只是本地遥测 schema 与观察钩子，源码中无任何网络调用或环境变量开关，不外发数据。
 
 **仍需 R3.0 真机复测**：第 3 节的 5 项厂商实测是在 0.73.1 上做的。R3.0 接线后用 `deepseek-chat` / `deepseek-reasoner` / `qwen3.8-flash` 在 1.5.2 上重跑这 5 项（尤其是 Qwen `compat` 与 DeepSeek `reasoning` 两个坑），结果补到本节。
+
+### 5.1 驱动落地后的补充（T3a，2026-11-25，读 1.5.2 源码与类型确认）
+
+- **用 `runAgentLoop` 而不是 `agentLoop`**：`agentLoop` 内部是 `void runAgentLoop(...).then(end)`，没有 `catch`；`streamFn` 或钩子抛异常时事件流永远不结束。`runAgentLoop` 会把异常抛给调用方。
+- **全部消息作为 prompts 传入、`context.messages` 为空**：工具声明（`toolsAdded`）会并入 prompts 中最后一条 system 消息；放进 context 会在用户消息前插入一条中途 system 消息。历史消息会经过 `message_end`（不会产生 `message_update`），驱动用 WeakSet 排除，不重复计用量。
+- **`finishTurn` 返回 `{ action: "end" }` 后立即结束、不重试**（测试统计 `streamFn` 只被调用 1 次）；对 error / aborted 回复其返回值被忽略。驱动只在还会再发请求（本轮有工具结果）时调用闸门。
+- 另有 `prepareRequest`（每次请求前调用，含第一次），但它只能改上下文、不能终止循环，因此闸门仍在 `finishTurn`。
+- SDK 默认请求失败自动重试 2 次，这些重试对 `max_rounds` 不可见；驱动默认改为 1 次。
