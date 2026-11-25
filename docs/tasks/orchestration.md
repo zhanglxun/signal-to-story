@@ -93,11 +93,12 @@
 
 | 任务 | 执行 | 分支 | 状态 | 评审 | 合并提交 |
 | --- | --- | --- | --- | --- | --- |
-| T0 补部署 | Codex | — | 待派发（需用户在场） | — | — |
+| T0 补部署 | Codex | — | 控制台已上线（2026-11-25）；读者站按用户决定暂不上线 | Claude 外网核对 | — |
 | T1 DB3b | Opus 子代理 | `t1-db3b` | 已合并 | Claude 验收 | `61e4572` |
 | T2 ACP 驱动 | Opus 子代理 | `t2-acp-driver` | 已合并 | Claude 验收 | `162bccf` |
 | T3a Pi 驱动 | Opus 子代理 | `t3a-pi-driver` | 已合并 | Claude 验收 | `bc7bf72` |
 | T3b HTTP 入口 | Opus 子代理 | `t3b-http-entry` | 已合并 | Claude 验收 | `9f915af` |
 | T4 配置页 | Opus 子代理 | `t4-config-pages` | 已合并 | Claude 验收 | `9258edb` |
 | T5 前端切换 | Opus 子代理 | `t5-chat-switch` | 已合并 | Claude 验收 | `fdea61f` |
-| T6 上线 | 主会话 + 用户 | — | 等 T2、T4、T5 | — | — |
+| step6 | Codex | — | 已执行（`20261127100000`，`node_*` = 15） | Claude 只读核对 | — |
+| T6 上线 | 主会话 + 用户 | — | 本机节点 Chat 已在线跑通（qwen，2 轮成功落库）；待公网方式 / CORS / ACP 真机 | — | — |
