@@ -13,6 +13,7 @@
 | Pi 选型 | `@earendil-works/pi-*@1.5.2`，API 已复核（[pi-spike-result.md](pi-spike-result.md) 第 5 节） |
 | T1 DB3b | 已合并（`61e4572`）：迁移、17 个 PGlite 用例、`0.5.0-step6.sql`（未上线） |
 | T2 ACP 驱动 | 已合并（`162bccf`）：`@agentclientprotocol/sdk@2.6.0`，假 ACP Agent 29 个用例；真机未验证（本机有 `opencode` 2.4.1，无 `codex-acp`） |
+| T4 配置页 | 已合并（`9258edb`）：模型页、CLI 页只读展示节点上报的目录，与 Chat 的 Model Selector 共用 `listRuntimeCatalog`；`/__sense_bridge/env` 已删。控制台单元测试已与本机 `.env.local` 隔离（`894e53a`） |
 | T3a Pi 驱动 | 已合并（`bc7bf72`）：`PiCloudDriver` + 运行时目录（`SENSE_API_RUNTIMES` / `SENSE_RUNTIME_<PROFILE>_*`）；未用真实 Key |
 
 **已知问题**：线上控制台 `story.susense.cn` 仍是 V1 构建（2026-10-08），**0.5 前端未部署，线上控制台当前不可用**；库内快照未建立。
